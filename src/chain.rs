@@ -8,7 +8,7 @@ use crate::taproot::{TaprootOutput, schnorr_sign, schnorr_verify};
 use crate::covenant::{CtvTemplate, ctv_template_hash};
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
-const BLOCK_TIME_TARGET_SECS: i64 = 30;
+const BLOCK_TIME_TARGET_SECS: i64 = 300; // 5 phút = 1/2 Bitcoin (10 phút)
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {
