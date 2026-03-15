@@ -209,8 +209,13 @@ fn run_miner(args: &[String]) {
                 std::process::exit(1);
             })
     });
-    let max_blks  = args.get(3).and_then(|s| s.parse::<u32>().ok());
-    let node_addr = args.get(4).cloned(); // v4.5: optional node P2P address
+    // args[3] có thể là số blocks (vd: "10") hoặc node address (vd: "1.2.3.4:8333")
+    // Nếu chứa ':' → là node address, không phải số blocks
+    let (max_blks, node_addr) = match args.get(3).map(|s| s.as_str()) {
+        Some(s) if s.contains(':') => (None,                                Some(s.to_string())),
+        Some(s)                    => (s.parse::<u32>().ok(), args.get(4).cloned()),
+        None                       => (None,                                None),
+    };
 
     let cfg = match max_blks {
         Some(n) => MinerConfig::with_limit(&address, n),

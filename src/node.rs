@@ -191,12 +191,14 @@ impl Node {
                             chain.chain.push(block.clone());
                         }
                     }
+                    let _ = storage::save_blockchain(&chain);
                 } else {
                     println!("  [{}] Local chain dài hơn hoặc bằng → bỏ qua", self.port);
                 }
 
                 println!("  [{}] Chain sau sync: {} blocks", self.port, chain.chain.len());
-                None
+                // Reply Height ack để caller không bị timeout
+                Some(Message::Height { height: chain.last_block().index })
             }
 
             // v4.3: Mempool broadcast + TX dedup

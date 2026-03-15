@@ -186,21 +186,39 @@ impl Miner {
         self.print_summary();
     }
 
-    /// v4.5: Sync chain từ P2P node (kết nối lần đầu hoặc khi node ở phía trước)
+    /// v4.5: Sync chain với P2P node — đẩy lên nếu miner dài hơn, kéo về nếu node dài hơn
     fn sync_from_node(&mut self, node_addr: &str) {
-        let my_height = (self.chain.chain.len() as u64).saturating_sub(1);
-        let resp = node_rpc(node_addr, &Message::GetBlocks { from_index: my_height });
-        if let Some(Message::Blocks { blocks }) = resp {
-            if blocks.is_empty() { return; }
-            println!("  [miner] Sync {} blocks từ node {}", blocks.len(), node_addr);
-            for block in blocks {
-                let last = self.chain.chain.last().unwrap();
-                if block.index == last.index + 1
-                    && block.prev_hash == last.hash
-                    && block.is_valid(self.chain.difficulty)
-                {
-                    self.chain.utxo_set.apply_block(&block.transactions);
-                    self.chain.chain.push(block);
+        // Hỏi node đang ở height bao nhiêu
+        let node_height = match node_rpc(node_addr, &Message::GetHeight) {
+            Some(Message::Height { height }) => height,
+            _ => return, // node không phản hồi
+        };
+
+        let my_height = self.chain.chain.last().map(|b| b.index).unwrap_or(0);
+
+        if my_height > node_height {
+            // Miner dài hơn → đẩy tất cả blocks node chưa có
+            let missing: Vec<_> = self.chain.chain.iter()
+                .filter(|b| b.index > node_height)
+                .cloned()
+                .collect();
+            println!("  [miner] Push {} blocks lên node (node={}, miner={})", missing.len(), node_height, my_height);
+            node_rpc(node_addr, &Message::Blocks { blocks: missing });
+        } else if node_height > my_height {
+            // Node dài hơn → kéo về
+            let resp = node_rpc(node_addr, &Message::GetBlocks { from_index: my_height });
+            if let Some(Message::Blocks { blocks }) = resp {
+                if blocks.is_empty() { return; }
+                println!("  [miner] Pull {} blocks từ node {}", blocks.len(), node_addr);
+                for block in blocks {
+                    let last = self.chain.chain.last().unwrap();
+                    if block.index == last.index + 1
+                        && block.prev_hash == last.hash
+                        && block.is_valid(self.chain.difficulty)
+                    {
+                        self.chain.utxo_set.apply_block(&block.transactions);
+                        self.chain.chain.push(block);
+                    }
                 }
             }
         }
