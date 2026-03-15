@@ -1,0 +1,23 @@
+[Unit]
+Description=Blockchain Rust Miner
+After=network.target blockchain-node.service
+Wants=blockchain-node.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/tuyenpkt/blockchain-rust
+
+# Đổi REWARD_ADDRESS thành địa chỉ ví của bạn (40 hex chars)
+Environment=REWARD_ADDRESS=aabbccddee112233445566778899aabbccddee11
+ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust mine ${REWARD_ADDRESS}
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=blockchain-miner
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

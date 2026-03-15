@@ -1,0 +1,187 @@
+# 🦀 Blockchain Rust — CONTEXT
+
+**Version hiện tại: v4.8 ✅ — 57/57 tests pass, 0 errors, 0 warnings**
+
+---
+
+## ✅ Tiến độ
+
+### Era 1–9 (v0.1 – v3.9) ✅ Hoàn thành
+| Era | Versions | Nội dung |
+|-----|----------|---------|
+| Era 1 | v0.1–v0.4 | Block, Chain, SHA-256, Genesis, PoW, UTXO |
+| Era 2 | v0.5–v0.8 | ECDSA Wallet, P2P Node, Mempool, HD Wallet |
+| Era 3 | v0.9–v1.3 | Script Engine, Multisig P2SH, SegWit, Lightning, Taproot |
+| Era 4 | v1.4–v1.7 | Covenants/CTV, Confidential TX, CoinJoin, Atomic Swap |
+| Era 5 | v1.8–v2.1 | ZK-SNARK, GHOST PoW, BFT Consensus, Sharding |
+| Era 6 | v2.2–v2.5 | ZK-Rollup, Optimistic Rollup, Recursive ZK, zkEVM |
+| Era 7 | v2.6–v2.9 | Smart Contract (WASM), Oracle, Governance, AI Agent |
+| Era 8 | v3.0–v3.3 | Dilithium, SPHINCS+, KYBER, Hybrid Sig (Post-Quantum) |
+| Era 9 | v3.4–v3.9 | Self-amend, IBC, DID, FHE, Sovereign Rollup, Full Stack |
+
+### Era 10 — PKT Native Chain (2031+)
+- [x] v4.0 — PKT Wallet CLI: `wallet new/show/address`, miner auto-load
+- [x] v4.1 — **PacketCrypt PoW**: announcement mining + block mining (`src/packetcrypt.rs`) 🔴
+- [x] v4.2 — **Persistent Storage** RocksDB: save/load chain+UTXO, load_or_new() (`src/storage.rs`) 🔴
+- [x] v4.3 — **P2P Sync**: longest-chain rule, block/TX dedup, GetHeight, mempool broadcast 🟡
+- [x] v4.4 — **REST API**: `GET /chain`, `GET /chain/:height`, `GET /balance/:addr`, `GET /mempool`, `POST /tx`, `GET /status` (`src/api.rs`) 🟡
+- [x] v4.5 — **Miner ↔ Node**: sync chain + fetch mempool TXs từ node, submit block qua P2P 🟡
+- [x] v4.6 — **Block Explorer CLI**: `explorer chain/block/tx/balance/utxo` (`src/explorer.rs`) 🟢
+- [x] v4.7 — **Testnet Config**: `NetworkParams`, `build_genesis()`, `run_local_testnet()` (`src/genesis.rs`) 🟡
+- [x] v4.8 — **Metrics**: hashrate, peer count, mempool size, block time, sync status (`src/metrics.rs`) 🟢
+- [ ] v4.9 — PKT Mainnet _(beta — chưa lên kế hoạch)_
+
+### Era 11 — Optimization & Security (v5.x)
+- [ ] v5.0 — Performance: UTXO indexing, block cache, faster Merkle
+- [ ] v5.1 — Security hardening: input validation, DoS protection, rate limiting
+- [ ] v5.2 — P2P improvements: peer scoring, ban list
+- [ ] v5.3 — Coinbase maturity (100 blocks), replay protection
+- [ ] v5.4 — Fee market: dynamic estimation, RBF
+- [ ] v5.5 — Storage v2: WAL, atomic writes, crash recovery
+- [ ] v5.6 — Fuzz testing + proptest
+- [ ] v5.7 — Monitoring: metrics endpoint, structured logging (tracing)
+- [ ] v5.8 — Code audit: fix Known Gaps còn lại
+- [ ] v5.9 — Benchmark suite: tps, latency, memory
+
+### Era 20 — Post-Singularity (v10.x) — hardware-dependent
+- [ ] v10.0–v10.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
+
+---
+
+## 🧱 Quyết định thiết kế quan trọng
+
+Chỉ ghi các quyết định **không hiển nhiên** hoặc có thể gây lỗi khi sửa code.
+
+| Version | Quyết định |
+|---------|-----------|
+| v0.4 | UtxoSet key = `"tx_id:index"` (HashMap<String, TxOutput>) |
+| v0.5 | `secp256k1 = 0.27`: dùng `Message::from_slice()`, KHÔNG có `from_digest_slice()` |
+| v0.6 | TCP messages phân tách bằng `\n` — mỗi Message serialize thêm `\n` cuối |
+| v0.8 | `pbkdf2 = { features = ["hmac"] }` — bắt buộc, thiếu là lỗi compile |
+| v0.9 | `TxOutput.script_pubkey: Script`, `TxInput.script_sig: Script` |
+| v1.3 | `secp256k1 = 0.27`: KHÔNG có `mul_assign` / `add_exp_assign` trên PublicKey — dùng `PublicKey::combine()` |
+| v1.3 | Key path spend phải sign bằng `tweaked_sk`, KHÔNG phải `internal_sk` |
+| v1.3 | `utxo.rs::owner_bytes_of()` hỗ trợ cả 20-byte (P2PKH) và 32-byte (P2TR) |
+| v1.3 | `schnorr_sign()`: dùng `copy_from_slice` thay `try_into()` trên `&[u8;64]` |
+| v1.5 | `mul_assign` không có trên `PublicKey` → dùng hash-based ECDH: `H(own_sk ‖ other_pk ‖ index)` |
+| v1.5 | `ConfidentialInput` field là `utxo_tx_id`, không phải `tx_id` |
+| v1.8 | `SchnorrZkProof.signature: Vec<u8>` (không dùng `[u8;64]` vì serde không impl cho fixed array >32) |
+| v2.3 | `Sequencer::create_fraudulent_batch()` KHÔNG apply TXs — state diverges để demo fraud |
+| v2.7 | Circuit breaker price cần fixed-point: `(price * 100_000_000.0) as u64` |
+| v3.2 | `decapsulate(sk, ct)` không nhận `pk` param — `h_pk` store trong sk |
+| v3.5 | `Relayer` pre-extract `chain_id` clone trước khi gọi `&mut self.chain_x` — tránh borrow conflict |
+| v3.6 | VC `signing_bytes()` sort claims keys — canonical form để verify đúng dù HashMap order khác |
+| v3.9 | `dilithium::Signature` có `c_hash`, `z: PolyVec { polys }`, KHÔNG có `.sig` field |
+| v3.9 | `kyber::PolyVec` là newtype: `.0.len()` — khác với `dilithium::PolyVec`: `.polys.len()` |
+| v4.0 | Wallet file: 2 dòng — `secret_key_hex\naddress` tại `~/.pkt/wallet.key` |
+| v4.1 | `effective_bits = base_bits - floor(log2(ann_count + 1))` |
+| v4.1 | `AnnouncementMiner.mine()` nonce bắt đầu từ `total_mined * 1_000_000` — tránh collision |
+| v4.2 | RocksDB key schema: `block:{height:016x}`, `utxo:{txid}:{index}`, `meta:height` |
+| v4.2 | `reset_storage()` dùng `DB::destroy()` — KHÔNG dùng `fs::remove_dir_all()` (bỏ sót WAL/manifest) |
+| v4.3 | `apply_longest_chain()` + `can_append()` là `pub fn` standalone → testable không cần TCP |
+| v4.3 | Storage tests dùng `static STORAGE_LOCK: Mutex<()>` — RocksDB không cho 2 threads cùng mở 1 DB |
+| v4.4 | `api::Db = Arc<Mutex<Blockchain>>` — shared state giữa axum handlers |
+| v4.4 | `POST /tx`: nhận `fee` từ `tx.fee`, tính `input_total = output_total + fee`, gọi `mempool.add()` |
+| v4.4 | `GET /balance/:addr` gọi `utxo_set.balance_of(addr)` — hỗ trợ P2PKH (20-byte) và P2TR (32-byte) |
+| v4.5 | `node_rpc()` dùng sync `TcpStream` + `BufReader::read_line()` — không cần tokio trong miner |
+| v4.5 | `node_rpc()` set `read_timeout(5s)` — tránh hang vô hạn khi VPS không respond |
+| v4.5 | Miner flow khi có node: sync chain → GetMempool → mine → submit NewBlock |
+| v4.5 | `MinerConfig::with_node(addr)` builder pattern — không break existing callers |
+| v4.5 | `Miner::new()` dùng `storage::load_or_new()` — load chain từ RocksDB thay vì reset mỗi lần |
+| v4.5 | Miner gọi `storage::save_blockchain()` sau mỗi block — chain persist qua restart |
+| v4.7 | `build_genesis()` encode genesis message vào `prev_hash` (SHA256 hex) — KHÔNG dùng `witness_root` (bị validate bởi `is_valid()`) |
+| v4.7 | Testnet bootstrap peer: `seed.testnet.oceif.com:18333` (Cloudflare DNS only, A record 180.93.1.235) |
+| v4.8 | `estimated_hashrate = 2^difficulty / avg_block_time_s` — rough estimate từ chain timestamps |
+| v4.8 | `GetPeerCount` / `PeerCount` thêm vào `message.rs` — node xử lý trong `handle_message()` |
+| v4.8 | `GET /metrics` trong `api.rs` gọi `metrics::collect(&bc, None)` — không query remote node từ REST |
+
+---
+
+## ⚠️ Known Gaps (còn thiếu)
+
+| Mức | Thiếu | Trạng thái |
+|-----|-------|-----------|
+| 🔴 | Persistent storage | ✅ v4.2 (RocksDB) |
+| 🔴 | Chain sync / longest-chain rule | ✅ v4.3 |
+| 🔴 | Block validation khi nhận từ peer | ✅ v4.3 |
+| 🔴 | Mempool broadcast | ✅ v4.3 |
+| 🟡 | REST/RPC API | ✅ v4.4 (axum 0.7) |
+| 🟡 | Miner ↔ Node kết nối | ✅ v4.5 |
+| 🟡 | Peer discovery tự động | v4.7 (todo) |
+| 🟡 | Coinbase maturity (100 blocks) | v5.3 (todo) |
+| 🟢 | Block Explorer | ✅ v4.6 |
+| 🟢 | Metrics | ✅ v4.8 |
+
+---
+
+## 📦 Dependencies
+
+```toml
+sha2 = "0.10"
+hex = "0.4"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+secp256k1 = { version = "0.27", features = ["rand-std", "global-context"] }
+ripemd = "0.1"
+bs58 = "0.5"
+tokio = { version = "1", features = ["full"] }
+hmac = "0.12"
+pbkdf2 = { version = "0.12", features = ["hmac"] }
+rocksdb = "0.21"          # v4.2: persistent storage backend
+axum = "0.7"              # v4.4: REST API
+```
+
+---
+
+## 🐛 Lỗi đáng nhớ
+
+| Version | Lỗi | Fix |
+|---------|-----|-----|
+| v0.5 | `Message::from_digest_slice()` not found | `Message::from_slice()` |
+| v0.8 | `pbkdf2_hmac` gated | `features = ["hmac"]` |
+| v1.3 | `add_exp_assign` not found trên PublicKey | `PublicKey::combine()` |
+| v1.3 | Key path verify fail | sign bằng `tweaked_sk` không phải `internal_sk` |
+| v1.3 | P2TR UTXO balance = 0 | `owner_bytes_of()` hỗ trợ 32-byte key |
+| v1.5 | `mul_assign` E0599 trên PublicKey | hash-based ECDH |
+| v4.3 | RocksDB lock contention trong parallel tests | `static STORAGE_LOCK: Mutex<()>` |
+| v4.5 | Miner hang vô hạn khi VPS không respond | `stream.set_read_timeout(Some(Duration::from_secs(5)))` |
+| v4.7 | `build_genesis()` fail `is_valid()` | encode genesis msg vào `prev_hash`, không phải `witness_root` |
+
+---
+
+## 🔖 Checkpoint
+
+```
+Version:   v4.8 ✅
+Tests:     57/57 pass
+Warnings:  0
+Errors:    0
+
+Stack đã có:
+  v0.1–v3.9  40 modules, all eras complete
+  v4.0       PKT Wallet CLI
+  v4.1       PacketCrypt PoW (src/packetcrypt.rs)
+  v4.2       RocksDB Persistent Storage (src/storage.rs)
+  v4.3       P2P Sync: longest-chain, dedup, GetHeight, mempool relay
+  v4.4       REST API (src/api.rs, axum 0.7):
+               GET /chain  GET /chain/:height  GET /balance/:addr
+               GET /mempool  GET /status  POST /tx  GET /metrics
+  v4.5       Miner ↔ Node P2P:
+               sync chain + GetMempool TXs + submit NewBlock
+               CLI: cargo run -- mine <addr> <n> <node:port>
+  v4.6       Block Explorer CLI (src/explorer.rs):
+               chain/block/tx/balance/utxo
+  v4.7       Testnet Config (src/genesis.rs):
+               NetworkParams, build_genesis(), run_local_testnet()
+               Bootstrap: seed.testnet.oceif.com:18333 (180.93.1.235)
+  v4.8       Metrics (src/metrics.rs):
+               MetricsSnapshot: height, difficulty, utxo_count, mempool_depth,
+               mempool_fees, avg_block_time, estimated_hashrate, peer_count,
+               sync_height_local, sync_height_remote
+               CLI: cargo run -- metrics [node:port]
+               REST: GET /metrics
+               P2P: GetPeerCount / PeerCount messages
+
+Next: v4.9 — PKT Mainnet (beta)
+```

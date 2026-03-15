@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blockchain Rust — 2009 → 2031+</title>
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --accent:  #f78166;
+      --gold:    #e3b341;
+      --green:   #3fb950;
+      --blue:    #58a6ff;
+      --purple:  #bc8cff;
+      --teal:    #39d353;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --code-bg: #1f2428;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    /* ── HERO ────────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 24px 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(88,166,255,.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(247,129,102,.12);
+      border: 1px solid rgba(247,129,102,.3);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -.02em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero-sub {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 32px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-size: 2rem; font-weight: 700; color: var(--blue); }
+    .stat-lbl { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity .15s, transform .15s;
+      cursor: pointer;
+    }
+    .btn:hover { opacity: .85; transform: translateY(-1px); }
+    .btn-primary { background: var(--blue); color: #000; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    /* ── LAYOUT ──────────────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+    section:last-child { border-bottom: none; }
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    h2 .tag {
+      font-size: .75rem;
+      font-weight: 600;
+      background: rgba(88,166,255,.15);
+      color: var(--blue);
+      border: 1px solid rgba(88,166,255,.25);
+      padding: 2px 10px;
+      border-radius: 12px;
+      vertical-align: middle;
+      margin-left: 10px;
+      letter-spacing: .05em;
+    }
+    .section-sub { color: var(--muted); margin-bottom: 36px; font-size: .95rem; }
+
+    /* ── ERA TIMELINE ────────────────────────────────────────── */
+    .timeline { display: flex; flex-direction: column; gap: 0; }
+    .era {
+      display: grid;
+      grid-template-columns: 140px 1px 1fr;
+      gap: 0 24px;
+    }
+    .era-meta { text-align: right; padding: 16px 0; }
+    .era-name {
+      font-weight: 700;
+      font-size: .9rem;
+      color: var(--gold);
+    }
+    .era-year { font-size: .78rem; color: var(--muted); }
+    .era-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .era-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--border);
+      border: 2px solid var(--blue);
+      margin-top: 20px;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .era-connector {
+      width: 2px;
+      flex: 1;
+      background: var(--border);
+    }
+    .era:last-child .era-connector { display: none; }
+    .era-body { padding: 14px 0 14px; }
+    .era-theme {
+      font-size: .9rem;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .version-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .vpill {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: .75rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      color: var(--muted);
+      transition: border-color .15s, color .15s;
+      cursor: default;
+    }
+    .vpill:hover { border-color: var(--blue); color: var(--blue); }
+
+    /* ── ERA COLORS ─────────────────────────────────────────── */
+    .era-1 .era-dot { border-color: #f78166; }
+    .era-2 .era-dot { border-color: #e3b341; }
+    .era-3 .era-dot { border-color: #58a6ff; }
+    .era-4 .era-dot { border-color: #bc8cff; }
+    .era-5 .era-dot { border-color: #3fb950; }
+    .era-6 .era-dot { border-color: #39d353; }
+    .era-7 .era-dot { border-color: #79c0ff; }
+    .era-8 .era-dot { border-color: #d2a8ff; }
+    .era-9  .era-dot { border-color: #ffa657; }
+    .era-10 .era-dot { border-color: #39d353; }
+    .era-11 .era-dot { border-color: #58a6ff; }
+
+    /* ── FEATURES GRID ───────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: border-color .2s, transform .2s;
+    }
+    .feature-card:hover {
+      border-color: var(--blue);
+      transform: translateY(-2px);
+    }
+    .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .feature-title { font-weight: 700; font-size: .95rem; margin-bottom: 6px; }
+    .feature-desc { color: var(--muted); font-size: .83rem; line-height: 1.5; }
+
+    /* ── INSTALL / USAGE ─────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 24px; }
+    .step {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .step-num {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(88,166,255,.12);
+      border: 1px solid rgba(88,166,255,.3);
+      color: var(--blue);
+      font-weight: 700;
+      font-size: .95rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-content h3 { font-size: 1rem; margin-bottom: 8px; }
+    .step-content p { color: var(--muted); font-size: .88rem; margin-bottom: 10px; }
+    pre, code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: .85rem;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    pre .prompt { color: var(--muted); user-select: none; }
+    pre .cmd     { color: var(--green); }
+    pre .comment { color: var(--muted); font-style: italic; }
+    pre .out     { color: var(--blue); }
+    code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: .82rem;
+      color: var(--accent);
+    }
+
+    /* ── SECURITY TABLE ──────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .86rem;
+    }
+    th {
+      background: var(--surface);
+      color: var(--muted);
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:hover td { background: rgba(255,255,255,.025); }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: .72rem;
+      font-weight: 600;
+    }
+    .badge-green  { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.25);  }
+    .badge-blue   { background: rgba(88,166,255,.15); color: var(--blue);   border: 1px solid rgba(88,166,255,.25); }
+    .badge-purple { background: rgba(188,140,255,.15);color: var(--purple); border: 1px solid rgba(188,140,255,.25);}
+    .badge-gold   { background: rgba(227,179,65,.15); color: var(--gold);   border: 1px solid rgba(227,179,65,.25); }
+    .badge-teal   { background: rgba(57,211,83,.15);  color: var(--teal);   border: 1px solid rgba(57,211,83,.25);  }
+    .badge-red    { background: rgba(247,129,102,.15);color: var(--accent); border: 1px solid rgba(247,129,102,.25);}
+
+    /* ── STACK DIAGRAM ───────────────────────────────────────── */
+    .stack-diagram {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .stack-row {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--border);
+    }
+    .stack-row:last-child { border-bottom: none; }
+    .stack-layer {
+      width: 150px;
+      flex-shrink: 0;
+      padding: 14px 16px;
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      display: flex;
+      align-items: center;
+      border-right: 1px solid var(--border);
+    }
+    .stack-content {
+      flex: 1;
+      padding: 14px 18px;
+      font-size: .83rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .stack-content .chip {
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: .75rem;
+      font-family: monospace;
+      color: var(--text);
+    }
+    .layer-identity  { color: #ffa657; }
+    .layer-app       { color: #79c0ff; }
+    .layer-cross     { color: #d2a8ff; }
+    .layer-crypto    { color: #bc8cff; }
+    .layer-consensus { color: #3fb950; }
+    .layer-base      { color: #58a6ff; }
+
+    /* ── FOOTER ──────────────────────────────────────────────── */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: .83rem;
+    }
+    footer a { color: var(--blue); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── RESPONSIVE ──────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .era { grid-template-columns: 90px 1px 1fr; gap: 0 12px; }
+      .stack-layer { width: 100px; font-size: .7rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ HERO -->
+<header class="hero">
+  <div class="container">
+    <div class="hero-badge">🦀 Rust · PKT Native · Open Source</div>
+    <h1>Blockchain <span>từ đầu</span><br/>2009 → 2031+</h1>
+    <p class="hero-sub">
+      Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block
+      đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet.
+      48+ versions. 10+ eras. Không thư viện blockchain.
+    </p>
+    <div class="hero-stats">
+      <div class="stat"><div class="stat-num">48+</div><div class="stat-lbl">Versions</div></div>
+      <div class="stat"><div class="stat-num">10+</div><div class="stat-lbl">Eras</div></div>
+      <div class="stat"><div class="stat-num">47</div><div class="stat-lbl">Src files</div></div>
+      <div class="stat"><div class="stat-num">57</div><div class="stat-lbl">Tests pass</div></div>
+    </div>
+    <div class="hero-btns">
+      <a href="#quickstart" class="btn btn-primary">⚡ Quick Start</a>
+      <a href="#timeline"   class="btn btn-secondary">📜 Timeline</a>
+      <a href="#stack"      class="btn btn-secondary">🔒 Stack 2031+</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════ WHY -->
+<section>
+  <div class="container">
+    <h2>Tại sao dự án này? <span class="tag">Giới thiệu</span></h2>
+    <p class="section-sub">Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🧱</div>
+        <div class="feature-title">Build from scratch</div>
+        <div class="feature-desc">Không dùng <code>bitcoin</code>, <code>ethereum</code> hay bất kỳ blockchain crate nào. SHA-256, ECDSA, PoW — tất cả tự viết để hiểu cơ chế bên trong.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <div class="feature-title">Incremental — mỗi version build trên version trước</div>
+        <div class="feature-desc">v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-title">Cryptography thực tế</div>
+        <div class="feature-desc">ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚛️</div>
+        <div class="feature-title">Post-Quantum ready</div>
+        <div class="feature-desc">Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-title">Ecosystem hiện đại</div>
+        <div class="feature-desc">IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📖</div>
+        <div class="feature-title">Code là tài liệu</div>
+        <div class="feature-desc">Mỗi file có comment giải thích cơ chế, tradeoff và tham chiếu đến BIP/RFC/NIST paper tương ứng. Demo chạy được ngay với <code>cargo run</code>.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ QUICKSTART -->
+<section id="quickstart">
+  <div class="container">
+    <h2>Quick Start <span class="tag">Cài đặt</span></h2>
+    <p class="section-sub">Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Clone repository</h3>
+          <pre><span class="prompt">$ </span><span class="cmd">git clone https://github.com/your-username/blockchain-rust</span>
+<span class="prompt">$ </span><span class="cmd">cd blockchain-rust</span></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Cài Rust (nếu chưa có)</h3>
+          <pre><span class="prompt">$ </span><span class="cmd">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</span>
+<span class="prompt">$ </span><span class="cmd">source ~/.cargo/env</span>
+<span class="prompt">$ </span><span class="cmd">rustup update stable</span></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Xem help &amp; version timeline</h3>
+          <pre><span class="prompt">$ </span><span class="cmd">cargo run</span>
+<span class="out">  PKT Blockchain — v4.8
+
+  Cách dùng:
+    cargo run -- wallet new             → tạo wallet mới
+    cargo run -- wallet show            → xem địa chỉ ví
+    cargo run -- mine [addr] [n]        → bắt đầu đào
+    cargo run -- node &lt;port&gt; [peer]    → P2P node
+    cargo run -- api [port]             → REST API (default 3000)
+    cargo run -- explorer chain         → block explorer CLI
+    cargo run -- genesis [regtest|testnet|mainnet]
+    cargo run -- testnet [n] [port]     → local testnet
+    cargo run -- metrics [node:port]    → hashrate, peers, mempool
+
+  ── Era 1 (2009)  Bitcoin Genesis ──  v0.1 … v0.4
+  ── Era 10 (2031) PKT Native Chain ── v4.0 ✅ … v4.8 ✅
+  48+ versions. 10+ eras.</span></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h3>Tạo ví PKT &amp; bắt đầu đào</h3>
+          <pre><span class="comment"># Tạo keypair mới, lưu ~/.pkt/wallet.key</span>
+<span class="prompt">$ </span><span class="cmd">cargo run -- wallet new</span>
+<span class="out">  Address      : 1PKTxxx...
+  Pubkey hash  : a3f2c1... (dùng cho miner)
+  Saved to     : ~/.pkt/wallet.key</span>
+
+<span class="comment"># Mine tự động đến ví vừa tạo</span>
+<span class="prompt">$ </span><span class="cmd">cargo run -- mine</span>
+
+<span class="comment"># Chạy 57 integration tests</span>
+<span class="prompt">$ </span><span class="cmd">cargo test</span>
+<span class="out">test result: ok. 57 passed; 0 failed</span></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <h3>Chạy P2P node (tùy chọn)</h3>
+          <p>Mở 2 terminal để test mạng ngang hàng:</p>
+          <pre><span class="comment"># Terminal 1 — node lắng nghe port 8333</span>
+<span class="prompt">$ </span><span class="cmd">cargo run -- node 8333</span>
+
+<span class="comment"># Terminal 2 — node kết nối tới node 1</span>
+<span class="prompt">$ </span><span class="cmd">cargo run -- node 8334 127.0.0.1:8333</span></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ TIMELINE -->
+<section id="timeline">
+  <div class="container">
+    <h2>Journey Timeline <span class="tag">48+ versions</span></h2>
+    <p class="section-sub">Mỗi era là một bước tiến lớn trong lịch sử blockchain.</p>
+    <div class="timeline">
+
+      <div class="era era-1">
+        <div class="era-meta"><div class="era-name">Era 1</div><div class="era-year">2009</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">⛏️ Bitcoin Genesis — PoW, Block, UTXO, SHA-256</div>
+          <div class="version-pills">
+            <span class="vpill">v0.1 Block + SHA-256</span>
+            <span class="vpill">v0.2 Transaction + Coinbase</span>
+            <span class="vpill">v0.3 Proof of Work</span>
+            <span class="vpill">v0.4 UTXO Model</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-2">
+        <div class="era-meta"><div class="era-name">Era 2</div><div class="era-year">2010–2013</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🔑 Security &amp; Wallets — ECDSA, P2P, HD Wallet</div>
+          <div class="version-pills">
+            <span class="vpill">v0.5 ECDSA + Wallet</span>
+            <span class="vpill">v0.6 P2P TCP Node</span>
+            <span class="vpill">v0.7 Mempool + Fee</span>
+            <span class="vpill">v0.8 HD Wallet BIP32/39/44</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-3">
+        <div class="era-meta"><div class="era-name">Era 3</div><div class="era-year">2014–2021</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">⚡ Scale &amp; Script — SegWit, Lightning, Taproot, MAST</div>
+          <div class="version-pills">
+            <span class="vpill">v0.9 Script Engine</span>
+            <span class="vpill">v1.0 Multisig P2SH</span>
+            <span class="vpill">v1.1 SegWit P2WPKH</span>
+            <span class="vpill">v1.2 Lightning + HTLC</span>
+            <span class="vpill">v1.3 Taproot + Schnorr + MuSig2</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-4">
+        <div class="era-meta"><div class="era-name">Era 4</div><div class="era-year">2018–2020</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🕵️ Layer 2 &amp; Privacy — CTV, Confidential, CoinJoin, Swap</div>
+          <div class="version-pills">
+            <span class="vpill">v1.4 Covenants + CTV</span>
+            <span class="vpill">v1.5 Confidential TX</span>
+            <span class="vpill">v1.6 CoinJoin + PayJoin</span>
+            <span class="vpill">v1.7 Atomic Swap</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-5">
+        <div class="era-meta"><div class="era-name">Era 5</div><div class="era-year">2021</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🔮 Advanced Consensus — ZK-SNARK, GHOST Protocol</div>
+          <div class="version-pills">
+            <span class="vpill">v1.8 ZK-SNARK + Groth16</span>
+            <span class="vpill">v1.9 GHOST Protocol + Uncles</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-6">
+        <div class="era-meta"><div class="era-name">Era 6</div><div class="era-year">2022–2023</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🗜️ ZK &amp; Rollup — BFT, Sharding, zkEVM, Recursive ZK</div>
+          <div class="version-pills">
+            <span class="vpill">v2.0 BFT Tendermint</span>
+            <span class="vpill">v2.1 Sharding + Beacon</span>
+            <span class="vpill">v2.2 ZK-Rollup</span>
+            <span class="vpill">v2.3 Optimistic Rollup</span>
+            <span class="vpill">v2.4 Recursive ZK / IVC</span>
+            <span class="vpill">v2.5 zkEVM</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-7">
+        <div class="era-meta"><div class="era-name">Era 7</div><div class="era-year">2023–2025</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🤖 AI &amp; Programmable — Contracts, Oracle, AI Agent</div>
+          <div class="version-pills">
+            <span class="vpill">v2.6 WASM Smart Contract</span>
+            <span class="vpill">v2.7 Oracle + TWAP</span>
+            <span class="vpill">v2.8 On-chain Governance</span>
+            <span class="vpill">v2.9 AI Agent DCA/Rebalance</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-8">
+        <div class="era-meta"><div class="era-name">Era 8</div><div class="era-year">2025–2027</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">⚛️ Post-Quantum — Dilithium, SPHINCS+, ML-KEM, Hybrid</div>
+          <div class="version-pills">
+            <span class="vpill">v3.0 Dilithium NIST FIPS 204</span>
+            <span class="vpill">v3.1 SPHINCS+ NIST FIPS 205</span>
+            <span class="vpill">v3.2 ML-KEM NIST FIPS 203</span>
+            <span class="vpill">v3.3 Hybrid ECDSA∧Dilithium</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-9">
+        <div class="era-meta"><div class="era-name">Era 9</div><div class="era-year">2027–2030</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🌐 Autonomous Chain — IBC, DID, FHE, Sovereign Rollup</div>
+          <div class="version-pills">
+            <span class="vpill">v3.4 Self-Amending Chain</span>
+            <span class="vpill">v3.5 IBC Cross-chain</span>
+            <span class="vpill">v3.6 W3C DID + VC</span>
+            <span class="vpill">v3.7 FHE Privacy Contracts</span>
+            <span class="vpill">v3.8 Sovereign Rollup + DAS</span>
+            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v3.9 Full Stack ✅</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-10">
+        <div class="era-meta"><div class="era-name">Era 10</div><div class="era-year">2031+</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🪙 PKT Native Chain — PacketCrypt PoW, REST API, Testnet</div>
+          <div class="version-pills">
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.0 PKT Wallet CLI ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.1 PacketCrypt PoW ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.2 Persistent Storage ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.3 P2P Sync ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.4 REST API ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.5 Miner ↔ Node ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.6 Block Explorer ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.7 Testnet Config ✅</span>
+            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v4.8 Metrics ✅</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-11">
+        <div class="era-meta"><div class="era-name">Era 11</div><div class="era-year">2032+</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">🛡️ Optimization &amp; Security — Hardening, Perf, Audit, Fuzz</div>
+          <div class="version-pills">
+            <span class="vpill">v5.0 Performance</span>
+            <span class="vpill">v5.1 Security Hardening</span>
+            <span class="vpill">v5.2 P2P Improvements</span>
+            <span class="vpill">v5.3 Coinbase Maturity</span>
+            <span class="vpill">v5.4 Fee Market + RBF</span>
+            <span class="vpill">v5.5 Storage v2 WAL</span>
+            <span class="vpill">v5.6 Fuzz Testing</span>
+            <span class="vpill">v5.7 Monitoring</span>
+            <span class="vpill">v5.8 Code Audit</span>
+            <span class="vpill">v5.9 Benchmarks</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ STACK 2030 -->
+<section id="stack">
+  <div class="container">
+    <h2>2031+ Blockchain Stack <span class="tag">Architecture</span></h2>
+    <p class="section-sub">7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.</p>
+    <div class="stack-diagram">
+      <div class="stack-row">
+        <div class="stack-layer layer-identity">Identity</div>
+        <div class="stack-content">
+          <span class="chip">DID (W3C)</span>
+          <span class="chip">Verifiable Credentials</span>
+          <span class="chip">DID Auth</span>
+          <span class="chip">Key Rotation</span>
+          <span class="chip">Self-Sovereign</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer layer-app">Application</div>
+        <div class="stack-content">
+          <span class="chip">WASM Smart Contracts</span>
+          <span class="chip">Oracle + TWAP</span>
+          <span class="chip">AI Agent</span>
+          <span class="chip">Governance</span>
+          <span class="chip">FHE Privacy Contracts</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer layer-cross">Cross-chain</div>
+        <div class="stack-content">
+          <span class="chip">IBC (ICS-02/03/04/20)</span>
+          <span class="chip">Sovereign Rollup</span>
+          <span class="chip">Atomic Swap</span>
+          <span class="chip">DA Layer (Celestia)</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer layer-crypto">Cryptography</div>
+        <div class="stack-content">
+          <span class="chip">Taproot + Schnorr</span>
+          <span class="chip">Groth16 ZK-SNARK</span>
+          <span class="chip">Dilithium PQ-Sign</span>
+          <span class="chip">ML-KEM KEM</span>
+          <span class="chip">Hybrid ECDSA∧Dil</span>
+          <span class="chip">FHE-LWE</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer layer-consensus">Consensus</div>
+        <div class="stack-content">
+          <span class="chip">BFT Tendermint</span>
+          <span class="chip">GHOST PoW</span>
+          <span class="chip">Sharding</span>
+          <span class="chip">Self-Amending Vote</span>
+          <span class="chip">Recursive ZK / IVC</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer layer-base">Base Layer</div>
+        <div class="stack-content">
+          <span class="chip">Block + SHA-256</span>
+          <span class="chip">UTXO</span>
+          <span class="chip">SegWit</span>
+          <span class="chip">Lightning</span>
+          <span class="chip">P2P TCP</span>
+          <span class="chip">Mempool</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SECURITY TABLE -->
+<section>
+  <div class="container">
+    <h2>Security Layer Stack <span class="tag">Defense in Depth</span></h2>
+    <p class="section-sub">Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tầng</th>
+            <th>Cơ chế</th>
+            <th>Bảo vệ chống</th>
+            <th>Mức độ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Classical Crypto</strong></td>
+            <td>ECDSA secp256k1, Schnorr, SHA-256</td>
+            <td>Classical computers</td>
+            <td><span class="badge badge-green">128-bit security</span></td>
+          </tr>
+          <tr>
+            <td><strong>Post-Quantum (PQ)</strong></td>
+            <td>Dilithium FIPS-204, SPHINCS+ FIPS-205, ML-KEM FIPS-203</td>
+            <td>Quantum (Shor/Grover)</td>
+            <td><span class="badge badge-purple">128-bit PQ security</span></td>
+          </tr>
+          <tr>
+            <td><strong>Hybrid Transition</strong></td>
+            <td>ECDSA ∧ Dilithium (AND policy)</td>
+            <td>Phải phá cả 2 cùng lúc</td>
+            <td><span class="badge badge-gold">Defense in depth</span></td>
+          </tr>
+          <tr>
+            <td><strong>Zero-Knowledge</strong></td>
+            <td>Groth16, Recursive ZK/IVC, zkEVM</td>
+            <td>Privacy leak khi verify</td>
+            <td><span class="badge badge-blue">Verifiable w/o witness</span></td>
+          </tr>
+          <tr>
+            <td><strong>Privacy</strong></td>
+            <td>FHE-LWE, Pedersen Commitment, CoinJoin</td>
+            <td>Plaintext trên chain</td>
+            <td><span class="badge badge-teal">Chain sees only ciphertext</span></td>
+          </tr>
+          <tr>
+            <td><strong>Identity</strong></td>
+            <td>W3C DID + VC, DID Auth</td>
+            <td>Central identity authority</td>
+            <td><span class="badge badge-blue">Self-sovereign</span></td>
+          </tr>
+          <tr>
+            <td><strong>Availability</strong></td>
+            <td>Erasure coding (2x) + DAS sampling</td>
+            <td>Data withholding attack</td>
+            <td><span class="badge badge-green">99.6% detection @ k=8</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ EXPLORE -->
+<section>
+  <div class="container">
+    <h2>Khám phá từng module <span class="tag">Source Code</span></h2>
+    <p class="section-sub">Mỗi file trong <code>src/</code> là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <div class="feature-title">block.rs + chain.rs</div>
+        <div class="feature-desc">Block header, Merkle root, SHA-256 mining, difficulty adjustment mỗi 5 block. Genesis block hardcoded như Bitcoin thực.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💳</div>
+        <div class="feature-title">wallet.rs + hd_wallet.rs</div>
+        <div class="feature-desc">ECDSA keypair, Base58Check address, BIP32 child key derivation, BIP39 mnemonic, BIP44 account/change/index path.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">lightning.rs</div>
+        <div class="feature-desc">Payment channel funding (2-of-2 P2SH), commitment TX off-chain, HTLC routing, cooperative/force close.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌳</div>
+        <div class="feature-title">taproot.rs</div>
+        <div class="feature-desc">Schnorr BIP340, tagged_hash, MAST (Merkelized Alternative Script Trees), P2TR output, MuSig2 key aggregation.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔮</div>
+        <div class="feature-title">zk_proof.rs</div>
+        <div class="feature-desc">Schnorr ZK interactive protocol, Hash Preimage proof, R1CS constraint system, Groth16 proving/verification.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗜️</div>
+        <div class="feature-title">zk_rollup.rs + zkevm.rs</div>
+        <div class="feature-desc">ZK-Rollup batch settlement trên L1, Optimistic Rollup fraud proof 7-day window, zkEVM per-opcode constraint generation.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚛️</div>
+        <div class="feature-title">dilithium.rs + kyber.rs</div>
+        <div class="feature-desc">CRYSTALS-Dilithium Module-LWE ring signature (NIST FIPS 204), ML-KEM key encapsulation với FO transform (NIST FIPS 203).</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-title">ibc.rs</div>
+        <div class="feature-desc">ICS-02 light client, ICS-03 connection 4-way handshake, ICS-04 channel handshake, packet lifecycle, ICS-20 token transfer.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🆔</div>
+        <div class="feature-title">did.rs</div>
+        <div class="feature-desc">W3C DID Core 1.0, <code>did:chain:&lt;hex&gt;</code> method, DID Document, VC issuance/verify, DID Auth challenge-response.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">fhe_contract.rs</div>
+        <div class="feature-desc">LWE-based Fully Homomorphic Encryption, HE-ADD/MUL-PLAIN, noise budget tracking, encrypted vote contract, salary sum, sealed bid auction.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛸</div>
+        <div class="feature-title">sovereign_rollup.rs</div>
+        <div class="feature-desc">DA layer với namespace blobs, Namespace Merkle Tree, erasure coding (2x), DAS sampling (99.6% @ k=8), sovereign upgrade.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <div class="feature-title">full_stack.rs</div>
+        <div class="feature-desc">Version registry (40+v), era descriptions (10+ eras), stack statistics, security layers — tích hợp và demo tất cả từ v0.1 → v4.0.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🪙</div>
+        <div class="feature-title">wallet_cli.rs + miner.rs</div>
+        <div class="feature-desc">PKT Wallet CLI: <code>wallet new/show/address</code>, lưu keypair tại <code>~/.pkt/wallet.key</code>. Miner: live hashrate, difficulty auto-adjust, submit block qua P2P.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">packetcrypt.rs</div>
+        <div class="feature-desc">PacketCrypt PoW: announcement mining với nonce collision avoidance, block mining với effective_bits = base_bits − floor(log₂(ann_count+1)).</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💾</div>
+        <div class="feature-title">storage.rs</div>
+        <div class="feature-desc">RocksDB persistent storage: lưu/load chain + UTXO qua restart. Key schema: <code>block:{height:016x}</code>, <code>utxo:{txid}:{index}</code>, <code>meta:height</code>.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-title">api.rs</div>
+        <div class="feature-desc">REST API axum 0.7: <code>GET /chain</code>, <code>GET /chain/:height</code>, <code>GET /balance/:addr</code>, <code>GET /mempool</code>, <code>POST /tx</code>, <code>GET /status</code>, <code>GET /metrics</code>.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <div class="feature-title">explorer.rs</div>
+        <div class="feature-desc">Block Explorer CLI: <code>explorer chain/block/tx/balance/utxo</code> — đọc chain từ RocksDB, hiển thị 5 blocks gần nhất, tìm TX theo prefix.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🧪</div>
+        <div class="feature-title">genesis.rs</div>
+        <div class="feature-desc">Testnet config: <code>NetworkParams</code> (magic bytes, coin params, ports), <code>build_genesis()</code>, local testnet N-node simulation. Bootstrap: <code>seed.testnet.oceif.com:18333</code>.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">metrics.rs</div>
+        <div class="feature-desc">Runtime metrics: height, difficulty, UTXO count, mempool depth + fees, avg block time (20-block window), estimated hashrate (2^diff / block_time), peer count, sync status local vs remote. CLI: <code>cargo run -- metrics</code> · REST: <code>GET /metrics</code>.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ DEPENDENCIES -->
+<section>
+  <div class="container">
+    <h2>Dependencies <span class="tag">Cargo.toml</span></h2>
+    <p class="section-sub">Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.</p>
+    <pre><span class="comment"># Cargo.toml</span>
+[dependencies]
+sha2       = "0.10"          <span class="comment"># SHA-256, SHA-512</span>
+hex        = "0.4"           <span class="comment"># hex encode/decode</span>
+chrono     = "0.4"           <span class="comment"># timestamps</span>
+serde      = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+secp256k1  = { version = "0.27", features = ["rand-std", "global-context"] }
+ripemd     = "0.1"           <span class="comment"># RIPEMD-160 (Bitcoin address)</span>
+bs58       = "0.5"           <span class="comment"># Base58Check encoding</span>
+tokio      = { version = "1", features = ["full"] }  <span class="comment"># async P2P</span>
+hmac       = "0.12"          <span class="comment"># HMAC-SHA512 (BIP32 HD wallet)</span>
+pbkdf2     = { version = "0.12", features = ["hmac"] }  <span class="comment"># BIP39 mnemonic</span>
+rocksdb    = "0.21"          <span class="comment"># v4.2: persistent chain + UTXO storage</span>
+axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain, POST /tx, ...)</span></pre>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ FOOTER -->
+<footer>
+  <div class="container">
+    <p style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">
+      🦀 Blockchain Rust — 2009 → 2031+
+    </p>
+    <p style="margin-bottom:16px; color: var(--muted);">
+      48+ versions &bull; 10+ eras &bull; 57/57 tests &bull; 0 errors &bull; 0 warnings
+    </p>
+    <p>
+      Built with Rust edition 2021 &bull;
+      Testnet: <a href="https://oceif.com">oceif.com</a> (<code style="font-size:.78rem">seed.testnet.oceif.com:18333</code>) &bull;
+      Tham chiếu: <a href="https://github.com/bitcoin/bips">Bitcoin BIPs</a> &bull;
+      <a href="https://csrc.nist.gov/projects/post-quantum-cryptography">NIST PQC</a> &bull;
+      <a href="https://www.w3.org/TR/did-core/">W3C DID</a> &bull;
+      <a href="https://github.com/cosmos/ibc">IBC Protocol</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
