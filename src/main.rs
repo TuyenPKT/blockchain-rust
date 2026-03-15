@@ -45,6 +45,9 @@ mod explorer;
 mod genesis;
 mod metrics;
 mod performance;
+mod security;
+mod p2p;
+mod maturity;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -144,7 +147,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v5.0                     ║");
+    println!("║              ⛓   Blockchain Rust  v5.3                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -1207,5 +1210,210 @@ mod tests {
         let root = fast_merkle_txids(&["a".repeat(64), "b".repeat(64)]);
         assert_eq!(root.len(), 64);
         assert_eq!(fast_merkle_txids(&[]), "0".repeat(64));
+    }
+
+    // ── Security (v5.1) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_security_rate_limiter() {
+        use crate::security::RateLimiter;
+
+        let mut rl = RateLimiter::new(3, 60);
+        assert!(rl.check("1.1.1.1"));
+        assert!(rl.check("1.1.1.1"));
+        assert!(rl.check("1.1.1.1")); // 3 — at limit
+        assert!(!rl.check("1.1.1.1")); // over limit
+
+        assert!(rl.check("2.2.2.2")); // separate IP unaffected
+
+        rl.reset("1.1.1.1");
+        assert!(rl.check("1.1.1.1")); // reset worked
+    }
+
+    #[test]
+    fn test_security_ban_list() {
+        use crate::security::BanList;
+
+        let mut bl = BanList::new();
+        assert!(!bl.is_banned("10.0.0.1"));
+
+        bl.ban("10.0.0.1", 3600);
+        assert!(bl.is_banned("10.0.0.1"));
+        assert_eq!(bl.banned_count(), 1);
+
+        bl.unban("10.0.0.1");
+        assert!(!bl.is_banned("10.0.0.1"));
+    }
+
+    #[test]
+    fn test_security_peer_guard() {
+        use crate::security::{PeerGuard, ConnectionLimits};
+
+        let mut guard = PeerGuard::new(2);
+        assert!(guard.admit("10.0.0.1", 0));
+        assert!(guard.admit("10.0.0.1", 1));
+        assert!(!guard.admit("10.0.0.1", 2)); // cap reached
+
+        // Strikes → auto-ban
+        for _ in 0..ConnectionLimits::MAX_STRIKES_BEFORE_BAN {
+            guard.strike("10.0.0.2");
+        }
+        assert!(guard.ban_list.is_banned("10.0.0.2"));
+        assert!(!guard.check_rate("10.0.0.2"));
+    }
+
+    #[test]
+    fn test_security_input_validator() {
+        use crate::security::InputValidator;
+        use crate::transaction::Transaction;
+
+        let mut tx = Transaction::coinbase("aabbccddaabbccddaabbccddaabbccddaabbccdd", 0);
+        tx.is_coinbase = false;
+        tx.tx_id = format!("{:064x}", 1u64);
+        assert!(InputValidator::validate_tx(&tx).is_ok());
+
+        // Coinbase must not be relayed
+        let cb = Transaction::coinbase("aabb", 0);
+        assert!(InputValidator::validate_tx(&cb).is_err());
+
+        // Short tx_id
+        let mut bad = tx.clone();
+        bad.tx_id = "abc".to_string();
+        assert!(InputValidator::validate_tx(&bad).is_err());
+
+        // Hello validation
+        assert!(InputValidator::validate_hello(1, "127.0.0.1", 8333).is_ok());
+        assert!(InputValidator::validate_hello(0, "127.0.0.1", 8333).is_err());
+        assert!(InputValidator::validate_hello(1, "127.0.0.1", 0).is_err());
+
+        // Peers validation
+        let good_peers = vec!["127.0.0.1:8333".to_string()];
+        assert!(InputValidator::validate_peers_response(&good_peers, 50).is_ok());
+        assert!(InputValidator::validate_peers_response(&good_peers, 0).is_err());
+    }
+
+    // ── P2P Improvements (v5.2) ──────────────────────────────────────────────
+
+    #[test]
+    fn test_peer_scoring_events() {
+        use crate::p2p::{PeerRegistry, ScoreEvent, BAN_SCORE_THRESHOLD};
+
+        let mut reg = PeerRegistry::new();
+        let ip = "10.0.1.1";
+
+        reg.record(ip, ScoreEvent::ValidBlock);
+        reg.record(ip, ScoreEvent::ValidBlock);
+        assert!(reg.score_of(ip) > 0);
+
+        // Drive below ban threshold: 2×(+10) + 4×(-20) = -60 ≤ -50
+        for _ in 0..4 {
+            reg.record(ip, ScoreEvent::InvalidBlock);
+        }
+        assert!(reg.score_of(ip) <= BAN_SCORE_THRESHOLD,
+            "score {} should be ≤ threshold {}", reg.score_of(ip), BAN_SCORE_THRESHOLD);
+        assert!(reg.should_ban(ip));
+    }
+
+    #[test]
+    fn test_peer_registry_best_peers() {
+        use crate::p2p::{PeerRegistry, ScoreEvent};
+
+        let mut reg = PeerRegistry::new();
+        reg.record("peer_a", ScoreEvent::ValidBlock);
+        reg.record("peer_a", ScoreEvent::ValidBlock);
+        reg.record("peer_b", ScoreEvent::ValidBlock);
+        reg.record("peer_c", ScoreEvent::Timeout);
+
+        let best = reg.best_peers(2);
+        assert_eq!(best.len(), 2);
+        assert!(best[0].score >= best[1].score);
+        assert_eq!(best[0].address, "peer_a");
+    }
+
+    #[test]
+    fn test_message_dedup_bounded() {
+        use crate::p2p::MessageDedup;
+
+        let mut dedup = MessageDedup::new(3);
+
+        assert!(dedup.check_and_insert("h1"));
+        assert!(dedup.check_and_insert("h2"));
+        assert!(dedup.check_and_insert("h3"));
+        assert_eq!(dedup.len(), 3);
+
+        // 4th insert evicts "h1" (oldest)
+        assert!(dedup.check_and_insert("h4"));
+        assert_eq!(dedup.len(), 3);
+        assert!(!dedup.contains("h1"), "oldest must be evicted");
+        assert!(dedup.contains("h4"));
+
+        // Duplicate still rejected
+        assert!(!dedup.check_and_insert("h4"));
+    }
+
+    // ── Coinbase Maturity & Replay Protection (v5.3) ─────────────────────────
+
+    #[test]
+    fn test_coinbase_guard_maturity() {
+        use crate::maturity::CoinbaseGuard;
+
+        let mut guard = CoinbaseGuard::new();
+        guard.register("cb_aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabb", 10);
+
+        // Not mature before height 110
+        assert!(!guard.is_mature("cb_aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabb", 50));
+        assert!(!guard.is_mature("cb_aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabb", 109));
+
+        // Mature at height 110 (= 10 + 100)
+        assert!(guard.is_mature("cb_aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabb", 110));
+        assert_eq!(guard.blocks_until_mature("cb_aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabb", 60), 50);
+
+        // Unknown tx_id always mature (regular TX)
+        assert!(guard.is_mature("some_regular_tx", 0));
+    }
+
+    #[test]
+    fn test_replay_guard_detects_replay() {
+        use crate::maturity::TxReplayGuard;
+
+        let mut guard = TxReplayGuard::new(100);
+
+        assert!(guard.confirm("tx_001").is_ok());
+        assert!(guard.confirm("tx_002").is_ok());
+        assert!(guard.confirm("tx_001").is_err(), "second confirm of tx_001 must be replay");
+        assert!(guard.is_replay("tx_001"));
+        assert!(!guard.is_replay("tx_003"));
+
+        // Eviction: window=2
+        let mut small = TxReplayGuard::new(2);
+        small.confirm("a").unwrap();
+        small.confirm("b").unwrap();
+        small.confirm("c").unwrap(); // evicts "a"
+        assert!(!small.is_replay("a"), "evicted entry must not block re-confirm");
+        assert!(small.is_replay("b"));
+        assert_eq!(small.len(), 2);
+    }
+
+    #[test]
+    fn test_locktime_validator() {
+        use crate::maturity::LockTimeValidator;
+        use crate::transaction::Transaction;
+
+        // check_locktime: 0 = always valid
+        assert!(LockTimeValidator::check_locktime(0, 0));
+        // block-height locktime
+        assert!(!LockTimeValidator::check_locktime(100, 50));  // future
+        assert!(LockTimeValidator::check_locktime(100, 100));  // exactly met
+        // timestamp locktime always valid in simplified impl
+        assert!(LockTimeValidator::check_locktime(500_000_001, 0));
+
+        // is_final: coinbase always final
+        let cb = Transaction::coinbase("aabbccddaabbccddaabbccddaabbccddaabbccdd", 0);
+        assert!(LockTimeValidator::is_final(&cb, 0));
+
+        // tx with no inputs → final
+        let mut empty_tx = Transaction::coinbase("aabbccddaabbccddaabbccddaabbccddaabbccdd", 0);
+        empty_tx.is_coinbase = false;
+        assert!(LockTimeValidator::is_final(&empty_tx, 0));
     }
 }

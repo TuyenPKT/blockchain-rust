@@ -1,7 +1,7 @@
 # TODO — Blockchain Rust
 
-**Version hiện tại: v5.0 ✅**
-**Tiến độ: 49/49+ versions — Era 11 bắt đầu**
+**Version hiện tại: v5.3 ✅**
+**Tiến độ: 52/52+ versions — Era 11: 4/10**
 
 ---
 
@@ -78,9 +78,9 @@
 ## ✅ Era 11 — Optimization & Security (2032–2035)
 
 - [x] v5.0 — Performance: UTXO secondary index, block cache, fast Merkle → `performance.rs`
-- [ ] v5.1 — Security hardening: input validation, DoS protection, rate limiting
-- [ ] v5.2 — P2P improvements: peer scoring, ban list
-- [ ] v5.3 — Coinbase maturity (100 blocks), replay protection
+- [x] v5.1 — Security hardening: RateLimiter, BanList, PeerGuard, InputValidator → `security.rs`
+- [x] v5.2 — P2P improvements: PeerRegistry, ScoreEvent, MessageDedup → `p2p.rs`
+- [x] v5.3 — Coinbase maturity (100 blocks), replay protection, locktime/sequence → `maturity.rs`
 - [ ] v5.4 — Fee market: dynamic estimation, RBF
 - [ ] v5.5 — Storage v2: WAL, atomic writes, crash recovery
 - [ ] v5.6 — Fuzz testing + proptest
@@ -92,7 +92,7 @@
 
 ## 🔜 Tiếp theo
 
-**v5.1 — Security hardening**: input validation, DoS protection, rate limiting P2P
+**v5.4 — Fee market**: dynamic fee estimation, RBF (Replace-By-Fee)
 
 ---
 
@@ -110,7 +110,7 @@
 | Era 8 (2025–2027)  | 4  | 4  | 0  |
 | Era 9 (2027–2030)  | 6  | 6  | 0  |
 | Era 10 (2031+)     | 9  | 9  | 0  |
-| Era 11 (2032–2035) | 10 | 1  | 9  |
-| **Tổng**           | **49** | **49** | **9** |
+| Era 11 (2032–2035) | 10 | 4  | 6  |
+| **Tổng**           | **52** | **52** | **6** |
 
-> Cập nhật lần cuối: v5.0 ✅ — Era 11 bắt đầu
+> Cập nhật lần cuối: v5.3 ✅ — Coinbase maturity, replay protection, locktime/sequence
