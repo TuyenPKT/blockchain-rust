@@ -87,8 +87,16 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v3.7", file: "fhe_contract.rs",      year: 2028, description: "FHE Privacy Contract, LWE, Encrypted Vote/Salary" },
     VersionInfo { version: "v3.8", file: "sovereign_rollup.rs",  year: 2029, description: "Sovereign Rollup, DA Layer, Erasure Coding, DAS" },
     VersionInfo { version: "v3.9", file: "full_stack.rs",        year: 2030, description: "Full Stack Integration: End-to-end 2009 → 2030" },
-    // Era 10 — PKT Native Chain (2030+)
-    VersionInfo { version: "v4.0", file: "wallet_cli.rs",         year: 2031, description: "PKT Wallet CLI: keygen, address, save/load, mine integration" },
+    // Era 10 — PKT Native Chain (2031+)
+    VersionInfo { version: "v4.0", file: "wallet_cli.rs",   year: 2031, description: "PKT Wallet CLI: keygen, address, save/load, mine integration" },
+    VersionInfo { version: "v4.1", file: "packetcrypt.rs",  year: 2031, description: "PacketCrypt PoW: announcement mining, effective difficulty" },
+    VersionInfo { version: "v4.2", file: "storage.rs",      year: 2031, description: "RocksDB Persistent Storage: save/load chain + UTXO" },
+    VersionInfo { version: "v4.3", file: "node.rs",         year: 2031, description: "P2P Sync: longest-chain rule, dedup, mempool broadcast" },
+    VersionInfo { version: "v4.4", file: "api.rs",          year: 2031, description: "REST API axum 0.7: /chain /balance /mempool /tx /status" },
+    VersionInfo { version: "v4.5", file: "miner.rs",        year: 2031, description: "Miner ↔ Node: sync chain, fetch mempool TXs, submit block" },
+    VersionInfo { version: "v4.6", file: "explorer.rs",     year: 2031, description: "Block Explorer CLI: chain/block/tx/balance/utxo" },
+    VersionInfo { version: "v4.7", file: "genesis.rs",      year: 2031, description: "Testnet Config: NetworkParams, build_genesis(), local testnet" },
+    VersionInfo { version: "v4.8", file: "metrics.rs",      year: 2031, description: "Metrics: hashrate, peer count, mempool depth, block time, sync" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -111,7 +119,7 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 7", range: "2023–2025", versions: "v2.6–v2.9", count: 4, theme: "AI & Programmable — Contracts, Oracle, AI Agent" },
     Era { name: "Era 8", range: "2025–2027", versions: "v3.0–v3.3", count: 4, theme: "Post-Quantum — Dilithium, SPHINCS+, ML-KEM, Hybrid" },
     Era { name: "Era 9", range: "2027–2030", versions: "v3.4–v3.9", count: 6, theme: "Autonomous Chain — IBC, DID, FHE, Sovereign Rollup" },
-    Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.x", count: 1, theme: "PKT Native Chain — Wallet CLI, Chain Sync, Persistent Storage" },
+    Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.8", count: 9, theme: "PKT Native Chain — PacketCrypt PoW, REST API, Testnet, Metrics" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -128,9 +136,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  40,
-    total_eras:       9,
-    total_src_files: 40,
+    total_versions:  48,
+    total_eras:      10,
+    total_src_files: 47,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",

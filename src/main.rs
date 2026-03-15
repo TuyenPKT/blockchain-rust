@@ -143,7 +143,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v4.0                     ║");
+    println!("║              ⛓   Blockchain Rust  v4.8                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
