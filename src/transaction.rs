@@ -152,12 +152,27 @@ impl Transaction {
 
     pub fn calculate_id(&self) -> String { self.calculate_txid() }
 
+    #[allow(dead_code)]
     pub fn coinbase(miner_pubkey_hash: &str, total_fee: u64) -> Self {
+        Self::coinbase_at(miner_pubkey_hash, total_fee, 0)
+    }
+
+    /// BIP34-style coinbase: encode block height vào coinbase input
+    /// để mỗi block có tx_id duy nhất dù cùng miner address và fee.
+    pub fn coinbase_at(miner_pubkey_hash: &str, total_fee: u64, height: u64) -> Self {
         let subsidy = 50_000_000_00u64;
         let outputs = vec![TxOutput::p2pkh(subsidy + total_fee, miner_pubkey_hash)];
+        // Coinbase input: tx_id = all zeros, output_index = block height (BIP34)
+        let coinbase_input = TxInput {
+            tx_id:        "0".repeat(64),
+            output_index: height as usize,
+            script_sig:   Script::empty(),
+            sequence:     0xFFFFFFFF,
+            witness:      vec![],
+        };
         let mut tx = Transaction {
             tx_id: String::new(), wtx_id: String::new(),
-            inputs: vec![], outputs, is_coinbase: true, fee: 0,
+            inputs: vec![coinbase_input], outputs, is_coinbase: true, fee: 0,
         };
         tx.tx_id  = tx.calculate_txid();
         tx.wtx_id = tx.calculate_wtxid();

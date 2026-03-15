@@ -185,13 +185,18 @@ pub fn cmd_utxo(addr: &str) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn load_or_exit() -> (Vec<crate::block::Block>, std::collections::HashMap<String, crate::transaction::TxOutput>) {
-    let blocks = match storage::load_chain() {
-        Ok(Some(b)) => b,
-        Ok(None)    => { eprintln!("Chưa có chain. Chạy miner trước: cargo run -- mine"); std::process::exit(1); }
-        Err(e)      => { eprintln!("Lỗi load chain: {}", e); std::process::exit(1); }
-    };
-    let utxos = storage::load_utxo().unwrap_or_default().unwrap_or_default();
-    (blocks, utxos)
+    match storage::load_chain() {
+        Err(e) => { eprintln!("Lỗi load chain: {}", e); std::process::exit(1); }
+        Ok(Some(blocks)) => {
+            let utxos = storage::load_utxo().unwrap_or_default().unwrap_or_default();
+            (blocks, utxos)
+        }
+        Ok(None) => {
+            // Chưa mine lần nào — dùng genesis blockchain
+            let bc = storage::load_or_new();
+            (bc.chain, bc.utxo_set.utxos)
+        }
+    }
 }
 
 fn print_explorer_help() {

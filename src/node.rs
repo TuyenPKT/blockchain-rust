@@ -15,6 +15,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use crate::chain::Blockchain;
 use crate::message::Message;
+use crate::storage;
 
 /// Node = 1 instance blockchain chạy trên 1 port TCP
 #[allow(dead_code)]
@@ -41,8 +42,15 @@ impl Node {
     /// Khởi động TCP listener — chấp nhận kết nối từ peers
     pub async fn start(self: Arc<Self>) {
         let addr     = format!("0.0.0.0:{}", self.port);
-        let listener = TcpListener::bind(&addr).await.unwrap();
-        println!("🌐 Node {} đang lắng nghe tại {}", self.port, addr);
+        let listener = match TcpListener::bind(&addr).await {
+            Ok(l)  => l,
+            Err(e) => {
+                eprintln!("Lỗi bind port {}: {} — cổng đang bị dùng bởi process khác?", self.port, e);
+                eprintln!("  Thử: lsof -i :{} | grep LISTEN   hoặc đổi port: cargo run -- node 8334", self.port);
+                return;
+            }
+        };
+        println!("Node {} đang lắng nghe tại {}", self.port, addr);
 
         loop {
             let (socket, peer_addr) = match listener.accept().await {
@@ -137,6 +145,8 @@ impl Node {
                     println!("  [{}] ✅ Block #{} hợp lệ → thêm vào chain", self.port, block.index);
                     chain.utxo_set.apply_block(&block.transactions);
                     chain.chain.push(block);
+                    // Persist ngay sau khi nhận block hợp lệ từ miner/peer
+                    let _ = storage::save_blockchain(&chain);
                 } else if block.index > tip.index + 1 {
                     // v4.3: Fork detection — peer ở phía trước, cần sync
                     println!("  [{}] ⚠️  Fork: peer ở height {}, ta ở {} → request sync", self.port, block.index, tip.index);
@@ -145,7 +155,9 @@ impl Node {
                 } else {
                     println!("  [{}] ⚠️  Block #{} stale hoặc invalid", self.port, block.index);
                 }
-                None
+                // Luôn reply Height để miner không bị timeout khi chờ response
+                let height = chain.last_block().index;
+                Some(Message::Height { height })
             }
 
             Message::GetBlocks { from_index } => {

@@ -252,12 +252,13 @@ impl Miner {
         let coinbase_reward = 5_000_000_000u64; // 50 PKT in paklets (simplified)
         let earned          = coinbase_reward + total_fee;
 
-        let coinbase  = Transaction::coinbase(&self.cfg.address, total_fee);
+        let prev    = self.chain.chain.last().unwrap();
+        let height  = prev.index + 1;
+        let coinbase = Transaction::coinbase_at(&self.cfg.address, total_fee, height);
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
 
-        let prev       = self.chain.chain.last().unwrap();
-        let mut block  = Block::new(prev.index + 1, all_txs, prev.hash.clone());
+        let mut block  = Block::new(height, all_txs, prev.hash.clone());
 
         // ── Adjust difficulty ────────────────────────────────────────────────
         let diff = self.chain.difficulty;

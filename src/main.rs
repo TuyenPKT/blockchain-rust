@@ -376,7 +376,7 @@ mod tests {
         use crate::transaction::Transaction;
         let tx = Transaction::coinbase("aabbccddee112233445566778899aabbccddee11", 0);
         assert!(tx.is_coinbase);
-        assert_eq!(tx.inputs.len(),  0); // coinbase không có input
+        assert_eq!(tx.inputs.len(),  1); // coinbase input (BIP34 height encoding)
         assert_eq!(tx.outputs.len(), 1);
         assert!(!tx.tx_id.is_empty());
     }

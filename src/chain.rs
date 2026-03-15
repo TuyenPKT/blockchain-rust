@@ -463,7 +463,8 @@ impl Blockchain {
         }
 
         let total_fee: u64 = valid_txs.iter().map(|t| t.fee).sum();
-        let coinbase = Transaction::coinbase(miner_hash, total_fee);
+        let height   = self.chain.last().map(|b| b.index + 1).unwrap_or(0);
+        let coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
 
@@ -492,7 +493,8 @@ impl Blockchain {
             if self.validate_tx_script(&tx) { valid_txs.push(tx); }
         }
         let total_fee: u64 = valid_txs.iter().map(|t| t.fee).sum();
-        let coinbase = Transaction::coinbase(miner_hash, total_fee);
+        let height   = self.chain.last().map(|b| b.index + 1).unwrap_or(0);
+        let coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
 
