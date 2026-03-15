@@ -22,3 +22,12 @@ pbkdf2 = { version = "0.12", features = ["hmac"] }
 rocksdb = "0.21"
 # v4.4: REST API
 axum = "0.7"
+# v5.6: property-based testing
+proptest = { version = "1.4", optional = true }
+
+[features]
+default = []
+fuzz = ["proptest"]
+
+[dev-dependencies]
+proptest = "1.4"

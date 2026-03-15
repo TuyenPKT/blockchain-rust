@@ -50,6 +50,7 @@ mod p2p;
 mod maturity;
 mod fee_market;
 mod wal;
+mod fuzz;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -149,7 +150,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v5.5                     ║");
+    println!("║              ⛓   Blockchain Rust  v5.6                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -1479,25 +1480,24 @@ mod tests {
         use crate::wal::{wal_status, RecoveryStatus};
         use crate::chain::Blockchain;
 
-        // Blockchain mới (không có DB) → Fresh
+        // Blockchain mới (không có DB) → Fresh (test không ghi DB, không cần lock)
         let bc = Blockchain::new();
         let mut bc_mut = bc;
-        // check_and_recover trên chain chỉ có genesis (chain chưa lưu) → Fresh
         let status = crate::wal::check_and_recover(&mut bc_mut);
-        // DB chưa tồn tại hoặc mới → Fresh (không crash)
         assert!(matches!(status, RecoveryStatus::Fresh | RecoveryStatus::Ok));
         drop(wal_status()); // wal_status phải không panic
     }
 
     #[test]
     fn test_wal_epoch_is_even_after_save() {
+        let _lock = STORAGE_LOCK.lock().unwrap(); // serialize với storage tests
         use crate::wal::{atomic_save, wal_status};
         use crate::chain::Blockchain;
 
         let mut bc = Blockchain::new();
         bc.add_block(vec![], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         // Lưu atomic → epoch phải chẵn sau khi xong
-        let _ = atomic_save(&bc); // Có thể fail nếu không có home dir trong CI, bỏ qua lỗi
+        let _ = atomic_save(&bc);
         let status = wal_status();
         if status.db_exists {
             assert!(status.is_clean, "epoch phải chẵn sau atomic_save thành công");
@@ -1523,5 +1523,106 @@ mod tests {
         // Nhưng UTXO đã xóa → test rebuild logic trực tiếp
         // (actual repair chỉ khi load từ DB thực tế)
         assert!(utxo_count_before > 0, "chain có 2 blocks phải có UTXOs coinbase");
+    }
+
+    // ── Fuzz + Property-based tests (v5.6) ───────────────────────────────────
+
+    #[test]
+    fn test_fuzz_message_corpus_no_panic() {
+        use crate::fuzz::{run_message_fuzz_corpus};
+
+        let summary = run_message_fuzz_corpus();
+        // Quan trọng nhất: không có panic với bất kỳ input nào
+        assert_eq!(summary.panics, 0,
+            "Message::deserialize không được panic với bất kỳ input nào ({} panics trên {} inputs)",
+            summary.panics, summary.total);
+        assert!(summary.total > 0);
+    }
+
+    #[test]
+    fn test_fuzz_block_hash_deterministic() {
+        use crate::fuzz::fuzz_block_hash;
+        use crate::block::Block;
+
+        // Same inputs → same hash (determinism)
+        let h1 = Block::calculate_hash(42, 1000000, &[], "abcd1234", 99);
+        let h2 = Block::calculate_hash(42, 1000000, &[], "abcd1234", 99);
+        assert_eq!(h1, h2, "hash phải deterministic");
+
+        // Fuzz với extreme values không panic
+        let r1 = fuzz_block_hash(0, 0, 0, "");
+        let r2 = fuzz_block_hash(u64::MAX, i64::MIN, u64::MAX, &"f".repeat(64));
+        let r3 = fuzz_block_hash(1, 1, 1, "invalid-hex-!@#$");
+        assert!(!r1.panicked, "hash với empty prev_hash không được panic");
+        assert!(!r2.panicked, "hash với MAX values không được panic");
+        assert!(!r3.panicked, "hash với invalid hex không được panic");
+        // Hash output phải luôn 64 hex chars
+        assert!(r2.parsed_ok, "hash output phải là 64 hex chars");
+    }
+
+    #[test]
+    fn test_fuzz_block_serialization_roundtrip() {
+        use crate::fuzz::fuzz_block_serialization;
+
+        // Test nhiều index và nonce values
+        for (index, nonce) in [(0u64, 0u64), (1, 12345), (999, u64::MAX / 2), (u64::MAX / 4, 1)] {
+            assert!(fuzz_block_serialization(index, nonce),
+                "Block serialization roundtrip failed cho index={}, nonce={}", index, nonce);
+        }
+    }
+
+    // ── Proptest property-based tests ────────────────────────────────────────
+
+    proptest::proptest! {
+        #[test]
+        fn prop_hash_always_64_hex(
+            index in 0u64..10000,
+            nonce in 0u64..100000,
+            ts    in 0i64..2_000_000_000i64,
+        ) {
+            use crate::block::Block;
+            use crate::fuzz::invariant_hash_is_64_hex;
+            let hash = Block::calculate_hash(index, ts, &[], "0000000000000000000000000000000000000000000000000000000000000000", nonce);
+            proptest::prop_assert!(invariant_hash_is_64_hex(&hash),
+                "hash '{}' không phải 64 hex chars", hash);
+        }
+
+        #[test]
+        fn prop_message_deserialize_no_panic(data in proptest::collection::vec(0u8..=255, 0..512)) {
+            use crate::fuzz::fuzz_message_deserialize;
+            let r = fuzz_message_deserialize(&data);
+            proptest::prop_assert!(!r.panicked,
+                "Message::deserialize panic với {} bytes", data.len());
+        }
+
+        #[test]
+        fn prop_fee_estimate_ordering(
+            fast   in 1.0f64..1000.0,
+            medium in 1.0f64..1000.0,
+            slow   in 1.0f64..1000.0,
+        ) {
+            use crate::fee_market::FeeEstimate;
+            // FeeEstimate đảm bảo fast >= medium >= slow
+            let est = FeeEstimate {
+                fast_sat_per_byte:   fast.max(medium).max(slow),
+                medium_sat_per_byte: medium.min(fast).max(slow),
+                slow_sat_per_byte:   slow.min(medium).min(fast),
+                min_sat_per_byte:    1.0,
+            };
+            proptest::prop_assert!(est.fast_sat_per_byte >= est.medium_sat_per_byte,
+                "fast phải >= medium");
+            proptest::prop_assert!(est.medium_sat_per_byte >= est.slow_sat_per_byte,
+                "medium phải >= slow");
+        }
+
+        #[test]
+        fn prop_rbf_bump_consistent(old_fee in 1u64..1_000_000, bump_pct in 0u64..200) {
+            use crate::fee_market::{is_valid_rbf_bump, RBF_MIN_BUMP};
+            let new_fee = old_fee * (100 + bump_pct) / 100;
+            let valid = is_valid_rbf_bump(old_fee, new_fee);
+            let expected = new_fee as f64 >= old_fee as f64 * RBF_MIN_BUMP;
+            proptest::prop_assert_eq!(valid, expected,
+                "RBF check không nhất quán: old={} new={} bump={}%", old_fee, new_fee, bump_pct);
+        }
     }
 }
