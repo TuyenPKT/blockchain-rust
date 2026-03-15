@@ -2,22 +2,34 @@
 
 /// v4.6 — Block Explorer CLI
 ///
-/// Đọc chain từ RocksDB local storage (read-only).
+/// Đọc chain từ RocksDB local storage (read-only), hoặc query remote node qua TCP.
 ///
 /// Commands:
-///   cargo run -- explorer chain             hiển thị chain summary + 5 blocks gần nhất
+///   cargo run -- explorer chain [node]      chain summary + 5 blocks gần nhất
 ///   cargo run -- explorer block <height>    chi tiết một block
 ///   cargo run -- explorer tx <tx_id>        tìm transaction theo tx_id (hoặc prefix)
 ///   cargo run -- explorer balance <addr>    số dư của địa chỉ
 ///   cargo run -- explorer utxo <addr>       danh sách UTXO của địa chỉ
+///
+/// Nếu <node> được chỉ định (ví dụ: seed.testnet.oceif.com:8333), explorer sẽ
+/// query remote node thay vì đọc local DB.
 
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
+use std::time::Duration;
 use crate::storage;
+use crate::message::Message;
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 pub fn run_explorer(args: &[String]) {
     match args.get(2).map(|s| s.as_str()) {
-        Some("chain")              => cmd_chain(),
+        Some("chain") => {
+            // Optional node addr: cargo run -- explorer chain seed.testnet.oceif.com:8333
+            let node = args.get(3).map(|s| s.as_str())
+                .or(Some(crate::miner::DEFAULT_NODE));
+            cmd_chain(node);
+        }
         Some("block")              => {
             match args.get(3).and_then(|s| s.parse::<u64>().ok()) {
                 Some(h) => cmd_block(h),
@@ -49,9 +61,26 @@ pub fn run_explorer(args: &[String]) {
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 /// explorer chain — tóm tắt toàn bộ chain
-pub fn cmd_chain() {
-    let (blocks, utxos) = load_or_exit();
-    let height     = blocks.len().saturating_sub(1);
+/// node_addr: nếu Some, query remote node; nếu None, đọc local DB
+pub fn cmd_chain(node_addr: Option<&str>) {
+    let (blocks, utxos) = match node_addr {
+        Some(addr) => match fetch_remote_chain(addr) {
+            Some(blocks) => {
+                let utxos = std::collections::HashMap::new();
+                (blocks, utxos)
+            }
+            None => {
+                eprintln!("  Không kết nối được node {} — đọc local DB", addr);
+                load_or_exit()
+            }
+        },
+        None => load_or_exit(),
+    };
+    if blocks.is_empty() {
+        println!("  (Chain trống — chưa có block nào sau genesis)");
+        return;
+    }
+    let height     = blocks.last().map(|b| b.index).unwrap_or(0);
     let utxo_count = utxos.len();
     let supply: u64 = utxos.values().map(|o| o.amount).sum();
     let tip        = blocks.last().unwrap();
@@ -199,12 +228,41 @@ fn load_or_exit() -> (Vec<crate::block::Block>, std::collections::HashMap<String
     }
 }
 
+/// Fetch toàn bộ blocks từ remote node qua TCP GetBlocks
+fn fetch_remote_chain(node_addr: &str) -> Option<Vec<crate::block::Block>> {
+    println!("  Kết nối node {} ...", node_addr);
+    let mut stream = match TcpStream::connect(node_addr) {
+        Ok(s)  => s,
+        Err(e) => { eprintln!("  ✗ connect: {}", e); return None; }
+    };
+    stream.set_read_timeout(Some(Duration::from_secs(15))).ok()?;
+
+    let msg = Message::GetBlocks { from_index: 0 };
+    if let Err(e) = stream.write_all(&msg.serialize()) {
+        eprintln!("  ✗ write: {}", e); return None;
+    }
+
+    let mut line = String::new();
+    match BufReader::new(stream).read_line(&mut line) {
+        Ok(0)  => { eprintln!("  ✗ connection closed"); None }
+        Err(e) => { eprintln!("  ✗ read: {}", e); None }
+        Ok(_)  => match Message::deserialize(line.trim_end_matches('\n').as_bytes()) {
+            Some(Message::Blocks { blocks }) => {
+                println!("  ✓ nhận {} blocks từ {}", blocks.len(), node_addr);
+                Some(blocks)
+            }
+            other => { eprintln!("  ✗ unexpected response: {:?}", other); None }
+        }
+    }
+}
+
 fn print_explorer_help() {
     println!();
     println!("  Usage: cargo run -- explorer <command> [args]");
     println!();
     println!("  Commands:");
-    println!("    chain              chain summary + 5 blocks gần nhất");
+    println!("    chain [node]       chain summary + 5 blocks gần nhất");
+    println!("                         node mặc định: {}", crate::miner::DEFAULT_NODE);
     println!("    block <height>     chi tiết block tại height");
     println!("    tx <tx_id>         tìm transaction (có thể dùng prefix)");
     println!("    balance <addr>     số dư của địa chỉ (pubkey_hash_hex)");

@@ -145,6 +145,7 @@ impl Node {
                     println!("  [{}] ✅ Block #{} hợp lệ → thêm vào chain", self.port, block.index);
                     chain.utxo_set.apply_block(&block.transactions);
                     chain.chain.push(block);
+                    chain.adjust_difficulty();
                     // Persist ngay sau khi nhận block hợp lệ từ miner/peer
                     let _ = storage::save_blockchain(&chain);
                 } else if block.index > tip.index + 1 {
@@ -189,6 +190,7 @@ impl Node {
                         {
                             chain.utxo_set.apply_block(&block.transactions);
                             chain.chain.push(block.clone());
+                            chain.adjust_difficulty();
                         }
                     }
                     let _ = storage::save_blockchain(&chain);
@@ -250,7 +252,22 @@ impl Node {
                 Some(Message::PeerCount { count })
             }
 
-            Message::PeerCount { .. } => None, // response, không xử lý ở node
+            Message::PeerCount { .. } => None,
+
+            // v5.x: getblocktemplate — miner query để mine block tiếp theo
+            Message::GetTemplate => {
+                let chain = self.chain.lock().await;
+                let tip   = chain.last_block();
+                let txs   = chain.mempool.select_transactions(500);
+                Some(Message::Template {
+                    prev_hash:  tip.hash.clone(),
+                    height:     tip.index + 1,
+                    difficulty: chain.difficulty,
+                    txs,
+                })
+            }
+
+            Message::Template { .. } => None, // miner nhận, node bỏ qua
         }
     }
 

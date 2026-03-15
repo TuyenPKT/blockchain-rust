@@ -694,7 +694,7 @@ impl Blockchain {
         Ok(tx_id)
     }
 
-    fn adjust_difficulty(&mut self) {
+    pub fn adjust_difficulty(&mut self) {
         let len = self.chain.len() as u64;
         if len == 0 || len % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 { return; }
         let last  = self.chain.last().unwrap();

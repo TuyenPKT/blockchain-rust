@@ -43,6 +43,16 @@ pub enum Message {
     GetPeerCount,
     /// v4.8: Trả về peer count
     PeerCount { count: usize },
+
+    /// v5.x: Miner yêu cầu block template để mine (getblocktemplate-style)
+    GetTemplate,
+    /// Node trả về mọi thứ miner cần để mine block tiếp theo
+    Template {
+        prev_hash:  String,
+        height:     u64,
+        difficulty: usize,
+        txs:        Vec<Transaction>, // pending txs từ mempool
+    },
 }
 
 impl Message {

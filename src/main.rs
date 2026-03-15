@@ -204,30 +204,28 @@ fn run_miner(args: &[String]) {
     let address = args.get(2).cloned().unwrap_or_else(|| {
         wallet_cli::load_miner_address()
             .unwrap_or_else(|| {
-                println!("⚠️  Chưa có ví. Tạo ví trước: cargo run -- wallet new");
-                println!("   Hoặc chỉ định địa chỉ: cargo run -- mine <pubkey_hash_hex>");
+                println!("Chưa có ví. Tạo ví trước: cargo run -- wallet new");
+                println!("  Hoặc chỉ định địa chỉ: cargo run -- mine <pubkey_hash_hex>");
                 std::process::exit(1);
             })
     });
-    // args[3] có thể là số blocks (vd: "10") hoặc node address (vd: "1.2.3.4:8333")
-    // Nếu chứa ':' → là node address, không phải số blocks
+
+    // args[3]: số blocks ("10") hoặc node address ("1.2.3.4:8333") hoặc không có
+    // args[4]: node address nếu args[3] là số blocks
     let (max_blks, node_addr) = match args.get(3).map(|s| s.as_str()) {
-        Some(s) if s.contains(':') => (None,                                Some(s.to_string())),
+        Some(s) if s.contains(':') => (None,               Some(s.to_string())),
         Some(s)                    => (s.parse::<u32>().ok(), args.get(4).cloned()),
-        None                       => (None,                                None),
+        None                       => (None,               None),
     };
 
     let cfg = match max_blks {
         Some(n) => MinerConfig::with_limit(&address, n),
         None    => MinerConfig::new(&address),
     };
-    // v4.5: attach node nếu có
+    // Ghi đè node nếu user chỉ định, mặc định là seed.testnet.oceif.com:8333
     let cfg = match node_addr {
-        Some(ref addr) => {
-            println!("  [miner] Kết nối đến node {}", addr);
-            cfg.with_node(addr)
-        }
-        None => cfg,
+        Some(ref addr) => cfg.with_node(addr),
+        None           => cfg,
     };
 
     let mut miner = Miner::new(cfg);
@@ -1008,7 +1006,7 @@ mod tests {
     fn test_miner_node_config() {
         use crate::miner::MinerConfig;
         let cfg = MinerConfig::new("deadbeef").with_node("127.0.0.1:8333");
-        assert_eq!(cfg.node_addr.as_deref(), Some("127.0.0.1:8333"));
+        assert_eq!(cfg.node_addr, "127.0.0.1:8333");
         assert_eq!(cfg.address, "deadbeef");
         assert!(cfg.max_blocks.is_none());
     }
