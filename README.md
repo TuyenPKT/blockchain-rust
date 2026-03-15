@@ -30,7 +30,7 @@ Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Te
 **Yêu cầu:** Rust 1.75+
 
 ```bash
-git clone https://github.com/your-username/blockchain-rust
+git clone https://github.com/TuyenPKT/blockchain-rust.git
 cd blockchain-rust
 cargo build
 cargo test

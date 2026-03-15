@@ -1,7 +1,7 @@
 # TODO — Blockchain Rust
 
-**Version hiện tại: v4.8 ✅**
-**Tiến độ: 48/48+ versions — Era 10 hoàn thành (trừ v4.9 mainnet)**
+**Version hiện tại: v5.0 ✅**
+**Tiến độ: 49/49+ versions — Era 11 bắt đầu**
 
 ---
 
@@ -75,9 +75,24 @@
 
 ---
 
+## ✅ Era 11 — Optimization & Security (2032–2035)
+
+- [x] v5.0 — Performance: UTXO secondary index, block cache, fast Merkle → `performance.rs`
+- [ ] v5.1 — Security hardening: input validation, DoS protection, rate limiting
+- [ ] v5.2 — P2P improvements: peer scoring, ban list
+- [ ] v5.3 — Coinbase maturity (100 blocks), replay protection
+- [ ] v5.4 — Fee market: dynamic estimation, RBF
+- [ ] v5.5 — Storage v2: WAL, atomic writes, crash recovery
+- [ ] v5.6 — Fuzz testing + proptest
+- [ ] v5.7 — Monitoring: metrics endpoint, structured logging (tracing)
+- [ ] v5.8 — Code audit: fix Known Gaps
+- [ ] v5.9 — Benchmark suite: tps, latency, memory
+
+---
+
 ## 🔜 Tiếp theo
 
-**v4.9 — PKT Mainnet** _(beta — chưa lên kế hoạch)_
+**v5.1 — Security hardening**: input validation, DoS protection, rate limiting P2P
 
 ---
 
@@ -95,6 +110,7 @@
 | Era 8 (2025–2027)  | 4  | 4  | 0  |
 | Era 9 (2027–2030)  | 6  | 6  | 0  |
 | Era 10 (2031+)     | 9  | 9  | 0  |
-| **Tổng**           | **48** | **48** | **0** |
+| Era 11 (2032–2035) | 10 | 1  | 9  |
+| **Tổng**           | **49** | **49** | **9** |
 
-> Cập nhật lần cuối: v4.8 ✅ — Era 10 hoàn thành
+> Cập nhật lần cuối: v5.0 ✅ — Era 11 bắt đầu

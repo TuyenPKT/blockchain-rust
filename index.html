@@ -1,40 +1,117 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Blockchain Rust — 2009 → 2031+</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
   <style>
+    /* ── DESIGN TOKENS ───────────────────────────────── */
     :root {
-      --bg:      #0d1117;
-      --surface: #161b22;
-      --border:  #30363d;
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #21262d;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --code-bg:  #1f2428;
+      --shadow:   rgba(0, 0, 0, 0.5);
+      /* Rust/blockchain accent colors */
       --accent:  #f78166;
       --gold:    #e3b341;
       --green:   #3fb950;
       --blue:    #58a6ff;
       --purple:  #bc8cff;
       --teal:    #39d353;
-      --text:    #e6edf3;
-      --muted:   #8b949e;
-      --code-bg: #1f2428;
+      /* Transition */
+      --t: background 0.3s ease, color 0.3s ease,
+           border-color 0.3s ease, box-shadow 0.3s ease;
     }
+
+    /* Light theme overrides */
+    [data-theme="light"] {
+      --bg:       #f6f8fa;
+      --surface:  #ffffff;
+      --surface2: #eaeef2;
+      --border:   #d0d7de;
+      --text:     #24292f;
+      --muted:    #57606a;
+      --code-bg:  #f0f2f4;
+      --shadow:   rgba(0, 0, 0, 0.1);
+    }
+
+    html { transition: var(--t); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       line-height: 1.6;
+      transition: var(--t);
     }
 
-    /* ── HERO ────────────────────────────────────────────────── */
+    /* ── TOP BAR (same design as pwa-v2 3) ───────────── */
+    .top-bar {
+      position: fixed;
+      top: 8px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 100;
+    }
+    .lang-selector {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 10px;
+      transition: var(--t);
+    }
+    .lang-selector select {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: 'Sora', sans-serif;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      max-width: 110px;
+    }
+    .lang-flag { font-size: 15px; }
+    .theme-toggle {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 36px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      transition: var(--t);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .theme-toggle:hover { border-color: var(--accent); }
+
+    /* ── HERO ────────────────────────────────────────────── */
     .hero {
-      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+      background: linear-gradient(135deg, var(--bg) 0%, var(--surface) 50%, var(--bg) 100%);
       border-bottom: 1px solid var(--border);
-      padding: 80px 24px 60px;
+      padding: 120px 24px 60px;
       text-align: center;
       position: relative;
       overflow: hidden;
+      transition: var(--t);
     }
     .hero::before {
       content: "";
@@ -65,10 +142,11 @@
     }
     .hero h1 span { color: var(--accent); }
     .hero-sub {
-      font-size: 1.15rem;
+      font-size: 1.05rem;
       color: var(--muted);
-      max-width: 600px;
+      max-width: 620px;
       margin: 0 auto 32px;
+      transition: color 0.3s;
     }
     .hero-stats {
       display: flex;
@@ -88,10 +166,12 @@
       padding: 10px 22px;
       border-radius: 8px;
       font-size: .9rem;
+      font-family: 'Sora', sans-serif;
       font-weight: 600;
       text-decoration: none;
       transition: opacity .15s, transform .15s;
       cursor: pointer;
+      border: none;
     }
     .btn:hover { opacity: .85; transform: translateY(-1px); }
     .btn-primary { background: var(--blue); color: #000; }
@@ -101,9 +181,9 @@
       color: var(--text);
     }
 
-    /* ── LAYOUT ──────────────────────────────────────────────── */
+    /* ── LAYOUT ──────────────────────────────────────────── */
     .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-    section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+    section { padding: 64px 0; border-bottom: 1px solid var(--border); transition: border-color 0.3s; }
     section:last-child { border-bottom: none; }
     h2 {
       font-size: 1.6rem;
@@ -122,9 +202,9 @@
       margin-left: 10px;
       letter-spacing: .05em;
     }
-    .section-sub { color: var(--muted); margin-bottom: 36px; font-size: .95rem; }
+    .section-sub { color: var(--muted); margin-bottom: 36px; font-size: .95rem; transition: color 0.3s; }
 
-    /* ── ERA TIMELINE ────────────────────────────────────────── */
+    /* ── ERA TIMELINE ────────────────────────────────────── */
     .timeline { display: flex; flex-direction: column; gap: 0; }
     .era {
       display: grid;
@@ -173,14 +253,14 @@
       border-radius: 6px;
       padding: 3px 10px;
       font-size: .75rem;
-      font-family: "SFMono-Regular", Consolas, monospace;
+      font-family: 'JetBrains Mono', "SFMono-Regular", Consolas, monospace;
       color: var(--muted);
       transition: border-color .15s, color .15s;
       cursor: default;
     }
     .vpill:hover { border-color: var(--blue); color: var(--blue); }
 
-    /* ── ERA COLORS ─────────────────────────────────────────── */
+    /* ── ERA COLORS ─────────────────────────────────────── */
     .era-1 .era-dot { border-color: #f78166; }
     .era-2 .era-dot { border-color: #e3b341; }
     .era-3 .era-dot { border-color: #58a6ff; }
@@ -193,7 +273,7 @@
     .era-10 .era-dot { border-color: #39d353; }
     .era-11 .era-dot { border-color: #58a6ff; }
 
-    /* ── FEATURES GRID ───────────────────────────────────────── */
+    /* ── FEATURES GRID ───────────────────────────────────── */
     .features-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -204,7 +284,7 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 20px;
-      transition: border-color .2s, transform .2s;
+      transition: border-color .2s, transform .2s, var(--t);
     }
     .feature-card:hover {
       border-color: var(--blue);
@@ -212,9 +292,9 @@
     }
     .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
     .feature-title { font-weight: 700; font-size: .95rem; margin-bottom: 6px; }
-    .feature-desc { color: var(--muted); font-size: .83rem; line-height: 1.5; }
+    .feature-desc { color: var(--muted); font-size: .83rem; line-height: 1.5; transition: color 0.3s; }
 
-    /* ── INSTALL / USAGE ─────────────────────────────────────── */
+    /* ── INSTALL / USAGE ─────────────────────────────────── */
     .steps { display: flex; flex-direction: column; gap: 24px; }
     .step {
       display: grid;
@@ -234,9 +314,9 @@
       flex-shrink: 0;
     }
     .step-content h3 { font-size: 1rem; margin-bottom: 8px; }
-    .step-content p { color: var(--muted); font-size: .88rem; margin-bottom: 10px; }
+    .step-content p { color: var(--muted); font-size: .88rem; margin-bottom: 10px; transition: color 0.3s; }
     pre, code {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-family: 'JetBrains Mono', "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       font-size: .85rem;
     }
     pre {
@@ -247,6 +327,7 @@
       overflow-x: auto;
       color: var(--text);
       line-height: 1.6;
+      transition: var(--t);
     }
     pre .prompt { color: var(--muted); user-select: none; }
     pre .cmd     { color: var(--green); }
@@ -259,9 +340,10 @@
       padding: 1px 6px;
       font-size: .82rem;
       color: var(--accent);
+      transition: var(--t);
     }
 
-    /* ── SECURITY TABLE ──────────────────────────────────────── */
+    /* ── SECURITY TABLE ──────────────────────────────────── */
     .table-wrap { overflow-x: auto; }
     table {
       width: 100%;
@@ -278,13 +360,16 @@
       text-transform: uppercase;
       letter-spacing: .06em;
       border-bottom: 1px solid var(--border);
+      transition: var(--t);
     }
     td {
       padding: 11px 14px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
+      transition: var(--t);
     }
     tr:hover td { background: rgba(255,255,255,.025); }
+    [data-theme="light"] tr:hover td { background: rgba(0,0,0,.025); }
     .badge {
       display: inline-block;
       padding: 2px 8px;
@@ -299,12 +384,13 @@
     .badge-teal   { background: rgba(57,211,83,.15);  color: var(--teal);   border: 1px solid rgba(57,211,83,.25);  }
     .badge-red    { background: rgba(247,129,102,.15);color: var(--accent); border: 1px solid rgba(247,129,102,.25);}
 
-    /* ── STACK DIAGRAM ───────────────────────────────────────── */
+    /* ── STACK DIAGRAM ───────────────────────────────────── */
     .stack-diagram {
       background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
+      transition: var(--t);
     }
     .stack-row {
       display: flex;
@@ -340,9 +426,11 @@
       border-radius: 4px;
       padding: 2px 8px;
       font-size: .75rem;
-      font-family: monospace;
+      font-family: 'JetBrains Mono', monospace;
       color: var(--text);
+      transition: var(--t);
     }
+    [data-theme="light"] .stack-content .chip { background: rgba(0,0,0,.04); }
     .layer-identity  { color: #ffa657; }
     .layer-app       { color: #79c0ff; }
     .layer-cross     { color: #d2a8ff; }
@@ -350,7 +438,7 @@
     .layer-consensus { color: #3fb950; }
     .layer-base      { color: #58a6ff; }
 
-    /* ── FOOTER ──────────────────────────────────────────────── */
+    /* ── FOOTER ──────────────────────────────────────────── */
     footer {
       background: var(--surface);
       border-top: 1px solid var(--border);
@@ -358,39 +446,73 @@
       text-align: center;
       color: var(--muted);
       font-size: .83rem;
+      transition: var(--t);
     }
     footer a { color: var(--blue); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
 
-    /* ── RESPONSIVE ──────────────────────────────────────────── */
+    /* ── RESPONSIVE ──────────────────────────────────────── */
     @media (max-width: 640px) {
       .era { grid-template-columns: 90px 1px 1fr; gap: 0 12px; }
       .stack-layer { width: 100px; font-size: .7rem; }
+      .hero { padding: 100px 16px 48px; }
+      .top-bar { top: 6px; right: 8px; }
     }
   </style>
 </head>
 <body>
 
+<!-- ═══ TOP BAR ═══════════════════════════════════════════ -->
+<div class="top-bar">
+  <div class="lang-selector">
+    <span class="lang-flag" id="langFlag">🇻🇳</span>
+    <select id="langSelect" onchange="doChangeLang(this.value)" aria-label="Language">
+      <option value="vi">Tiếng Việt</option>
+      <option value="en">English</option>
+      <option value="zh">中文</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+      <option value="es">Español</option>
+      <option value="fr">Français</option>
+      <option value="de">Deutsch</option>
+      <option value="pt">Português</option>
+      <option value="ru">Русский</option>
+      <option value="ar">العربية</option>
+      <option value="hi">हिन्दी</option>
+      <option value="id">Indonesia</option>
+      <option value="th">ภาษาไทย</option>
+      <option value="tr">Türkçe</option>
+      <option value="it">Italiano</option>
+      <option value="nl">Nederlands</option>
+      <option value="pl">Polski</option>
+      <option value="uk">Українська</option>
+      <option value="fa">فارسی</option>
+    </select>
+  </div>
+  <button class="theme-toggle" id="themeBtn" onclick="doToggleTheme()" aria-label="Toggle theme">☀️</button>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════ HERO -->
 <header class="hero">
   <div class="container">
-    <div class="hero-badge">🦀 Rust · PKT Native · Open Source</div>
-    <h1>Blockchain <span>từ đầu</span><br/>2009 → 2031+</h1>
-    <p class="hero-sub">
+    <div class="hero-badge" data-i18n="hero-badge">🦀 Rust · PKT Native · Open Source</div>
+    <h1>Blockchain <span data-i18n="hero-h1-span">từ đầu</span><br/>2009 → 2031+</h1>
+    <p class="hero-sub" data-i18n="hero-sub">
       Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block
       đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet.
       48+ versions. 10+ eras. Không thư viện blockchain.
     </p>
     <div class="hero-stats">
-      <div class="stat"><div class="stat-num">48+</div><div class="stat-lbl">Versions</div></div>
-      <div class="stat"><div class="stat-num">10+</div><div class="stat-lbl">Eras</div></div>
-      <div class="stat"><div class="stat-num">47</div><div class="stat-lbl">Src files</div></div>
-      <div class="stat"><div class="stat-num">57</div><div class="stat-lbl">Tests pass</div></div>
+      <div class="stat"><div class="stat-num">48+</div><div class="stat-lbl" data-i18n="stat-ver">Versions</div></div>
+      <div class="stat"><div class="stat-num">10+</div><div class="stat-lbl" data-i18n="stat-era">Eras</div></div>
+      <div class="stat"><div class="stat-num">47</div><div class="stat-lbl" data-i18n="stat-src">Src files</div></div>
+      <div class="stat"><div class="stat-num">57</div><div class="stat-lbl" data-i18n="stat-test">Tests pass</div></div>
     </div>
     <div class="hero-btns">
-      <a href="#quickstart" class="btn btn-primary">⚡ Quick Start</a>
-      <a href="#timeline"   class="btn btn-secondary">📜 Timeline</a>
-      <a href="#stack"      class="btn btn-secondary">🔒 Stack 2031+</a>
+      <a href="#quickstart" class="btn btn-primary" data-i18n="btn-qs">⚡ Quick Start</a>
+      <a href="#timeline"   class="btn btn-secondary" data-i18n="btn-tl">📜 Timeline</a>
+      <a href="#stack"      class="btn btn-secondary" data-i18n="btn-stack">🔒 Stack 2031+</a>
+      <a href="https://github.com/TuyenPKT/blockchain-rust" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="btn-gh">⭐ GitHub</a>
     </div>
   </div>
 </header>
@@ -398,38 +520,38 @@
 <!-- ═══════════════════════════════════════════════════════════ WHY -->
 <section>
   <div class="container">
-    <h2>Tại sao dự án này? <span class="tag">Giới thiệu</span></h2>
-    <p class="section-sub">Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.</p>
+    <h2><span data-i18n="why-h2">Tại sao dự án này?</span> <span class="tag" data-i18n="why-tag">Giới thiệu</span></h2>
+    <p class="section-sub" data-i18n="why-sub">Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.</p>
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon">🧱</div>
-        <div class="feature-title">Build from scratch</div>
-        <div class="feature-desc">Không dùng <code>bitcoin</code>, <code>ethereum</code> hay bất kỳ blockchain crate nào. SHA-256, ECDSA, PoW — tất cả tự viết để hiểu cơ chế bên trong.</div>
+        <div class="feature-title" data-i18n="feat1-title">Build from scratch</div>
+        <div class="feature-desc" data-i18n="feat1-desc">Không dùng <code>bitcoin</code>, <code>ethereum</code> hay bất kỳ blockchain crate nào. SHA-256, ECDSA, PoW — tất cả tự viết để hiểu cơ chế bên trong.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🔗</div>
-        <div class="feature-title">Incremental — mỗi version build trên version trước</div>
-        <div class="feature-desc">v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.</div>
+        <div class="feature-title" data-i18n="feat2-title">Incremental — mỗi version build trên version trước</div>
+        <div class="feature-desc" data-i18n="feat2-desc">v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🔐</div>
-        <div class="feature-title">Cryptography thực tế</div>
-        <div class="feature-desc">ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.</div>
+        <div class="feature-title" data-i18n="feat3-title">Cryptography thực tế</div>
+        <div class="feature-desc" data-i18n="feat3-desc">ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⚛️</div>
-        <div class="feature-title">Post-Quantum ready</div>
-        <div class="feature-desc">Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.</div>
+        <div class="feature-title" data-i18n="feat4-title">Post-Quantum ready</div>
+        <div class="feature-desc" data-i18n="feat4-desc">Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🌐</div>
-        <div class="feature-title">Ecosystem hiện đại</div>
-        <div class="feature-desc">IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.</div>
+        <div class="feature-title" data-i18n="feat5-title">Ecosystem hiện đại</div>
+        <div class="feature-desc" data-i18n="feat5-desc">IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">📖</div>
-        <div class="feature-title">Code là tài liệu</div>
-        <div class="feature-desc">Mỗi file có comment giải thích cơ chế, tradeoff và tham chiếu đến BIP/RFC/NIST paper tương ứng. Demo chạy được ngay với <code>cargo run</code>.</div>
+        <div class="feature-title" data-i18n="feat6-title">Code là tài liệu</div>
+        <div class="feature-desc" data-i18n="feat6-desc">Mỗi file có comment giải thích cơ chế, tradeoff và tham chiếu đến BIP/RFC/NIST paper tương ứng. Demo chạy được ngay với <code>cargo run</code>.</div>
       </div>
     </div>
   </div>
@@ -438,15 +560,15 @@
 <!-- ═══════════════════════════════════════════════════════════ QUICKSTART -->
 <section id="quickstart">
   <div class="container">
-    <h2>Quick Start <span class="tag">Cài đặt</span></h2>
-    <p class="section-sub">Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.</p>
+    <h2><span data-i18n="qs-h2">Quick Start</span> <span class="tag" data-i18n="qs-tag">Cài đặt</span></h2>
+    <p class="section-sub" data-i18n="qs-sub">Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.</p>
     <div class="steps">
 
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-content">
-          <h3>Clone repository</h3>
-          <pre><span class="prompt">$ </span><span class="cmd">git clone https://github.com/your-username/blockchain-rust</span>
+          <h3 data-i18n="qs-step1">Clone repository</h3>
+          <pre><span class="prompt">$ </span><span class="cmd">git clone https://github.com/TuyenPKT/blockchain-rust.git</span>
 <span class="prompt">$ </span><span class="cmd">cd blockchain-rust</span></pre>
         </div>
       </div>
@@ -454,7 +576,7 @@
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-content">
-          <h3>Cài Rust (nếu chưa có)</h3>
+          <h3 data-i18n="qs-step2">Cài Rust (nếu chưa có)</h3>
           <pre><span class="prompt">$ </span><span class="cmd">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</span>
 <span class="prompt">$ </span><span class="cmd">source ~/.cargo/env</span>
 <span class="prompt">$ </span><span class="cmd">rustup update stable</span></pre>
@@ -464,7 +586,7 @@
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-content">
-          <h3>Xem help &amp; version timeline</h3>
+          <h3 data-i18n="qs-step3">Xem help &amp; version timeline</h3>
           <pre><span class="prompt">$ </span><span class="cmd">cargo run</span>
 <span class="out">  PKT Blockchain — v4.8
 
@@ -488,7 +610,7 @@
       <div class="step">
         <div class="step-num">4</div>
         <div class="step-content">
-          <h3>Tạo ví PKT &amp; bắt đầu đào</h3>
+          <h3 data-i18n="qs-step4">Tạo ví PKT &amp; bắt đầu đào</h3>
           <pre><span class="comment"># Tạo keypair mới, lưu ~/.pkt/wallet.key</span>
 <span class="prompt">$ </span><span class="cmd">cargo run -- wallet new</span>
 <span class="out">  Address      : 1PKTxxx...
@@ -507,8 +629,8 @@
       <div class="step">
         <div class="step-num">5</div>
         <div class="step-content">
-          <h3>Chạy P2P node (tùy chọn)</h3>
-          <p>Mở 2 terminal để test mạng ngang hàng:</p>
+          <h3 data-i18n="qs-step5">Chạy P2P node (tùy chọn)</h3>
+          <p data-i18n="qs-step5-desc">Mở 2 terminal để test mạng ngang hàng:</p>
           <pre><span class="comment"># Terminal 1 — node lắng nghe port 8333</span>
 <span class="prompt">$ </span><span class="cmd">cargo run -- node 8333</span>
 
@@ -524,8 +646,8 @@
 <!-- ═══════════════════════════════════════════════════════════ TIMELINE -->
 <section id="timeline">
   <div class="container">
-    <h2>Journey Timeline <span class="tag">48+ versions</span></h2>
-    <p class="section-sub">Mỗi era là một bước tiến lớn trong lịch sử blockchain.</p>
+    <h2><span data-i18n="tl-h2">Journey Timeline</span> <span class="tag">48+ versions</span></h2>
+    <p class="section-sub" data-i18n="tl-sub">Mỗi era là một bước tiến lớn trong lịch sử blockchain.</p>
     <div class="timeline">
 
       <div class="era era-1">
@@ -703,8 +825,8 @@
 <!-- ═══════════════════════════════════════════════════════════ STACK 2030 -->
 <section id="stack">
   <div class="container">
-    <h2>2031+ Blockchain Stack <span class="tag">Architecture</span></h2>
-    <p class="section-sub">7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.</p>
+    <h2><span data-i18n="stack-h2">2031+ Blockchain Stack</span> <span class="tag">Architecture</span></h2>
+    <p class="section-sub" data-i18n="stack-sub">7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.</p>
     <div class="stack-diagram">
       <div class="stack-row">
         <div class="stack-layer layer-identity">Identity</div>
@@ -774,16 +896,16 @@
 <!-- ═══════════════════════════════════════════════════════════ SECURITY TABLE -->
 <section>
   <div class="container">
-    <h2>Security Layer Stack <span class="tag">Defense in Depth</span></h2>
-    <p class="section-sub">Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.</p>
+    <h2><span data-i18n="sec-h2">Security Layer Stack</span> <span class="tag">Defense in Depth</span></h2>
+    <p class="section-sub" data-i18n="sec-sub">Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.</p>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Tầng</th>
-            <th>Cơ chế</th>
-            <th>Bảo vệ chống</th>
-            <th>Mức độ</th>
+            <th data-i18n="sec-col1">Tầng</th>
+            <th data-i18n="sec-col2">Cơ chế</th>
+            <th data-i18n="sec-col3">Bảo vệ chống</th>
+            <th data-i18n="sec-col4">Mức độ</th>
           </tr>
         </thead>
         <tbody>
@@ -802,7 +924,7 @@
           <tr>
             <td><strong>Hybrid Transition</strong></td>
             <td>ECDSA ∧ Dilithium (AND policy)</td>
-            <td>Phải phá cả 2 cùng lúc</td>
+            <td data-i18n="sec-hybrid-prot">Phải phá cả 2 cùng lúc</td>
             <td><span class="badge badge-gold">Defense in depth</span></td>
           </tr>
           <tr>
@@ -838,8 +960,8 @@
 <!-- ═══════════════════════════════════════════════════════════ EXPLORE -->
 <section>
   <div class="container">
-    <h2>Khám phá từng module <span class="tag">Source Code</span></h2>
-    <p class="section-sub">Mỗi file trong <code>src/</code> là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.</p>
+    <h2><span data-i18n="explore-h2">Khám phá từng module</span> <span class="tag">Source Code</span></h2>
+    <p class="section-sub" data-i18n="explore-sub">Mỗi file trong <code>src/</code> là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.</p>
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon">📦</div>
@@ -943,8 +1065,8 @@
 <!-- ═══════════════════════════════════════════════════════════ DEPENDENCIES -->
 <section>
   <div class="container">
-    <h2>Dependencies <span class="tag">Cargo.toml</span></h2>
-    <p class="section-sub">Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.</p>
+    <h2><span data-i18n="dep-h2">Dependencies</span> <span class="tag">Cargo.toml</span></h2>
+    <p class="section-sub" data-i18n="dep-sub">Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.</p>
     <pre><span class="comment"># Cargo.toml</span>
 [dependencies]
 sha2       = "0.10"          <span class="comment"># SHA-256, SHA-512</span>
@@ -966,15 +1088,18 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
 <!-- ═══════════════════════════════════════════════════════════ FOOTER -->
 <footer>
   <div class="container">
-    <p style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">
+    <p style="font-size:1.1rem; font-weight:700; margin-bottom:8px;" data-i18n="footer-title">
       🦀 Blockchain Rust — 2009 → 2031+
     </p>
-    <p style="margin-bottom:16px; color: var(--muted);">
+    <p style="margin-bottom:16px;" data-i18n="footer-stats">
       48+ versions &bull; 10+ eras &bull; 57/57 tests &bull; 0 errors &bull; 0 warnings
     </p>
     <p>
+      <a href="https://github.com/TuyenPKT/blockchain-rust">⭐ GitHub: TuyenPKT/blockchain-rust</a> &bull;
       Built with Rust edition 2021 &bull;
-      Testnet: <a href="https://oceif.com">oceif.com</a> (<code style="font-size:.78rem">seed.testnet.oceif.com:18333</code>) &bull;
+      Testnet: <a href="https://oceif.com">oceif.com</a> (<code style="font-size:.78rem">seed.testnet.oceif.com:18333</code>)
+    </p>
+    <p style="margin-top:10px; font-size:.78rem;">
       Tham chiếu: <a href="https://github.com/bitcoin/bips">Bitcoin BIPs</a> &bull;
       <a href="https://csrc.nist.gov/projects/post-quantum-cryptography">NIST PQC</a> &bull;
       <a href="https://www.w3.org/TR/did-core/">W3C DID</a> &bull;
@@ -983,5 +1108,149 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
   </div>
 </footer>
 
+<script>
+(function () {
+  'use strict';
+
+  /* ── THEME ─────────────────────────────────────────── */
+  var THEME_KEY = 'br_theme';
+
+  function getTheme() {
+    var s = localStorage.getItem(THEME_KEY);
+    if (s === 'light' || s === 'dark') return s;
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : '');
+    localStorage.setItem(THEME_KEY, t);
+    var btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
+  }
+
+  window.doToggleTheme = function () {
+    var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    applyTheme(cur === 'light' ? 'dark' : 'light');
+  };
+
+  /* ── I18N ──────────────────────────────────────────── */
+  var LANG_KEY = 'br_lang';
+
+  var LANG_META = {
+    vi: '🇻🇳', en: '🇬🇧', zh: '🇨🇳', ja: '🇯🇵', ko: '🇰🇷',
+    es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪', pt: '🇵🇹', ru: '🇷🇺',
+    ar: '🇸🇦', hi: '🇮🇳', id: '🇮🇩', th: '🇹🇭', tr: '🇹🇷',
+    it: '🇮🇹', nl: '🇳🇱', pl: '🇵🇱', uk: '🇺🇦', fa: '🇮🇷'
+  };
+
+  var I18N = {
+    vi: {
+      'hero-badge':   '🦀 Rust · PKT Native · Mã nguồn mở',
+      'hero-h1-span': 'từ đầu',
+      'hero-sub':     'Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet. 48+ versions. 10+ eras. Không thư viện blockchain.',
+      'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Tệp nguồn', 'stat-test': 'Tests pass',
+      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2031+', 'btn-gh': '⭐ GitHub',
+      'why-h2': 'Tại sao dự án này?', 'why-tag': 'Giới thiệu',
+      'why-sub': 'Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.',
+      'feat1-title': 'Build from scratch',
+      'feat2-title': 'Incremental — mỗi version build trên version trước',
+      'feat2-desc': 'v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.',
+      'feat3-title': 'Cryptography thực tế',
+      'feat3-desc': 'ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.',
+      'feat4-title': 'Post-Quantum ready',
+      'feat4-desc': 'Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.',
+      'feat5-title': 'Ecosystem hiện đại',
+      'feat5-desc': 'IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.',
+      'feat6-title': 'Code là tài liệu',
+      'qs-h2': 'Quick Start', 'qs-tag': 'Cài đặt',
+      'qs-sub': 'Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.',
+      'qs-step1': 'Clone repository', 'qs-step2': 'Cài Rust (nếu chưa có)',
+      'qs-step3': 'Xem help & version timeline', 'qs-step4': 'Tạo ví PKT & bắt đầu đào',
+      'qs-step5': 'Chạy P2P node (tùy chọn)', 'qs-step5-desc': 'Mở 2 terminal để test mạng ngang hàng:',
+      'tl-h2': 'Journey Timeline', 'tl-sub': 'Mỗi era là một bước tiến lớn trong lịch sử blockchain.',
+      'stack-h2': '2031+ Blockchain Stack',
+      'stack-sub': '7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.',
+      'sec-h2': 'Security Layer Stack',
+      'sec-sub': 'Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.',
+      'sec-col1': 'Tầng', 'sec-col2': 'Cơ chế', 'sec-col3': 'Bảo vệ chống', 'sec-col4': 'Mức độ',
+      'sec-hybrid-prot': 'Phải phá cả 2 cùng lúc',
+      'explore-h2': 'Khám phá từng module',
+      'explore-sub': 'Mỗi file trong src/ là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.',
+      'dep-h2': 'Dependencies',
+      'dep-sub': 'Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.',
+      'footer-title': '🦀 Blockchain Rust — 2009 → 2031+',
+      'footer-stats': '48+ versions • 10+ eras • 57/57 tests • 0 errors • 0 warnings'
+    },
+    en: {
+      'hero-badge':   '🦀 Rust · PKT Native · Open Source',
+      'hero-h1-span': 'from scratch',
+      'hero-sub':     'Build a complete blockchain in Rust — from Bitcoin Genesis block to PKT Native Chain with PacketCrypt PoW, REST API, RocksDB storage, and Testnet. 48+ versions. 10+ eras. No blockchain libraries.',
+      'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Src files', 'stat-test': 'Tests pass',
+      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2031+', 'btn-gh': '⭐ GitHub',
+      'why-h2': 'Why this project?', 'why-tag': 'About',
+      'why-sub': 'Each version is a standalone lesson — reading the code is reading blockchain history.',
+      'feat1-title': 'Build from scratch',
+      'feat2-title': 'Incremental — each version builds on the previous',
+      'feat2-desc': 'v0.1 is Bitcoin Genesis. v1.1 adds SegWit. v3.9 integrates everything. No rewrites — only extensions.',
+      'feat3-title': 'Real-world Cryptography',
+      'feat3-desc': 'ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — detailed implementation of each algorithm.',
+      'feat4-title': 'Post-Quantum ready',
+      'feat4-desc': 'Era 8 fully implements NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM and Hybrid ECDSA∧Dilithium migration path.',
+      'feat5-title': 'Modern Ecosystem',
+      'feat5-desc': 'IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup with DA layer — technologies actually in production by 2030.',
+      'feat6-title': 'Code as documentation',
+      'qs-h2': 'Quick Start', 'qs-tag': 'Install',
+      'qs-sub': 'Requires: Rust 1.75+ and Cargo. No external dependencies needed.',
+      'qs-step1': 'Clone repository', 'qs-step2': 'Install Rust (if not yet)',
+      'qs-step3': 'View help & version timeline', 'qs-step4': 'Create PKT wallet & start mining',
+      'qs-step5': 'Run P2P node (optional)', 'qs-step5-desc': 'Open 2 terminals to test peer-to-peer networking:',
+      'tl-h2': 'Journey Timeline', 'tl-sub': 'Each era is a major leap in blockchain history.',
+      'stack-h2': '2031+ Blockchain Stack',
+      'stack-sub': '7 independent security layers — compromising one layer does not break the entire system.',
+      'sec-h2': 'Security Layer Stack',
+      'sec-sub': 'Each layer protects against a different threat model — the system stays secure even if one layer is compromised.',
+      'sec-col1': 'Layer', 'sec-col2': 'Mechanism', 'sec-col3': 'Protects against', 'sec-col4': 'Level',
+      'sec-hybrid-prot': 'Must break both simultaneously',
+      'explore-h2': 'Explore each module',
+      'explore-sub': 'Each file in src/ is a standalone version — read sequentially to trace the evolution.',
+      'dep-h2': 'Dependencies',
+      'dep-sub': 'Minimal dependencies — only core cryptographic primitives, no blockchain framework.',
+      'footer-title': '🦀 Blockchain Rust — 2009 → 2031+',
+      'footer-stats': '48+ versions • 10+ eras • 57/57 tests • 0 errors • 0 warnings'
+    }
+  };
+
+  function applyLang(code) {
+    if (!LANG_META[code]) code = 'vi';
+    localStorage.setItem(LANG_KEY, code);
+    document.documentElement.lang = code;
+    document.documentElement.dir = (code === 'ar' || code === 'fa') ? 'rtl' : 'ltr';
+
+    var flagEl = document.getElementById('langFlag');
+    if (flagEl) flagEl.textContent = LANG_META[code] || '🌐';
+
+    var selectEl = document.getElementById('langSelect');
+    if (selectEl) selectEl.value = code;
+
+    /* Apply translations — fallback to 'vi' if lang not in I18N */
+    var t = I18N[code] || I18N['vi'];
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n');
+      if (t[key] !== undefined) el.textContent = t[key];
+    });
+  }
+
+  window.doChangeLang = applyLang;
+
+  /* ── INIT ──────────────────────────────────────────── */
+  applyTheme(getTheme());
+  applyLang(localStorage.getItem(LANG_KEY) || 'vi');
+
+  /* Watch OS-level theme changes */
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function (e) {
+    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
+  });
+})();
+</script>
 </body>
 </html>

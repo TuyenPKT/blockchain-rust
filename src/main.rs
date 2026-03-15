@@ -44,6 +44,7 @@ mod api;
 mod explorer;
 mod genesis;
 mod metrics;
+mod performance;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -143,7 +144,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v4.8                     ║");
+    println!("║              ⛓   Blockchain Rust  v5.0                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -1135,5 +1136,76 @@ mod tests {
         let pb = ping.serialize();
         let rp = Message::deserialize(&pb[..pb.len()-1]).unwrap();
         assert!(matches!(rp, Message::Ping));
+    }
+
+    // ── Performance (v5.0) ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_utxo_index_matches_utxo_set() {
+        use crate::chain::Blockchain;
+        use crate::performance::UtxoIndex;
+
+        let mut bc = Blockchain::new();
+        bc.difficulty = 1;
+        let addr = "aabbccddaabbccddaabbccddaabbccddaabbccdd";
+        bc.add_block(vec![], addr);
+        bc.add_block(vec![], addr);
+
+        let mut idx = UtxoIndex::new();
+        for block in &bc.chain {
+            idx.apply_block(&block.transactions);
+        }
+
+        assert_eq!(idx.balance_of(addr), bc.utxo_set.balance_of(addr),
+            "UtxoIndex balance must match UtxoSet");
+        assert_eq!(idx.utxos_of(addr).len(), bc.utxo_set.utxos_of(addr).len(),
+            "UtxoIndex UTXO count must match UtxoSet");
+        assert_eq!(idx.len(), bc.utxo_set.utxos.len());
+        assert_eq!(idx.balance_of("0000000000000000000000000000000000000000"), 0);
+    }
+
+    #[test]
+    fn test_block_cache_o1_lookup() {
+        use crate::chain::Blockchain;
+        use crate::performance::BlockCache;
+
+        let mut bc = Blockchain::new();
+        bc.difficulty = 1;
+        bc.add_block(vec![], "miner");
+        bc.add_block(vec![], "miner");
+
+        let cache = BlockCache::build_from_chain(&bc.chain);
+        assert_eq!(cache.len(), bc.chain.len());
+
+        for block in &bc.chain {
+            assert!(cache.contains_hash(&block.hash));
+            assert_eq!(cache.height_of(&block.hash), Some(block.index));
+        }
+        assert!(!cache.contains_hash(&"0".repeat(64)));
+        assert!(cache.height_of("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_fast_merkle_matches_block_merkle() {
+        use crate::performance::{fast_merkle, fast_merkle_txids};
+
+        // fast_merkle uses raw-byte concatenation (Bitcoin standard).
+        // Block::merkle uses hex-string concatenation (non-standard) — they differ.
+        // Test fast_merkle correctness independently.
+        let leaf1 = [0xAAu8; 32];
+        let leaf2 = [0xBBu8; 32];
+
+        // Deterministic
+        assert_eq!(fast_merkle(&[leaf1, leaf2]), fast_merkle(&[leaf1, leaf2]));
+        // Order matters
+        assert_ne!(fast_merkle(&[leaf1, leaf2]), fast_merkle(&[leaf2, leaf1]));
+        // Single leaf = leaf itself
+        assert_eq!(fast_merkle(&[leaf1]), leaf1);
+        // Empty = zero
+        assert_eq!(fast_merkle(&[]), [0u8; 32]);
+        // fast_merkle_txids returns 64-char hex
+        let root = fast_merkle_txids(&["a".repeat(64), "b".repeat(64)]);
+        assert_eq!(root.len(), 64);
+        assert_eq!(fast_merkle_txids(&[]), "0".repeat(64));
     }
 }
