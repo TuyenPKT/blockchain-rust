@@ -8,7 +8,7 @@ use crate::taproot::{TaprootOutput, schnorr_sign, schnorr_verify};
 use crate::covenant::{CtvTemplate, ctv_template_hash};
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
-const BLOCK_TIME_TARGET_SECS: i64 = 10;
+const BLOCK_TIME_TARGET_SECS: i64 = 30;
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {
@@ -701,10 +701,26 @@ impl Blockchain {
         let first = &self.chain[(len - DIFFICULTY_ADJUSTMENT_INTERVAL) as usize];
         let time_taken    = last.timestamp - first.timestamp;
         let time_expected = BLOCK_TIME_TARGET_SECS * DIFFICULTY_ADJUSTMENT_INTERVAL as i64;
-        if time_taken == 0 || time_taken < time_expected / 2 {
-            self.difficulty += 1; println!("📈 Difficulty → {}", self.difficulty);
+        if time_taken <= 0 {
+            // Blocks cực nhanh (< 1s cho toàn interval) — tăng mạnh
+            self.difficulty += 2;
+            println!("📈📈 Difficulty → {} (blocks quá nhanh)", self.difficulty);
+        } else if time_taken < time_expected / 4 {
+            // Nhanh hơn target > 4x → tăng 2
+            self.difficulty += 2;
+            println!("📈📈 Difficulty → {} ({}s < target {}s / 4)", self.difficulty, time_taken, time_expected);
+        } else if time_taken < time_expected / 2 {
+            // Nhanh hơn target 2–4x → tăng 1
+            self.difficulty += 1;
+            println!("📈 Difficulty → {} ({}s vs target {}s)", self.difficulty, time_taken, time_expected);
+        } else if time_taken > time_expected * 4 && self.difficulty > 1 {
+            // Chậm hơn 4x → giảm 2
+            self.difficulty -= if self.difficulty > 2 { 2 } else { 1 };
+            println!("📉📉 Difficulty → {} ({}s > target {}s x4)", self.difficulty, time_taken, time_expected);
         } else if time_taken > time_expected * 2 && self.difficulty > 1 {
-            self.difficulty -= 1; println!("📉 Difficulty → {}", self.difficulty);
+            // Chậm hơn 2x → giảm 1
+            self.difficulty -= 1;
+            println!("📉 Difficulty → {} ({}s vs target {}s)", self.difficulty, time_taken, time_expected);
         }
     }
 
