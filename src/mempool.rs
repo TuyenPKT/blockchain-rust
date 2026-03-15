@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::transaction::Transaction;
+use crate::fee_market;
 
 /// Một entry trong mempool — TX + fee tính được
 #[derive(Debug, Clone)]
@@ -77,6 +78,23 @@ impl Mempool {
         for tx_id in confirmed_tx_ids {
             if self.entries.remove(tx_id).is_some() {
                 println!("  ✅ Mempool: TX {} đã confirm, xóa khỏi mempool", &tx_id[..12]);
+            }
+        }
+    }
+
+    /// Thêm TX với hỗ trợ RBF: tự động thay thế TX cũ nếu cùng inputs và fee đủ cao
+    /// Trả về Ok(Some(old_tx_id)) nếu replaced, Ok(None) nếu TX mới bình thường
+    #[allow(dead_code)]
+    pub fn add_or_replace(&mut self, tx: Transaction, input_total: u64) -> Result<Option<String>, String> {
+        let fee = input_total.saturating_sub(tx.total_output());
+        match fee_market::try_rbf_replace(self, &tx, fee)? {
+            Some(old_id) => {
+                self.add(tx, input_total)?;
+                Ok(Some(old_id))
+            }
+            None => {
+                self.add(tx, input_total)?;
+                Ok(None)
             }
         }
     }

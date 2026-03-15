@@ -53,6 +53,17 @@ pub enum Message {
         difficulty: usize,
         txs:        Vec<Transaction>, // pending txs từ mempool
     },
+
+    /// v5.4: Query fee estimate từ node
+    GetFeeEstimate,
+    /// Node trả về fee estimate dựa trên lịch sử block gần nhất
+    FeeEstimate {
+        fast_sat_per_byte:   f64,
+        medium_sat_per_byte: f64,
+        slow_sat_per_byte:   f64,
+        min_sat_per_byte:    f64,
+        history_blocks:      usize,
+    },
 }
 
 impl Message {

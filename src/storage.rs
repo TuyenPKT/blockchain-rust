@@ -176,7 +176,9 @@ use crate::utxo::UtxoSet;
 /// Load snapshot vào Blockchain struct. Nếu không có → genesis.
 pub fn load_or_new() -> Blockchain {
     match try_load_blockchain() {
-        Ok(Some(bc)) => {
+        Ok(Some(mut bc)) => {
+            // v5.5: Kiểm tra và repair nếu phát hiện crash mid-write
+            crate::wal::check_and_recover(&mut bc);
             println!(
                 "  📦 Loaded from RocksDB: height={}, utxos={}",
                 bc.chain.len() - 1,
@@ -215,11 +217,13 @@ fn try_load_blockchain() -> Result<Option<Blockchain>, String> {
         }
     };
 
+    let fee_estimator = crate::fee_market::FeeEstimator::rebuild_from_blocks(&blocks);
     Ok(Some(Blockchain {
         chain: blocks,
         difficulty,
         utxo_set,
-        mempool: crate::mempool::Mempool::new(),
+        mempool:       crate::mempool::Mempool::new(),
+        fee_estimator,
     }))
 }
 
@@ -234,13 +238,9 @@ fn recalculate_difficulty(blocks: &[crate::block::Block]) -> usize {
     avg_zeros.max(3)
 }
 
-/// Lưu Blockchain snapshot (bao gồm difficulty)
+/// Lưu Blockchain snapshot — v5.5: dùng atomic WriteBatch qua wal::atomic_save
 pub fn save_blockchain(bc: &Blockchain) -> Result<(), String> {
-    save_snapshot(&bc.chain, &bc.utxo_set.utxos)?;
-    let db = open_db()?;
-    db.put(META_DIFFICULTY, bc.difficulty.to_string().as_bytes())
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    crate::wal::atomic_save(bc)
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────

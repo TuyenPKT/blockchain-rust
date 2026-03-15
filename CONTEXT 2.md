@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v5.5 ✅ — 103/103 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v5.3 ✅ — 97/97 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -36,8 +36,8 @@
 - [x] v5.1 — **Security hardening**: RateLimiter, BanList, PeerGuard, InputValidator (`src/security.rs`) 🟢
 - [x] v5.2 — **P2P improvements**: PeerRegistry, ScoreEvent, MessageDedup bounded cache (`src/p2p.rs`) 🟢
 - [x] v5.3 — **Coinbase maturity**: 100-block lockup, replay protection, BIP-style locktime/sequence (`src/maturity.rs`) 🟢
-- [x] v5.4 — **Fee market**: FeeEstimator (sliding window 20 blocks, 3 targets), RBF (10% min bump) (`src/fee_market.rs`) 🟢
-- [x] v5.5 — **Storage v2**: atomic WriteBatch, WAL epoch (crash detection), UTXO rebuild on recovery (`src/wal.rs`) 🟢
+- [ ] v5.4 — Fee market: dynamic estimation, RBF
+- [ ] v5.5 — Storage v2: WAL, atomic writes, crash recovery
 - [ ] v5.6 — Fuzz testing + proptest
 - [ ] v5.7 — Monitoring: metrics endpoint, structured logging (tracing)
 - [ ] v5.8 — Code audit: fix Known Gaps còn lại

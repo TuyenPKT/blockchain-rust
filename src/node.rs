@@ -144,6 +144,7 @@ impl Node {
                 {
                     println!("  [{}] ✅ Block #{} hợp lệ → thêm vào chain", self.port, block.index);
                     chain.utxo_set.apply_block(&block.transactions);
+                    chain.fee_estimator.record_block(&block.transactions);
                     chain.chain.push(block);
                     chain.adjust_difficulty();
                     // Persist ngay sau khi nhận block hợp lệ từ miner/peer
@@ -189,6 +190,7 @@ impl Node {
                             && block.is_valid(chain.difficulty)
                         {
                             chain.utxo_set.apply_block(&block.transactions);
+                            chain.fee_estimator.record_block(&block.transactions);
                             chain.chain.push(block.clone());
                             chain.adjust_difficulty();
                         }
@@ -268,6 +270,21 @@ impl Node {
             }
 
             Message::Template { .. } => None, // miner nhận, node bỏ qua
+
+            // v5.4: Fee market estimate
+            Message::GetFeeEstimate => {
+                let chain = self.chain.lock().await;
+                let est = chain.fee_estimator.estimate();
+                Some(Message::FeeEstimate {
+                    fast_sat_per_byte:   est.fast_sat_per_byte,
+                    medium_sat_per_byte: est.medium_sat_per_byte,
+                    slow_sat_per_byte:   est.slow_sat_per_byte,
+                    min_sat_per_byte:    est.min_sat_per_byte,
+                    history_blocks:      chain.fee_estimator.history_depth(),
+                })
+            }
+
+            Message::FeeEstimate { .. } => None,
         }
     }
 

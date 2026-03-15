@@ -6,16 +6,18 @@ use crate::mempool::Mempool;
 use crate::script::{Script, ScriptInterpreter};
 use crate::taproot::{TaprootOutput, schnorr_sign, schnorr_verify};
 use crate::covenant::{CtvTemplate, ctv_template_hash};
+use crate::fee_market::FeeEstimator;
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
 const BLOCK_TIME_TARGET_SECS: i64 = 300; // 5 phút = 1/2 Bitcoin (10 phút)
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {
-    pub chain:      Vec<Block>,
-    pub difficulty: usize,
-    pub utxo_set:   UtxoSet,
-    pub mempool:    Mempool,
+    pub chain:          Vec<Block>,
+    pub difficulty:     usize,
+    pub utxo_set:       UtxoSet,
+    pub mempool:        Mempool,
+    pub fee_estimator:  FeeEstimator,
 }
 
 impl Blockchain {
@@ -25,7 +27,11 @@ impl Blockchain {
             "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
         );
         genesis.hash = Block::calculate_hash(0, genesis.timestamp, &vec![], &genesis.prev_hash, 0);
-        Blockchain { chain: vec![genesis], difficulty: 3, utxo_set: UtxoSet::new(), mempool: Mempool::new() }
+        Blockchain {
+            chain: vec![genesis], difficulty: 3,
+            utxo_set: UtxoSet::new(), mempool: Mempool::new(),
+            fee_estimator: FeeEstimator::new(),
+        }
     }
 
     #[allow(dead_code)] pub fn create_and_submit(
@@ -480,6 +486,7 @@ impl Blockchain {
             block.nonce, &block.hash[..12], start.elapsed().as_millis());
 
         self.utxo_set.apply_block(&block.transactions);
+        self.fee_estimator.record_block(&block.transactions);
         self.chain.push(block);
         self.mempool.remove_confirmed(&selected_ids);
     }
@@ -507,6 +514,7 @@ impl Blockchain {
         println!("✅ nonce={} | hash={}... | {}ms\n",
             block.nonce, &block.hash[..12], start.elapsed().as_millis());
         self.utxo_set.apply_block(&block.transactions);
+        self.fee_estimator.record_block(&block.transactions);
         self.chain.push(block);
     }
 
