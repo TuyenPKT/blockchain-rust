@@ -1,14 +1,14 @@
-# 🦀 Blockchain Rust — 2009 → 2031+
+# 🦀 Blockchain Rust — 2009 → 2036+
 
 > Xây dựng một blockchain hoàn chỉnh từ Bitcoin 0.1 đến PKT Native Chain bằng Rust thuần — không dùng bất kỳ blockchain framework nào.
 
-**v4.8 ✅ · 48+ versions · 10+ eras · 57/57 tests · 0 warnings**
+**v5.9 ✅ · 58 versions · 12 eras · 136/136 tests · 0 warnings**
 
 ---
 
 ## Tổng quan
 
-Mỗi version build trực tiếp trên version trước, không viết lại từ đầu. Đọc code theo thứ tự là đọc lịch sử blockchain từ 2009 đến 2031+.
+Mỗi version build trực tiếp trên version trước, không viết lại từ đầu. Đọc code theo thứ tự là đọc lịch sử blockchain từ 2009 đến 2036+.
 
 ```
 Era 1  (2009)       — Bitcoin Genesis: Block, SHA-256, PoW, UTXO
@@ -21,6 +21,8 @@ Era 7  (2023–2025)  — WASM Contracts, Oracle, Governance, AI Agent
 Era 8  (2025–2027)  — Post-Quantum: Dilithium, SPHINCS+, ML-KEM, Hybrid
 Era 9  (2027–2030)  — Self-Amend, IBC, W3C DID, FHE, Sovereign Rollup
 Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Testnet, Metrics
+Era 11 (2032–2035)  — Optimization & Security: UTXO index, Fee market, WAL, Fuzz, Monitoring, Benchmarks ✅
+Era 12 (2036+)      — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD, Mining Pool
 ```
 
 ---
@@ -33,7 +35,7 @@ Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Te
 git clone https://github.com/TuyenPKT/blockchain-rust.git
 cd blockchain-rust
 cargo build
-cargo test
+cargo test        # 136 tests, 0 warnings
 ```
 
 ---
@@ -50,9 +52,9 @@ cargo run -- mine                              # mine dùng ví đã tạo
 cargo run -- mine <addr_hex> <n>               # mine n blocks
 cargo run -- mine <addr_hex> <n> <node:port>   # mine + kết nối P2P node
 
-# P2P Node
-cargo run -- node 8333                         # chạy node
-cargo run -- node 8334 127.0.0.1:8333          # chạy node + kết nối peer
+# P2P Node (v5.8: tự động peer discovery)
+cargo run -- node 8333                         # chạy node + auto-discover peers
+cargo run -- node 8334 127.0.0.1:8333          # chạy node + kết nối peer cụ thể
 
 # REST API
 cargo run -- api 3000                          # khởi động API tại port 3000
@@ -73,6 +75,21 @@ cargo run -- genesis testnet                   # xem testnet config
 cargo run -- metrics                           # đọc từ local RocksDB
 cargo run -- metrics 127.0.0.1:8333            # + query peer count và remote height
 
+# Monitoring / Health endpoint (v5.7)
+cargo run -- monitor                           # health server tại port 3001
+cargo run -- monitor 3002                      # health server tại port 3002
+# → GET http://localhost:3001/health  (HealthStatus JSON)
+# → GET http://localhost:3001/ready   (503 nếu chưa synced)
+
+# Benchmark suite (v5.9)
+cargo run -- bench all                         # toàn bộ benchmarks
+cargo run -- bench hash                        # hash throughput
+cargo run -- bench tps                         # transactions per second
+cargo run -- bench mining                      # block mining latency
+cargo run -- bench merkle                      # merkle_std vs fast_merkle
+cargo run -- bench utxo                        # UTXO scan O(n) vs index O(1)
+cargo run -- bench mempool                     # mempool select
+
 # Tests
 cargo test
 ```
@@ -91,54 +108,63 @@ cargo test
 | GET | `/status` | Trạng thái node |
 | GET | `/metrics` | Hashrate, peers, mempool, block time |
 
----
+## Health API (port 3001 — v5.7)
 
-## Metrics (v4.8)
-
-```bash
-$ cargo run -- metrics
-
-╔══════════════════════════════════════════════════════════════╗
-║                   📊  Node Metrics  v4.8                    ║
-╚══════════════════════════════════════════════════════════════╝
-
-  Collected at     : 2026-03-15 10:00:00 UTC
-
-  ── Chain ────────────────────────────────────────────────────
-  Height           : 42
-  Difficulty       : 3
-  UTXO count       : 85
-
-  ── Mempool ──────────────────────────────────────────────────
-  Depth            : 7 tx
-  Total fees       : 35000 sat  (0.00035000 PKT)
-
-  ── Performance ──────────────────────────────────────────────
-  Avg block time   : 8.3s
-  Est. hashrate    : 963 H/s
-
-  ── Network ──────────────────────────────────────────────────
-  Peers connected  : 2
-  Sync status      : local=42  remote=42  ✅ synced
-```
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| GET | `/health` | HealthStatus JSON (uptime, height, fees, ...) |
+| GET | `/ready` | 200 OK hoặc 503 khi chưa synced |
+| GET | `/version` | `{"version": "v5.9"}` |
 
 ---
 
-## Cấu trúc source
+## Era 11 — Optimization & Security ✅
+
+| Version | Module | Nội dung |
+|---------|--------|---------|
+| v5.0 | `performance.rs` | UTXO O(1) index, BlockCache O(1), fast_merkle |
+| v5.1 | `security.rs` | RateLimiter, BanList, PeerGuard, InputValidator |
+| v5.2 | `p2p.rs` | PeerRegistry, ScoreEvent EMA, MessageDedup FIFO |
+| v5.3 | `maturity.rs` | Coinbase 100-block lockup, replay protection, locktime |
+| v5.4 | `fee_market.rs` | FeeEstimator sliding window 20 blocks, RBF 10% |
+| v5.5 | `wal.rs` | Atomic WriteBatch, WAL epoch, UTXO crash recovery |
+| v5.6 | `fuzz.rs` | Fuzz corpus, proptest: hash/fee/RBF/roundtrip |
+| v5.7 | `monitoring.rs` | tracing logs, HealthStatus, /health /ready /version |
+| v5.8 | `peer_discovery.rs` | PeerStore, DnsSeedResolver, PEX, auto-connect |
+| v5.9 | `bench.rs` | BenchResult/Suite, hash/TPS/latency/merkle/UTXO/mempool |
+
+## Era 12 — Multi-threading & GPU (upcoming)
+
+| Version | Module | Nội dung |
+|---------|--------|---------|
+| v6.0 | `blake3_hash.rs` | BLAKE3 thay SHA-256 cho PoW (3–4x nhanh hơn) |
+| v6.1 | `cpu_miner.rs` | rayon multi-thread, nonce splitting, 1/3 cores |
+| v6.2 | `chain_concurrent.rs` | Arc<RwLock>, multi-reader + single-writer chain |
+| v6.3 | `validator.rs` | Parallel block validation với rayon |
+| v6.4 | `gpu_miner.rs` | GpuBackend abstraction, 1/3 compute units |
+| v6.5 | `opencl_kernel.rs` | BLAKE3 OpenCL C kernel (`--features opencl`) |
+| v6.6 | `cuda_kernel.rs` | BLAKE3 CUDA PTX kernel (`--features cuda`) |
+| v6.7 | `mining_pool.rs` | Stratum-like pool, WorkTemplate, Share |
+| v6.8 | `simd_hash.rs` | BLAKE3 AVX2 4x lanes SIMD |
+| v6.9 | `hw_config.rs` | HardwareProfile, auto-config, `cargo run -- hw-info` |
+
+---
+
+## Cấu trúc source (57 files)
 
 ```
 src/
-├── main.rs              CLI dispatch + integration tests (57 tests)
+├── main.rs              CLI dispatch + 136 integration tests
 ├── block.rs             Block, SHA-256, Merkle root, PoW
-├── chain.rs             Blockchain, validation, UTXO management
+├── chain.rs             Blockchain, validation, difficulty (target=300s)
 ├── transaction.rs       TxInput/TxOutput, txid/wtxid, SegWit
 ├── utxo.rs              UTXO set, P2PKH + P2TR balance lookup
 ├── wallet.rs            ECDSA keypair, Bitcoin address Base58Check
-├── mempool.rs           Mempool, fee-rate selection
+├── mempool.rs           Mempool, fee-rate selection, RBF
 ├── message.rs           P2P message protocol
-├── node.rs              TCP node, peer discovery, chain sync
+├── node.rs              TCP node, chain sync, peer discovery
 ├── hd_wallet.rs         BIP32/39/44 HD Wallet
-├── script.rs            Script engine, P2PK/P2PKH/P2SH/OP_RETURN
+├── script.rs            Script engine, P2PK/P2PKH/P2SH/P2WPKH
 ├── lightning.rs         Payment channels, HTLC, commitment TX
 ├── taproot.rs           Schnorr BIP340, MAST, P2TR, MuSig2
 ├── covenant.rs          CTV (CheckTemplateVerify), Vault
@@ -169,12 +195,22 @@ src/
 ├── full_stack.rs        Version registry, era descriptions, stats
 ├── miner.rs             Live PoW miner, hashrate display
 ├── wallet_cli.rs        PKT Wallet CLI commands
-├── packetcrypt.rs       PacketCrypt PoW (announcement + block mining)
+├── packetcrypt.rs       PacketCrypt PoW (announcement + block)
 ├── storage.rs           RocksDB persistent chain + UTXO storage
 ├── api.rs               REST API (axum 0.7)
 ├── explorer.rs          Block Explorer CLI
 ├── genesis.rs           NetworkParams, testnet genesis config
-└── metrics.rs           Runtime metrics: hashrate, peers, mempool, sync
+├── metrics.rs           Runtime metrics: hashrate, peers, mempool, sync
+├── performance.rs       UTXO O(1) index, BlockCache, fast_merkle  ← v5.0
+├── security.rs          RateLimiter, BanList, PeerGuard            ← v5.1
+├── p2p.rs               PeerRegistry, ScoreEvent, MessageDedup     ← v5.2
+├── maturity.rs          CoinbaseGuard, TxReplayGuard, LockTime     ← v5.3
+├── fee_market.rs        FeeEstimator, RBF replace-by-fee           ← v5.4
+├── wal.rs               Atomic WAL, crash recovery                 ← v5.5
+├── fuzz.rs              Fuzz corpus, proptest invariants           ← v5.6
+├── monitoring.rs        tracing logs, HealthStatus, /health        ← v5.7
+├── peer_discovery.rs    PeerStore, DnsSeedResolver, PEX            ← v5.8
+└── bench.rs             BenchResult/Suite, all benchmarks          ← v5.9
 ```
 
 ---
@@ -182,7 +218,7 @@ src/
 ## Dependencies
 
 ```toml
-sha2       = "0.10"    # SHA-256
+sha2       = "0.10"    # SHA-256 (PoW + ECDSA messages)
 hex        = "0.4"
 chrono     = "0.4"
 serde      = { version = "1.0", features = ["derive"] }
@@ -195,6 +231,13 @@ hmac       = "0.12"    # BIP32 HD wallet
 pbkdf2     = { version = "0.12", features = ["hmac"] }  # BIP39
 rocksdb    = "0.21"    # v4.2: persistent storage
 axum       = "0.7"     # v4.4: REST API
+tracing    = "0.1"     # v5.7: structured logging
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Upcoming Era 12:
+# blake3     = "1.5"   # v6.0: BLAKE3 (pure Rust, 3-4x faster than SHA-256)
+# rayon      = "1.10"  # v6.1: CPU parallel mining
+# num_cpus   = "1.16"  # v6.1: core count detection
 ```
 
 ---
@@ -209,6 +252,9 @@ cargo run -- node 18334 seed.testnet.oceif.com:18333
 
 # Mine về VPS seed
 cargo run -- mine <addr> 0 seed.testnet.oceif.com:18333
+
+# Check health node
+curl http://seed.testnet.oceif.com:3001/health
 ```
 
 ---

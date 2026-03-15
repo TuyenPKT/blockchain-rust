@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blockchain Rust — 2009 → 2031+</title>
+  <title>Blockchain Rust — 2009 → 2036+</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
@@ -496,22 +496,22 @@
 <header class="hero">
   <div class="container">
     <div class="hero-badge" data-i18n="hero-badge">🦀 Rust · PKT Native · Open Source</div>
-    <h1>Blockchain <span data-i18n="hero-h1-span">từ đầu</span><br/>2009 → 2031+</h1>
+    <h1>Blockchain <span data-i18n="hero-h1-span">từ đầu</span><br/>2009 → 2036+</h1>
     <p class="hero-sub" data-i18n="hero-sub">
       Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block
       đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet.
-      48+ versions. 10+ eras. Không thư viện blockchain.
+      58+ versions. 12+ eras. Không thư viện blockchain.
     </p>
     <div class="hero-stats">
-      <div class="stat"><div class="stat-num">48+</div><div class="stat-lbl" data-i18n="stat-ver">Versions</div></div>
-      <div class="stat"><div class="stat-num">10+</div><div class="stat-lbl" data-i18n="stat-era">Eras</div></div>
+      <div class="stat"><div class="stat-num">58+</div><div class="stat-lbl" data-i18n="stat-ver">Versions</div></div>
+      <div class="stat"><div class="stat-num">12+</div><div class="stat-lbl" data-i18n="stat-era">Eras</div></div>
       <div class="stat"><div class="stat-num">47</div><div class="stat-lbl" data-i18n="stat-src">Src files</div></div>
       <div class="stat"><div class="stat-num">57</div><div class="stat-lbl" data-i18n="stat-test">Tests pass</div></div>
     </div>
     <div class="hero-btns">
       <a href="#quickstart" class="btn btn-primary" data-i18n="btn-qs">⚡ Quick Start</a>
       <a href="#timeline"   class="btn btn-secondary" data-i18n="btn-tl">📜 Timeline</a>
-      <a href="#stack"      class="btn btn-secondary" data-i18n="btn-stack">🔒 Stack 2031+</a>
+      <a href="#stack"      class="btn btn-secondary" data-i18n="btn-stack">🔒 Stack 2036+</a>
       <a href="https://github.com/TuyenPKT/blockchain-rust" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="btn-gh">⭐ GitHub</a>
     </div>
   </div>
@@ -601,9 +601,10 @@
     cargo run -- testnet [n] [port]     → local testnet
     cargo run -- metrics [node:port]    → hashrate, peers, mempool
 
-  ── Era 1 (2009)  Bitcoin Genesis ──  v0.1 … v0.4
-  ── Era 10 (2031) PKT Native Chain ── v4.0 ✅ … v4.8 ✅
-  48+ versions. 10+ eras.</span></pre>
+  ── Era 1  (2009)  Bitcoin Genesis ──   v0.1 … v0.4
+  ── Era 11 (2032) Optimization ──      v5.0 ✅ … v5.9 ✅
+  ── Era 12 (2036) Multi-thread &amp; GPU ── v6.0 … v6.9
+  58+ versions. 12+ eras.</span></pre>
         </div>
       </div>
 
@@ -620,7 +621,7 @@
 <span class="comment"># Mine tự động đến ví vừa tạo</span>
 <span class="prompt">$ </span><span class="cmd">cargo run -- mine</span>
 
-<span class="comment"># Chạy 57 integration tests</span>
+<span class="comment"># Chạy 136 integration tests</span>
 <span class="prompt">$ </span><span class="cmd">cargo test</span>
 <span class="out">test result: ok. 57 passed; 0 failed</span></pre>
         </div>
@@ -646,7 +647,7 @@
 <!-- ═══════════════════════════════════════════════════════════ TIMELINE -->
 <section id="timeline">
   <div class="container">
-    <h2><span data-i18n="tl-h2">Journey Timeline</span> <span class="tag">48+ versions</span></h2>
+    <h2><span data-i18n="tl-h2">Journey Timeline</span> <span class="tag">58+ versions</span></h2>
     <p class="section-sub" data-i18n="tl-sub">Mỗi era là một bước tiến lớn trong lịch sử blockchain.</p>
     <div class="timeline">
 
@@ -799,21 +800,41 @@
       </div>
 
       <div class="era era-11">
-        <div class="era-meta"><div class="era-name">Era 11</div><div class="era-year">2032+</div></div>
+        <div class="era-meta"><div class="era-name">Era 11</div><div class="era-year">2032–2035</div></div>
         <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
         <div class="era-body">
-          <div class="era-theme">🛡️ Optimization &amp; Security — Hardening, Perf, Audit, Fuzz</div>
+          <div class="era-theme">🛡️ Optimization &amp; Security — Hardening, Perf, Audit, Fuzz ✅</div>
           <div class="version-pills">
-            <span class="vpill">v5.0 Performance</span>
-            <span class="vpill">v5.1 Security Hardening</span>
-            <span class="vpill">v5.2 P2P Improvements</span>
-            <span class="vpill">v5.3 Coinbase Maturity</span>
-            <span class="vpill">v5.4 Fee Market + RBF</span>
-            <span class="vpill">v5.5 Storage v2 WAL</span>
-            <span class="vpill">v5.6 Fuzz Testing</span>
-            <span class="vpill">v5.7 Monitoring</span>
-            <span class="vpill">v5.8 Code Audit</span>
-            <span class="vpill">v5.9 Benchmarks</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.0 Performance ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.1 Security Hardening ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.2 P2P Improvements ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.3 Coinbase Maturity ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.4 Fee Market + RBF ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.5 Storage v2 WAL ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.6 Fuzz Testing ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.7 Monitoring ✅</span>
+            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.8 Peer Discovery ✅</span>
+            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v5.9 Benchmarks ✅</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="era era-12">
+        <div class="era-meta"><div class="era-name">Era 12</div><div class="era-year">2036+</div></div>
+        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
+        <div class="era-body">
+          <div class="era-theme">⚡ Multi-threading &amp; GPU — BLAKE3, rayon, OpenCL, CUDA, SIMD, Mining Pool</div>
+          <div class="version-pills">
+            <span class="vpill">v6.0 BLAKE3 Hash Engine</span>
+            <span class="vpill">v6.1 CPU Multi-thread Miner</span>
+            <span class="vpill">v6.2 Thread-safe Chain</span>
+            <span class="vpill">v6.3 Parallel Block Validation</span>
+            <span class="vpill">v6.4 GPU Miner Abstraction</span>
+            <span class="vpill">v6.5 OpenCL Kernel</span>
+            <span class="vpill">v6.6 CUDA Kernel</span>
+            <span class="vpill">v6.7 Mining Pool</span>
+            <span class="vpill">v6.8 SIMD Hash AVX2</span>
+            <span class="vpill">v6.9 Hardware Auto-config</span>
           </div>
         </div>
       </div>
@@ -825,7 +846,7 @@
 <!-- ═══════════════════════════════════════════════════════════ STACK 2030 -->
 <section id="stack">
   <div class="container">
-    <h2><span data-i18n="stack-h2">2031+ Blockchain Stack</span> <span class="tag">Architecture</span></h2>
+    <h2><span data-i18n="stack-h2">2036+ Blockchain Stack</span> <span class="tag">Architecture</span></h2>
     <p class="section-sub" data-i18n="stack-sub">7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.</p>
     <div class="stack-diagram">
       <div class="stack-row">
@@ -1021,7 +1042,7 @@
       <div class="feature-card">
         <div class="feature-icon">🗺️</div>
         <div class="feature-title">full_stack.rs</div>
-        <div class="feature-desc">Version registry (40+v), era descriptions (10+ eras), stack statistics, security layers — tích hợp và demo tất cả từ v0.1 → v4.0.</div>
+        <div class="feature-desc">Version registry (58+v), era descriptions (12+ eras), stack statistics, security layers — tích hợp và demo tất cả từ v0.1 → v5.9.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🪙</div>
@@ -1089,10 +1110,10 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
 <footer>
   <div class="container">
     <p style="font-size:1.1rem; font-weight:700; margin-bottom:8px;" data-i18n="footer-title">
-      🦀 Blockchain Rust — 2009 → 2031+
+      🦀 Blockchain Rust — 2009 → 2036+
     </p>
     <p style="margin-bottom:16px;" data-i18n="footer-stats">
-      48+ versions &bull; 10+ eras &bull; 57/57 tests &bull; 0 errors &bull; 0 warnings
+      58+ versions &bull; 12+ eras &bull; 136/136 tests &bull; 0 errors &bull; 0 warnings
     </p>
     <p>
       <a href="https://github.com/TuyenPKT/blockchain-rust">⭐ GitHub: TuyenPKT/blockchain-rust</a> &bull;
@@ -1147,9 +1168,9 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
     vi: {
       'hero-badge':   '🦀 Rust · PKT Native · Mã nguồn mở',
       'hero-h1-span': 'từ đầu',
-      'hero-sub':     'Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet. 48+ versions. 10+ eras. Không thư viện blockchain.',
+      'hero-sub':     'Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet. 58+ versions. 12+ eras. Không thư viện blockchain.',
       'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Tệp nguồn', 'stat-test': 'Tests pass',
-      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2031+', 'btn-gh': '⭐ GitHub',
+      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2036+', 'btn-gh': '⭐ GitHub',
       'why-h2': 'Tại sao dự án này?', 'why-tag': 'Giới thiệu',
       'why-sub': 'Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.',
       'feat1-title': 'Build from scratch',
@@ -1168,7 +1189,7 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
       'qs-step3': 'Xem help & version timeline', 'qs-step4': 'Tạo ví PKT & bắt đầu đào',
       'qs-step5': 'Chạy P2P node (tùy chọn)', 'qs-step5-desc': 'Mở 2 terminal để test mạng ngang hàng:',
       'tl-h2': 'Journey Timeline', 'tl-sub': 'Mỗi era là một bước tiến lớn trong lịch sử blockchain.',
-      'stack-h2': '2031+ Blockchain Stack',
+      'stack-h2': '2036+ Blockchain Stack',
       'stack-sub': '7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.',
       'sec-h2': 'Security Layer Stack',
       'sec-sub': 'Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.',
@@ -1178,15 +1199,15 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
       'explore-sub': 'Mỗi file trong src/ là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.',
       'dep-h2': 'Dependencies',
       'dep-sub': 'Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.',
-      'footer-title': '🦀 Blockchain Rust — 2009 → 2031+',
-      'footer-stats': '48+ versions • 10+ eras • 57/57 tests • 0 errors • 0 warnings'
+      'footer-title': '🦀 Blockchain Rust — 2009 → 2036+',
+      'footer-stats': '58+ versions • 12+ eras • 136/136 tests • 0 errors • 0 warnings'
     },
     en: {
       'hero-badge':   '🦀 Rust · PKT Native · Open Source',
       'hero-h1-span': 'from scratch',
-      'hero-sub':     'Build a complete blockchain in Rust — from Bitcoin Genesis block to PKT Native Chain with PacketCrypt PoW, REST API, RocksDB storage, and Testnet. 48+ versions. 10+ eras. No blockchain libraries.',
+      'hero-sub':     'Build a complete blockchain in Rust — from Bitcoin Genesis block to PKT Native Chain with PacketCrypt PoW, REST API, RocksDB storage, and Testnet. 58+ versions. 12+ eras. No blockchain libraries.',
       'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Src files', 'stat-test': 'Tests pass',
-      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2031+', 'btn-gh': '⭐ GitHub',
+      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2036+', 'btn-gh': '⭐ GitHub',
       'why-h2': 'Why this project?', 'why-tag': 'About',
       'why-sub': 'Each version is a standalone lesson — reading the code is reading blockchain history.',
       'feat1-title': 'Build from scratch',
@@ -1205,7 +1226,7 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
       'qs-step3': 'View help & version timeline', 'qs-step4': 'Create PKT wallet & start mining',
       'qs-step5': 'Run P2P node (optional)', 'qs-step5-desc': 'Open 2 terminals to test peer-to-peer networking:',
       'tl-h2': 'Journey Timeline', 'tl-sub': 'Each era is a major leap in blockchain history.',
-      'stack-h2': '2031+ Blockchain Stack',
+      'stack-h2': '2036+ Blockchain Stack',
       'stack-sub': '7 independent security layers — compromising one layer does not break the entire system.',
       'sec-h2': 'Security Layer Stack',
       'sec-sub': 'Each layer protects against a different threat model — the system stays secure even if one layer is compromised.',
@@ -1215,8 +1236,8 @@ axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain,
       'explore-sub': 'Each file in src/ is a standalone version — read sequentially to trace the evolution.',
       'dep-h2': 'Dependencies',
       'dep-sub': 'Minimal dependencies — only core cryptographic primitives, no blockchain framework.',
-      'footer-title': '🦀 Blockchain Rust — 2009 → 2031+',
-      'footer-stats': '48+ versions • 10+ eras • 57/57 tests • 0 errors • 0 warnings'
+      'footer-title': '🦀 Blockchain Rust — 2009 → 2036+',
+      'footer-stats': '58+ versions • 12+ eras • 136/136 tests • 0 errors • 0 warnings'
     }
   };
 

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"TODO\\\\|todo\\\\|FIXME\\\\|fixme\\\\|hack\\\\|HACK\\\\|unimplemented\\\\|todo!\\(\\)\" /Users/tuyennguyen/Documents/GitHub/blockchain-rust/src/*.rs)"
+      "Bash(grep -n \"TODO\\\\|todo\\\\|FIXME\\\\|fixme\\\\|hack\\\\|HACK\\\\|unimplemented\\\\|todo!\\(\\)\" /Users/tuyennguyen/Documents/GitHub/blockchain-rust/src/*.rs)",
+      "Bash(ls /Users/tuyennguyen/Documents/GitHub/blockchain-rust/*.md /Users/tuyennguyen/Documents/GitHub/blockchain-rust/*.html)"
     ]
   }
 }
