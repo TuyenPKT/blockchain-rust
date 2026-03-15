@@ -16,7 +16,7 @@
 /// CLI:  cargo run -- bench [hash|mining|tps|merkle|utxo|mempool|all]
 /// Output: bảng kết quả + tóm tắt baseline
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
