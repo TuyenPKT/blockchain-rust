@@ -51,6 +51,8 @@ mod maturity;
 mod fee_market;
 mod wal;
 mod fuzz;
+mod monitoring;
+mod peer_discovery;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -72,6 +74,7 @@ mod fuzz;
 //   cargo run -- testnet [n] [port]            → local testnet (n nodes, base port)
 //   cargo run -- genesis [regtest|testnet]     → xem network config
 //   cargo run -- metrics [node:port]           → hashrate, peers, mempool, block time
+//   cargo run -- monitor [port]               → health endpoint (mặc định 3001)
 //   cargo test                                 → chạy integration tests
 
 fn main() {
@@ -112,6 +115,12 @@ fn main() {
             let node_addr = args.get(2).map(|s| s.as_str());
             metrics::cmd_metrics(node_addr);
         }
+        Some("monitor") => {
+            let port: u16 = args.get(2)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3001);
+            monitoring::cmd_monitor(port);
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -150,7 +159,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v5.6                     ║");
+    println!("║              ⛓   Blockchain Rust  v5.8                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -170,6 +179,7 @@ fn print_help() {
     println!("    cargo run -- testnet [n] [port]      local testnet (mặc định 3 nodes)");
     println!("    cargo run -- genesis [net]           xem config: regtest/testnet/mainnet");
     println!("    cargo run -- metrics [node:port]     hashrate, peers, mempool, block time");
+    println!("    cargo run -- monitor [port]          health endpoint (mặc định 3001)");
     println!("    cargo test                           chạy integration tests");
     println!();
 
@@ -247,10 +257,35 @@ fn run_node(port: u16, peer: Option<String>) {
         let n2 = Arc::clone(&n);
         tokio::spawn(async move { n2.start().await });
 
-        if let Some(peer_addr) = peer {
+        // v5.8: Peer discovery tự động
+        // 1. Nếu user chỉ định peer thủ công → connect trực tiếp + record vào store
+        // 2. Nếu không → bootstrap từ PeerStore + DNS seeds (testnet)
+        let my_host = local_ip();
+
+        let peers_to_connect: Vec<String> = if let Some(explicit) = peer {
+            // User-specified peer: record vào store để dùng lần sau
+            let disc = peer_discovery::PeerDiscovery::new(
+                &["seed.testnet.oceif.com"], port,
+            );
+            disc.record_peer(&explicit);
+            vec![explicit]
+        } else {
+            // Auto-discover: stored peers + DNS seeds
+            let disc = peer_discovery::PeerDiscovery::new(
+                &["seed.testnet.oceif.com"], port,
+            );
+            let found = disc.bootstrap();
+            if found.is_empty() {
+                println!("  Peer discovery: không tìm được peer nào.");
+            } else {
+                println!("  Peer discovery: {} peers tìm được.", found.len());
+            }
+            found
+        };
+
+        for peer_addr in peers_to_connect {
             println!("Kết nối đến peer: {}", peer_addr);
-            let my_host = local_ip();
-            let hello = Message::Hello { version: 1, host: my_host, port };
+            let hello = Message::Hello { version: 1, host: my_host.clone(), port };
             if let Some(resp) = Node::send_to_peer(&peer_addr, &hello).await {
                 println!("  Response: {:?}", resp);
             }
@@ -1507,7 +1542,6 @@ mod tests {
     #[test]
     fn test_wal_rebuild_utxo_from_chain() {
         use crate::chain::Blockchain;
-        use crate::wal::check_and_recover;
 
         let mut bc = Blockchain::new();
         bc.add_block(vec![], "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");

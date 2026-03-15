@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"TODO\\\\|todo\\\\|FIXME\\\\|fixme\\\\|hack\\\\|HACK\\\\|unimplemented\\\\|todo!\\(\\)\" /Users/tuyennguyen/Documents/GitHub/blockchain-rust/src/*.rs)"
+    ]
+  }
+}

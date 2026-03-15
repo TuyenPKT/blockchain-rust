@@ -105,6 +105,8 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v5.4", file: "fee_market.rs",   year: 2033, description: "Fee market: dynamic estimation, RBF (Replace-By-Fee)" },
     VersionInfo { version: "v5.5", file: "wal.rs",          year: 2033, description: "Storage v2: atomic WriteBatch, WAL epoch, crash recovery" },
     VersionInfo { version: "v5.6", file: "fuzz.rs",         year: 2034, description: "Fuzz + proptest: hash determinism, message no-panic, fee bounds, RBF" },
+    VersionInfo { version: "v5.7", file: "monitoring.rs",     year: 2034, description: "Monitoring: tracing structured logs, HealthStatus, /health /ready endpoint" },
+    VersionInfo { version: "v5.8", file: "peer_discovery.rs", year: 2034, description: "Peer discovery: PeerStore, DnsSeedResolver, PEX bootstrap, auto-connect" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -128,7 +130,7 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 8", range: "2025–2027", versions: "v3.0–v3.3", count: 4, theme: "Post-Quantum — Dilithium, SPHINCS+, ML-KEM, Hybrid" },
     Era { name: "Era 9", range: "2027–2030", versions: "v3.4–v3.9", count: 6, theme: "Autonomous Chain — IBC, DID, FHE, Sovereign Rollup" },
     Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.8", count: 9, theme: "PKT Native Chain — PacketCrypt PoW, REST API, Testnet, Metrics" },
-    Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.6", count: 7, theme: "Optimization & Security — UTXO index, peer scoring, fee market, WAL, fuzz testing" },
+    Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.8", count: 9, theme: "Optimization & Security — UTXO index, fee market, WAL, fuzz, monitoring, peer discovery" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -145,9 +147,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  55,
+    total_versions:  57,
     total_eras:      11,
-    total_src_files: 54,
+    total_src_files: 56,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",
