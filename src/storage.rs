@@ -45,7 +45,8 @@ fn open_db() -> Result<DB, String> {
 
 fn block_key(height: u64) -> String { format!("block:{:016x}", height) }
 fn utxo_key(k: &str)       -> String { format!("utxo:{}", k) }
-const META_HEIGHT: &[u8]            = b"meta:height";
+const META_HEIGHT:     &[u8] = b"meta:height";
+const META_DIFFICULTY: &[u8] = b"meta:difficulty";
 
 // ─── Chain storage ────────────────────────────────────────────────────────────
 
@@ -202,17 +203,44 @@ fn try_load_blockchain() -> Result<Option<Blockchain>, String> {
     let utxo_map = load_utxo()?.unwrap_or_default();
     let mut utxo_set = UtxoSet::new();
     utxo_set.utxos = utxo_map;
+
+    // Load difficulty từ DB; nếu chưa có (DB cũ) → tính lại từ chain
+    let difficulty = {
+        let db = open_db()?;
+        match db.get(META_DIFFICULTY).map_err(|e| e.to_string())? {
+            Some(v) => std::str::from_utf8(&v).ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(3),
+            None => recalculate_difficulty(&blocks),
+        }
+    };
+
     Ok(Some(Blockchain {
-        chain:      blocks,
-        difficulty: 3,
+        chain: blocks,
+        difficulty,
         utxo_set,
-        mempool:    crate::mempool::Mempool::new(),
+        mempool: crate::mempool::Mempool::new(),
     }))
 }
 
-/// Lưu Blockchain snapshot
+/// Tính lại difficulty từ lịch sử chain (migration từ DB cũ không lưu difficulty)
+fn recalculate_difficulty(blocks: &[crate::block::Block]) -> usize {
+    // Đếm số leading zeros trong hash của các block gần nhất
+    let recent = blocks.iter().rev().take(10);
+    let avg_zeros = recent
+        .map(|b| b.hash.chars().take_while(|&c| c == '0').count())
+        .max()
+        .unwrap_or(3);
+    avg_zeros.max(3)
+}
+
+/// Lưu Blockchain snapshot (bao gồm difficulty)
 pub fn save_blockchain(bc: &Blockchain) -> Result<(), String> {
-    save_snapshot(&bc.chain, &bc.utxo_set.utxos)
+    save_snapshot(&bc.chain, &bc.utxo_set.utxos)?;
+    let db = open_db()?;
+    db.put(META_DIFFICULTY, bc.difficulty.to_string().as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
