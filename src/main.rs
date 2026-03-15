@@ -53,6 +53,7 @@ mod wal;
 mod fuzz;
 mod monitoring;
 mod peer_discovery;
+mod bench;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -121,6 +122,10 @@ fn main() {
                 .unwrap_or(3001);
             monitoring::cmd_monitor(port);
         }
+        Some("bench") => {
+            let target = args.get(2).map(|s| s.as_str()).unwrap_or("all");
+            bench::cmd_bench(target);
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -159,7 +164,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v5.8                     ║");
+    println!("║              ⛓   Blockchain Rust  v5.9                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -180,6 +185,7 @@ fn print_help() {
     println!("    cargo run -- genesis [net]           xem config: regtest/testnet/mainnet");
     println!("    cargo run -- metrics [node:port]     hashrate, peers, mempool, block time");
     println!("    cargo run -- monitor [port]          health endpoint (mặc định 3001)");
+    println!("    cargo run -- bench [target]          benchmark (hash|mining|tps|merkle|utxo|mempool|all)");
     println!("    cargo test                           chạy integration tests");
     println!();
 

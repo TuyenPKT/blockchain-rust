@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v5.8 ✅ — 127/127 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v5.9 ✅ — 136/136 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -41,7 +41,7 @@
 - [x] v5.6 — **Fuzz + proptest**: corpus no-panic, hash determinism, Message roundtrip, fee bounds, RBF consistency (`src/fuzz.rs`) 🟢
 - [x] v5.7 — **Monitoring**: `tracing` structured logs, `HealthStatus`, `GET /health /ready /version`, `cmd_monitor` CLI (`src/monitoring.rs`) 🟢
 - [x] v5.8 — **Peer discovery**: `PeerStore` (~/.pkt/peers.txt), `DnsSeedResolver` (stdlib DNS), `PeerDiscovery::bootstrap/record/pex_query`, auto-discover khi `run_node` (`src/peer_discovery.rs`) 🟢
-- [ ] v5.9 — Benchmark suite: tps, latency, memory
+- [x] v5.9 — **Benchmark suite**: hash throughput, mining latency, TPS, merkle_std vs fast, UTXO scan vs index, mempool select; `BenchResult`/`BenchSuite` serde; `cargo run -- bench [target]` (`src/bench.rs`) 🟢
 
 ### Era 20 — Post-Singularity (v10.x) — hardware-dependent
 - [ ] v10.0–v10.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
@@ -210,5 +210,16 @@ Stack đã có:
                deep_bootstrap(): initial + PEX query each peer
                run_node() tự động discover peers khi không chỉ định --peer
 
-Next: v5.9 — Benchmark suite: tps, latency, memory
+  v5.9       Benchmark suite (src/bench.rs):
+               BenchResult: iterations, avg/min/max ns, ops_per_sec, serde
+               BenchSuite: Vec<BenchResult> + timestamp, print() table
+               bench_hash_throughput: Block::calculate_hash calls/sec
+               bench_block_mining(diff): latency mine 1 block at difficulty
+               bench_tps(blocks, txs): transactions per second
+               bench_merkle_compare: merkle_root_txid vs fast_merkle_txids
+               bench_utxo_lookup: UtxoSet O(n) scan vs UtxoIndex O(1)
+               bench_mempool_select: select_transactions at 100/1000 entries
+               CLI: cargo run -- bench [hash|mining|tps|merkle|utxo|mempool|all]
+
+Next: Era 11 hoàn thành! Next: Era 12 hoặc v10.x (Post-Singularity)
 ```
