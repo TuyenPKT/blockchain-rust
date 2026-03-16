@@ -109,6 +109,8 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v5.8", file: "peer_discovery.rs", year: 2034, description: "Peer discovery: PeerStore, DnsSeedResolver, PEX bootstrap, auto-connect" },
     VersionInfo { version: "v5.9", file: "bench.rs",          year: 2035, description: "Benchmark suite: hash/TPS/latency/merkle/UTXO/mempool, BenchResult serde" },
     VersionInfo { version: "v6.0", file: "blake3_hash.rs",    year: 2036, description: "BLAKE3 hash engine: thay SHA-256 cho PoW, hash_version field, 3-4x nhanh hơn" },
+    VersionInfo { version: "v6.1", file: "cpu_miner.rs",        year: 2036, description: "CPU multi-thread miner: rayon work-stealing, nonce split, AtomicBool stop flag" },
+    VersionInfo { version: "v6.2", file: "chain_concurrent.rs", year: 2036, description: "Thread-safe chain: Arc<RwLock<Blockchain>>, multiple readers + single writer" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -133,7 +135,7 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 9", range: "2027–2030", versions: "v3.4–v3.9", count: 6, theme: "Autonomous Chain — IBC, DID, FHE, Sovereign Rollup" },
     Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.8", count: 9, theme: "PKT Native Chain — PacketCrypt PoW, REST API, Testnet, Metrics" },
     Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.9", count: 10, theme: "Optimization & Security — fee market, WAL, fuzz, monitoring, peer discovery, benchmarks" },
-    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 1,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
+    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 3,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -150,9 +152,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  59,
+    total_versions:  61,
     total_eras:      12,
-    total_src_files: 58,
+    total_src_files: 60,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",

@@ -29,6 +29,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # v6.0: BLAKE3 hash engine (3–4x faster than SHA-256 for PoW)
 blake3 = "1.5"
+# v6.1: CPU multi-thread miner
+rayon = "1.10"
+num_cpus = "1.16"
 
 [features]
 default = []

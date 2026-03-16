@@ -55,6 +55,8 @@ mod monitoring;
 mod peer_discovery;
 mod bench;
 mod blake3_hash;
+mod cpu_miner;
+mod chain_concurrent;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -130,6 +132,12 @@ fn main() {
         Some("blake3") => {
             blake3_hash::cmd_blake3_bench();
         }
+        Some("cpumine") => {
+            let addr = args.get(2).map(|s| s.as_str()).unwrap_or("0000000000000000000000000000000000000000");
+            let diff = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(2usize);
+            let n    = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(3u32);
+            cpu_miner::cmd_cpu_mine(addr, diff, n);
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -168,7 +176,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v6.0                     ║");
+    println!("║              ⛓   Blockchain Rust  v6.2                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2036+               ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -191,6 +199,7 @@ fn print_help() {
     println!("    cargo run -- monitor [port]          health endpoint (mặc định 3001)");
     println!("    cargo run -- bench [target]          benchmark (hash|mining|tps|merkle|utxo|mempool|all)");
     println!("    cargo run -- blake3                  BLAKE3 vs SHA-256 benchmark");
+    println!("    cargo run -- cpumine [addr] [d] [n]  CPU multi-thread miner (diff=d, n blocks)");
     println!("    cargo test                           chạy integration tests");
     println!();
 
