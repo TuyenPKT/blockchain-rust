@@ -5,12 +5,12 @@ Wants=blockchain-node.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/opt/blockchain-rust
+User=tuyenpkt   # đổi thành username của bạn
+WorkingDirectory=%h/blockchain-rust
 
 # Đổi REWARD_ADDRESS thành địa chỉ ví của bạn (40 hex chars)
 Environment=REWARD_ADDRESS=aabbccddee112233445566778899aabbccddee11
-ExecStart=/opt/blockchain-rust/target/release/blockchain-rust mine ${REWARD_ADDRESS}
+ExecStart=%h/blockchain-rust/target/release/blockchain-rust mine ${REWARD_ADDRESS}
 Restart=always
 RestartSec=3
 StandardOutput=journal
