@@ -149,12 +149,11 @@ use crate::block::Block;
 /// Genesis message được encode vào prev_hash field (không dùng được như chain thật,
 /// nhưng đủ để identify network — giống Bitcoin's "Chancellor on brink..." trong coinbase)
 pub fn build_genesis(params: &NetworkParams) -> Block {
-    use sha2::{Sha256, Digest};
     // Encode genesis message thành prev_hash hex (64 chars)
     let msg_hash = {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(params.genesis_message.as_bytes());
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     };
     let mut genesis = Block::new(0, vec![], msg_hash);
     // Mine với difficulty của network

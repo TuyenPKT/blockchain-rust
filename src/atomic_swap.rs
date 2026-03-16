@@ -27,7 +27,6 @@
 //! → Alice có đủ thời gian claim sau khi thấy Bob lock
 //! → Bob có đủ thời gian claim sau khi thấy Alice claim
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::wallet::Wallet;
 use crate::script::Script;
@@ -61,7 +60,7 @@ impl HtlcOutput {
         let mut data = preimage_hash.to_vec();
         data.extend_from_slice(&amount.to_le_bytes());
         data.extend_from_slice(&locktime.to_le_bytes());
-        let utxo_id = hex::encode(Sha256::digest(&data));
+        let utxo_id = hex::encode(blake3::hash(&data).as_bytes());
 
         HtlcOutput {
             hash_lock: preimage_hash,
@@ -76,7 +75,7 @@ impl HtlcOutput {
     /// Verify claim: preimage phải hash thành hash_lock, sig phải hợp lệ
     pub fn verify_claim(&self, preimage: &[u8], claimer_wallet: &Wallet) -> bool {
         // 1. Check hash lock
-        let h: [u8; 32] = Sha256::digest(preimage).into();
+        let h: [u8; 32] = *blake3::hash(preimage).as_bytes();
         if h != self.hash_lock { return false; }
 
         // 2. Check claimer identity
@@ -109,7 +108,7 @@ impl HtlcOutput {
         data.extend_from_slice(&self.hash_lock);
         data.extend_from_slice(&self.amount.to_le_bytes());
         data.extend_from_slice(preimage);
-        Sha256::digest(&data).to_vec()
+        blake3::hash(&data).as_bytes().to_vec()
     }
 
     fn refund_signing_data(&self, current_block: u64) -> Vec<u8> {
@@ -117,7 +116,7 @@ impl HtlcOutput {
         data.extend_from_slice(&self.hash_lock);
         data.extend_from_slice(&self.amount.to_le_bytes());
         data.extend_from_slice(&current_block.to_le_bytes());
-        Sha256::digest(&data).to_vec()
+        blake3::hash(&data).as_bytes().to_vec()
     }
 }
 
@@ -160,7 +159,7 @@ impl AtomicSwap {
     ) -> Self {
         // Alice tạo random preimage 32 bytes
         let preimage = generate_preimage();
-        let hash_lock: [u8; 32] = Sha256::digest(&preimage).into();
+        let hash_lock: [u8; 32] = *blake3::hash(&preimage).as_bytes();
 
         AtomicSwap {
             state: SwapState::Proposed,
@@ -360,7 +359,7 @@ impl SwapVerifier {
 
     /// Verify preimage hợp lệ với hash_lock
     pub fn verify_preimage(preimage: &[u8], hash_lock: &[u8; 32]) -> bool {
-        let h: [u8; 32] = Sha256::digest(preimage).into();
+        let h: [u8; 32] = *blake3::hash(preimage).as_bytes();
         h == *hash_lock
     }
 }

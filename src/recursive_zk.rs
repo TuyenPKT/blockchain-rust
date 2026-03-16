@@ -29,7 +29,6 @@
 ///
 /// Tham khảo: Nova (Kothapalli et al.), Halo (Bowe et al.), Pickles (Mina)
 
-use sha2::{Sha256, Digest};
 
 // ─── ComputationStep ──────────────────────────────────────────────────────────
 
@@ -49,19 +48,19 @@ impl ComputationStep {
         let input_state = input_state.into();
 
         // F(input_state, step_data) → output_state
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"step_fn_v24");
         h.update(input_state.as_bytes());
         h.update(&step_data);
-        let output_state = hex::encode(h.finalize());
+        let output_state = hex::encode(h.finalize().as_bytes());
 
-        let mut h2 = Sha256::new();
+        let mut h2 = blake3::Hasher::new();
         h2.update(b"step_hash_v24");
-        h2.update(step_index.to_le_bytes());
+        h2.update(&step_index.to_le_bytes());
         h2.update(input_state.as_bytes());
         h2.update(output_state.as_bytes());
         h2.update(&step_data);
-        let step_hash = hex::encode(h2.finalize());
+        let step_hash = hex::encode(h2.finalize().as_bytes());
 
         ComputationStep { step_index, input_state, output_state, step_data, step_hash }
     }
@@ -82,13 +81,13 @@ pub struct BaseProof {
 
 impl BaseProof {
     pub fn generate(step: &ComputationStep) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"base_proof_v24");
-        h.update(step.step_index.to_le_bytes());
+        h.update(&step.step_index.to_le_bytes());
         h.update(step.input_state.as_bytes());
         h.update(step.output_state.as_bytes());
         h.update(&step.step_data);
-        let proof_bytes = h.finalize().to_vec();
+        let proof_bytes = h.finalize().as_bytes().to_vec();
         let proof_size  = proof_bytes.len();
 
         BaseProof {
@@ -108,9 +107,9 @@ impl BaseProof {
     }
 
     pub fn proof_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(&self.proof_bytes);
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 
@@ -149,13 +148,13 @@ impl RecursiveProof {
 
         let prev_proof_hash = base.proof_hash();
 
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"recursive_v24");
         h.update(base.input_state.as_bytes());  // z_0
         h.update(&prev_proof_hash.as_bytes());
         h.update(step.step_hash.as_bytes());
         h.update(step.output_state.as_bytes());
-        let proof_bytes = h.finalize().to_vec();
+        let proof_bytes = h.finalize().as_bytes().to_vec();
         let proof_size  = proof_bytes.len();
 
         Ok(RecursiveProof {
@@ -189,13 +188,13 @@ impl RecursiveProof {
 
         // Folding: accumulate new step into proof
         // Key: proof_bytes size stays constant (32 bytes) regardless of steps
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"recursive_v24");
         h.update(self.initial_state.as_bytes());  // z_0 invariant
         h.update(prev_proof_hash.as_bytes());
         h.update(step.step_hash.as_bytes());
         h.update(step.output_state.as_bytes());
-        let proof_bytes = h.finalize().to_vec();
+        let proof_bytes = h.finalize().as_bytes().to_vec();
         let proof_size  = proof_bytes.len();
 
         Ok(RecursiveProof {
@@ -210,9 +209,9 @@ impl RecursiveProof {
     }
 
     pub fn proof_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(&self.proof_bytes);
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 
     /// Verify the final recursive proof
@@ -305,20 +304,20 @@ impl IvcChain {
                 let real_base = BaseProof::generate(&prev_step);
                 // ... actually use the stored base directly
                 // Create recursive from the stored base + current step
-                let mut h = Sha256::new();
+                let mut h = blake3::Hasher::new();
                 h.update(b"base_proof_v24");
-                h.update(0u64.to_le_bytes());
+                h.update(&0u64.to_le_bytes());
                 h.update(base_clone.input_state.as_bytes());
                 h.update(base_clone.output_state.as_bytes());
-                let base_proof_hash = hex::encode(h.finalize());
+                let base_proof_hash = hex::encode(h.finalize().as_bytes());
 
-                let mut h2 = Sha256::new();
+                let mut h2 = blake3::Hasher::new();
                 h2.update(b"recursive_v24");
                 h2.update(base_clone.input_state.as_bytes());
                 h2.update(base_proof_hash.as_bytes());
                 h2.update(step.step_hash.as_bytes());
                 h2.update(step.output_state.as_bytes());
-                let proof_bytes = h2.finalize().to_vec();
+                let proof_bytes = h2.finalize().as_bytes().to_vec();
                 let proof_size  = proof_bytes.len();
 
                 let _ = real_base;
@@ -392,14 +391,14 @@ impl AggregatedProof {
         let proof_hashes: Vec<String> = proof_roots.iter().map(|(h, _)| h.clone()).collect();
 
         // Merkle-like aggregation
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"aggregated_v24");
-        h.update((proof_count as u64).to_le_bytes());
+        h.update(&(proof_count as u64).to_le_bytes());
         for (ph, tx_count) in &proof_roots {
             h.update(ph.as_bytes());
-            h.update(tx_count.to_le_bytes());
+            h.update(&tx_count.to_le_bytes());
         }
-        let aggregated = h.finalize().to_vec();
+        let aggregated = h.finalize().as_bytes().to_vec();
 
         AggregatedProof { proof_count, proof_hashes, aggregated, total_tx_count }
     }
@@ -412,9 +411,9 @@ impl AggregatedProof {
     }
 
     pub fn aggregated_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(&self.aggregated);
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 

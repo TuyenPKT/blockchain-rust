@@ -17,8 +17,7 @@
 //!   3. Detect P2SH: deserialize redeemScript từ stack, chạy tiếp
 //!   4. Stack top = 1 → hợp lệ
 
-use sha2::{Sha256, Digest};
-use ripemd::Ripemd160;
+use ripemd::{Ripemd160, Digest as RipemdDigest};
 use serde::{Serialize, Deserialize};
 
 // ── Opcodes ─────────────────────────────────────────────────────────────────
@@ -72,7 +71,7 @@ impl Script {
 
     /// HASH160 của serialized script — dùng làm P2SH address identifier
     pub fn script_hash(script_bytes: &[u8]) -> Vec<u8> {
-        Ripemd160::digest(Sha256::digest(script_bytes)).to_vec()
+        Ripemd160::digest(blake3::hash(script_bytes).as_bytes()).to_vec()
     }
 
     // ── Standard script builders ─────────────────────────────
@@ -224,7 +223,7 @@ impl Script {
 
     /// RIPEMD160(SHA256(pubkey)) — 20 bytes
     pub fn pubkey_hash(pubkey_bytes: &[u8]) -> Vec<u8> {
-        Ripemd160::digest(Sha256::digest(pubkey_bytes)).to_vec()
+        Ripemd160::digest(blake3::hash(pubkey_bytes).as_bytes()).to_vec()
     }
 
     /// Kiểm tra script có phải P2SH không:
@@ -371,7 +370,7 @@ impl ScriptInterpreter {
 
             Opcode::OpHash256 => {
                 let top = match self.pop() { Some(t) => t, None => return false };
-                self.stack.push(Sha256::digest(Sha256::digest(&top)).to_vec());
+                self.stack.push(blake3::hash(blake3::hash(&top).as_bytes()).as_bytes().to_vec());
             }
 
             Opcode::OpEqual => {
@@ -450,8 +449,8 @@ fn verify_ecdsa(pubkey_bytes: &[u8], data: &[u8], sig_bytes: &[u8]) -> bool {
     use secp256k1::{Secp256k1, PublicKey, Message, ecdsa::Signature};
     let secp   = Secp256k1::new();
     let pubkey = match PublicKey::from_slice(pubkey_bytes) { Ok(k) => k, Err(_) => return false };
-    let hash   = Sha256::digest(data);
-    let msg    = match Message::from_slice(&hash)          { Ok(m) => m, Err(_) => return false };
+    let hash   = blake3::hash(data);
+    let msg    = match Message::from_slice(hash.as_bytes()) { Ok(m) => m, Err(_) => return false };
     let sig    = match Signature::from_compact(sig_bytes)  { Ok(s) => s, Err(_) => return false };
     secp.verify_ecdsa(&msg, &sig, &pubkey).is_ok()
 }

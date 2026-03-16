@@ -37,7 +37,6 @@
 ///
 /// References: NIST SP 800-208, ETSI TS 119 312, Draft RFC 9691
 
-use sha2::{Sha256, Digest};
 use secp256k1::{Secp256k1, SecretKey as EcdsaSk, PublicKey as EcdsaPk, Message};
 use crate::dilithium::{DilithiumKeypair, Signature as DilSig};
 
@@ -108,15 +107,15 @@ impl HybridKeypair {
         };
 
         // Address = H(ecdsa_pk_bytes ‖ dil_pk_seed)
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"hybrid_address");
         if let Some(pk) = &ecdsa_pk {
-            h.update(pk.serialize());
+            h.update(&pk.serialize());
         }
         if let Some(kp) = &dil_kp {
             h.update(&kp.pk.seed_a);
         }
-        let addr_hash = h.finalize();
+        let addr_hash = *h.finalize().as_bytes();
         let prefix = match mode {
             SigMode::Classical => "cls1",
             SigMode::Hybrid    => "hyb1",
@@ -233,13 +232,10 @@ impl WalletState {
 // ─── Hash helper ─────────────────────────────────────────────────────────────
 
 fn h256(label: &[u8], data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(label);
     h.update(data);
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *h.finalize().as_bytes()
 }
 
 // ─── Quantum threat model ─────────────────────────────────────────────────────

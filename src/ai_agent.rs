@@ -31,7 +31,6 @@
 ///
 /// Tham khảo: Gelato Network, Chainlink Automation, MEV bots, DeFi strategies
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── MarketData ────────────────────────────────────────────────────────────────
@@ -280,12 +279,12 @@ pub struct TxLog {
 
 impl TxLog {
     pub fn new(block: u64, rule_name: &str, action_desc: &str, success: bool, note: &str) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"agent_tx_v29");
-        h.update(block.to_le_bytes());
+        h.update(&block.to_le_bytes());
         h.update(rule_name.as_bytes());
         h.update(action_desc.as_bytes());
-        let tx_hash = format!("0x{}", &hex::encode(h.finalize())[..16]);
+        let tx_hash = format!("0x{}", &hex::encode(h.finalize().as_bytes())[..16]);
         TxLog {
             block,
             rule_name: rule_name.to_string(),

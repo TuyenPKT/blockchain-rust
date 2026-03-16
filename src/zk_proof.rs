@@ -28,7 +28,6 @@
 //!      Witnesses, public inputs, proving key, verification key
 //!      Production: dùng ark-groth16 / bellman với EC pairings
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::taproot::{schnorr_sign, schnorr_verify, x_only, tagged_hash};
 
@@ -130,7 +129,7 @@ impl HashPreimageProof {
     /// Prove: "Tôi biết x sao cho H(x) = y"
     pub fn prove(x: &[u8]) -> Self {
         // Tính public statement
-        let y: [u8; 32] = Sha256::digest(x).into();
+        let y: [u8; 32] = *blake3::hash(x).as_bytes();
 
         // Chọn random r (blinding factor)
         let r = generate_random();
@@ -138,7 +137,7 @@ impl HashPreimageProof {
         // Commitment đến randomness (ẩn r)
         let commit_a: [u8; 32] = {
             let mut d = b"zkA|".to_vec(); d.extend_from_slice(&r);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Commitment đến witness (ẩn x nhờ r random)
@@ -146,7 +145,7 @@ impl HashPreimageProof {
             let mut d = b"zkW|".to_vec();
             d.extend_from_slice(&r);
             d.extend_from_slice(x);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Fiat-Shamir challenge (non-interactive)
@@ -156,7 +155,7 @@ impl HashPreimageProof {
             d.extend_from_slice(&commit_w);
             d.extend_from_slice(&y);
             d.extend_from_slice(b"zkchallenge");
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Nonce công khai (verifier có thể tính lại từ commit_a + challenge)
@@ -164,7 +163,7 @@ impl HashPreimageProof {
             let mut d = b"zkN|".to_vec();
             d.extend_from_slice(&commit_a);
             d.extend_from_slice(&challenge);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Response (binds nonce và challenge — verifier compute được)
@@ -172,7 +171,7 @@ impl HashPreimageProof {
             let mut d = b"zkZ|".to_vec();
             d.extend_from_slice(&nonce);
             d.extend_from_slice(&challenge);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         HashPreimageProof { public_hash: y, commit_a, commit_w, challenge, response }
@@ -187,7 +186,7 @@ impl HashPreimageProof {
             d.extend_from_slice(&self.commit_w);
             d.extend_from_slice(&self.public_hash);
             d.extend_from_slice(b"zkchallenge");
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Bước 2: Fiat-Shamir consistency (chứng minh prover đã commit trước challenge)
@@ -200,7 +199,7 @@ impl HashPreimageProof {
             let mut d = b"zkN|".to_vec();
             d.extend_from_slice(&self.commit_a);
             d.extend_from_slice(&self.challenge);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // Bước 4: Recompute expected response
@@ -208,7 +207,7 @@ impl HashPreimageProof {
             let mut d = b"zkZ|".to_vec();
             d.extend_from_slice(&nonce);
             d.extend_from_slice(&self.challenge);
-            Sha256::digest(&d).into()
+            *blake3::hash(&d).as_bytes()
         };
 
         // commit_w không rỗng (ràng buộc tối thiểu)
@@ -224,7 +223,7 @@ impl HashPreimageProof {
         let _expected = Self::prove(x);
         // Chỉ check public_hash và structural properties
         // (r random nên commitment sẽ khác, dùng hash của x để check)
-        let y_check: [u8; 32] = Sha256::digest(x).into();
+        let y_check: [u8; 32] = *blake3::hash(x).as_bytes();
         self.public_hash == y_check && self.verify()
     }
 }
@@ -335,7 +334,7 @@ pub struct VerificationKey {
 /// Returns (proving_key, verification_key)
 pub fn groth16_setup(circuit: &R1csCircuit) -> (ProvingKey, VerificationKey) {
     // "Toxic waste" τ — phải xóa sau setup (real: MPC ceremony)
-    let tau: [u8; 32] = Sha256::digest(b"toxic_waste_tau_MUST_DELETE").into();
+    let tau: [u8; 32] = *blake3::hash(b"toxic_waste_tau_MUST_DELETE").as_bytes();
     let alpha = tagged_hash("Groth16Alpha", &tau);
     let beta  = tagged_hash("Groth16Beta",  &tau);
     let gamma = tagged_hash("Groth16Gamma", &tau);
@@ -343,13 +342,13 @@ pub fn groth16_setup(circuit: &R1csCircuit) -> (ProvingKey, VerificationKey) {
 
     // e(α, β) = pairing (simplified: H(α || β))
     let mut ab = alpha.to_vec(); ab.extend_from_slice(&beta);
-    let alpha_beta = Sha256::digest(&ab).into();
+    let alpha_beta = *blake3::hash(&ab).as_bytes();
 
     // Encode circuit constraints into keys
     let circuit_hash = {
         let mut d = Vec::new();
         for c in &circuit.constraints { d.extend_from_slice(c.label.as_bytes()); }
-        Sha256::digest(&d)
+        blake3::hash(&d)
     };
     let _ = circuit_hash; // used in production to bind keys to circuit
 
@@ -384,20 +383,20 @@ pub fn groth16_prove(
     for (i, &w) in witness.iter().enumerate() {
         let mut d = pi_a_data.clone();
         d.extend_from_slice(&(i as i64 * w).to_le_bytes());
-        pi_a_data = Sha256::digest(&d).to_vec();
+        pi_a_data = blake3::hash(&d).as_bytes().to_vec();
     }
     pi_a_data.extend_from_slice(&r);
-    let pi_a: [u8; 32] = Sha256::digest(&pi_a_data).into();
+    let pi_a: [u8; 32] = *blake3::hash(&pi_a_data).as_bytes();
 
     // π_B = β + Σ(b_i * τ^i) + s·δ (simplified)
     let mut pi_b_data = pk.beta.to_vec();
     for (i, &w) in witness.iter().enumerate() {
         let mut d = pi_b_data.clone();
         d.extend_from_slice(&(i as i64 * w + 1).to_le_bytes());
-        pi_b_data = Sha256::digest(&d).to_vec();
+        pi_b_data = blake3::hash(&d).as_bytes().to_vec();
     }
     pi_b_data.extend_from_slice(&s);
-    let pi_b: [u8; 32] = Sha256::digest(&pi_b_data).into();
+    let pi_b: [u8; 32] = *blake3::hash(&pi_b_data).as_bytes();
 
     // π_C = Σ(h_i * τ^i * Δ) + s·π_A + r·π_B - r·s·δ (simplified)
     let mut pi_c_data = Vec::new();
@@ -406,7 +405,7 @@ pub fn groth16_prove(
     pi_c_data.extend_from_slice(&pk.delta);
     pi_c_data.extend_from_slice(&r);
     pi_c_data.extend_from_slice(&s);
-    let pi_c: [u8; 32] = Sha256::digest(&pi_c_data).into();
+    let pi_c: [u8; 32] = *blake3::hash(&pi_c_data).as_bytes();
 
     Ok(Groth16Proof { pi_a, pi_b, pi_c, public_inputs: public.to_vec() })
 }
@@ -420,7 +419,7 @@ pub fn groth16_verify(
     // e(A, B) — simplified: H(π_A || π_B)
     let mut e_ab = proof.pi_a.to_vec();
     e_ab.extend_from_slice(&proof.pi_b);
-    let lhs: [u8; 32] = Sha256::digest(&e_ab).into();
+    let lhs: [u8; 32] = *blake3::hash(&e_ab).as_bytes();
 
     // Σ public inputs term
     let mut sigma_data = Vec::new();
@@ -428,14 +427,14 @@ pub fn groth16_verify(
         sigma_data.extend_from_slice(&inp.to_le_bytes());
     }
     sigma_data.extend_from_slice(&vk.gamma);
-    let sigma: [u8; 32] = Sha256::digest(&sigma_data).into();
+    let sigma: [u8; 32] = *blake3::hash(&sigma_data).as_bytes();
 
     // e(α,β) · e(Σ,γ) · e(C,δ) — simplified: H(α_β || sigma || C_δ)
     let mut rhs_data = vk.alpha_beta.to_vec();
     rhs_data.extend_from_slice(&sigma);
     rhs_data.extend_from_slice(&proof.pi_c);
     rhs_data.extend_from_slice(&vk.delta);
-    let rhs: [u8; 32] = Sha256::digest(&rhs_data).into();
+    let rhs: [u8; 32] = *blake3::hash(&rhs_data).as_bytes();
 
     // Trong real Groth16: lhs == rhs (algebraic identity)
     // Simplified: chúng ta verify structural consistency
@@ -478,7 +477,7 @@ impl ZkSimulator {
         let mut sim_data = b"zkSIM|".to_vec();
         sim_data.extend_from_slice(pk_bytes);
         sim_data.extend_from_slice(msg);
-        let hash = Sha256::digest(&sim_data);
+        let hash = *blake3::hash(&sim_data).as_bytes();
         let mut out = vec![0u8; 64];
         out[..32].copy_from_slice(&hash);
         out[32..].copy_from_slice(&hash);

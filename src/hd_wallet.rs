@@ -7,7 +7,7 @@
 ///   entropy (128 bit) → mnemonic 12 từ → seed (PBKDF2) → master key (HMAC-SHA512)
 ///   → derive theo path → keypair → address
 
-use sha2::{Sha256, Sha512, Digest};
+use sha2::Sha512;
 use hmac::{Hmac, Mac};
 use pbkdf2::pbkdf2_hmac;
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
@@ -49,7 +49,7 @@ pub fn generate_entropy() -> [u8; 16] {
 /// 128 bit entropy → 12 words (mỗi từ = 11 bit index vào wordlist 2048 từ)
 pub fn entropy_to_mnemonic(entropy: &[u8]) -> Vec<String> {
     // Checksum = SHA256(entropy)[0..len/32 bits]
-    let hash     = Sha256::digest(entropy);
+    let hash     = blake3::hash(entropy);
     let cs_bits  = entropy.len() * 8 / 32; // 128bit → 4 bits checksum
 
     // Ghép entropy + checksum thành bit array
@@ -60,7 +60,7 @@ pub fn entropy_to_mnemonic(entropy: &[u8]) -> Vec<String> {
         }
     }
     for i in (8 - cs_bits..8).rev() {
-        bits.push((hash[0] >> i) & 1 == 1);
+        bits.push((hash.as_bytes()[0] >> i) & 1 == 1);
     }
 
     // Mỗi 11 bit → 1 chỉ số trong wordlist

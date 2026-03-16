@@ -35,7 +35,6 @@
 ///
 /// Inspired by: Tezos Babylon/Athens upgrades, Cosmos governance module
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -269,12 +268,7 @@ pub struct SelfAmendChain {
 
 impl SelfAmendChain {
     pub fn new() -> Self {
-        let code_hash: [u8; 32] = {
-            let mut sha = Sha256::new();
-            sha.update(b"genesis_protocol_v1.0.0");
-            let out = sha.finalize();
-            let mut r = [0u8; 32]; r.copy_from_slice(&out); r
-        };
+        let code_hash: [u8; 32] = *blake3::hash(b"genesis_protocol_v1.0.0").as_bytes();
 
         let mut chain = SelfAmendChain {
             block:      0,
@@ -522,15 +516,12 @@ impl SelfAmendChain {
     }
 
     fn make_id(&self, proposer: &str, block: u64, label: &str) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"amendment_id");
         h.update(proposer.as_bytes());
         h.update(&block.to_le_bytes());
         h.update(label.as_bytes());
-        let out = h.finalize();
-        let mut r = [0u8; 32];
-        r.copy_from_slice(&out);
-        r
+        *h.finalize().as_bytes()
     }
 
     fn log(&mut self, msg: &str) {
@@ -547,10 +538,5 @@ impl SelfAmendChain {
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 pub fn make_code_hash(data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(data);
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *blake3::hash(data).as_bytes()
 }

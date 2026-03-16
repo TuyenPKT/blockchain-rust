@@ -12,7 +12,6 @@
 //!   scriptSig:    (rỗng)
 //!   witness:      [<sig_bytes>, <pubkey_bytes>]
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::script::Script;
 
@@ -109,7 +108,7 @@ impl Transaction {
             self.outputs.iter().map(|o| o.amount).collect::<Vec<_>>(),
             self.is_coinbase,
         );
-        hex::encode(Sha256::digest(Sha256::digest(data.as_bytes())))
+        hex::encode(blake3::hash(data.as_bytes()).as_bytes())
     }
 
     /// wtxid: hash inputs+outputs+witness
@@ -124,7 +123,7 @@ impl Transaction {
             self.is_coinbase,
             wit,
         );
-        hex::encode(Sha256::digest(Sha256::digest(data.as_bytes())))
+        hex::encode(blake3::hash(data.as_bytes()).as_bytes())
     }
 
     /// BIP143 sighash cho SegWit — bao gồm input_amount
@@ -137,7 +136,7 @@ impl Transaction {
             input_index,
             input_amount,
         );
-        Sha256::digest(data.as_bytes()).to_vec()
+        blake3::hash(data.as_bytes()).as_bytes().to_vec()
     }
 
     /// Legacy signing_data (P2PKH, P2SH)
@@ -147,7 +146,7 @@ impl Transaction {
             self.inputs.iter().map(|i| (&i.tx_id, i.output_index)).collect::<Vec<_>>(),
             self.outputs.iter().map(|o| o.amount).collect::<Vec<_>>(),
         );
-        Sha256::digest(data.as_bytes()).to_vec()
+        blake3::hash(data.as_bytes()).as_bytes().to_vec()
     }
 
     pub fn calculate_id(&self) -> String { self.calculate_txid() }

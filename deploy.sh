@@ -40,9 +40,10 @@ echo "✅ Build xong: $(ls -lh target/release/blockchain-rust)"
 
 # Setup systemd
 cp ~/blockchain-rust/blockchain-node.service /etc/systemd/system/
+cp ~/blockchain-rust/blockchain-api.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable blockchain-node
-systemctl restart blockchain-node
-echo "✅ Service started"
-systemctl status blockchain-node --no-pager
+systemctl enable blockchain-node blockchain-api
+systemctl restart blockchain-node blockchain-api
+echo "✅ Services started"
+systemctl status blockchain-node blockchain-api --no-pager
 REMOTE

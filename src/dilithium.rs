@@ -40,7 +40,6 @@
 ///
 /// Tham khảo: CRYSTALS-Dilithium spec (v3.1), NIST FIPS 204
 
-use sha2::{Sha256, Digest};
 
 // ─── Parameters ───────────────────────────────────────────────────────────────
 
@@ -177,13 +176,13 @@ pub fn sample_uniform(seed: &[u8], domain: u8, row: usize, col: usize) -> Poly {
     let mut buf = [0u8; 32];
 
     while idx < N {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(seed);
-        h.update([domain]);
-        h.update(row.to_le_bytes());
-        h.update(col.to_le_bytes());
-        h.update(counter.to_le_bytes());
-        buf.copy_from_slice(&h.finalize());
+        h.update(&[domain]);
+        h.update(&row.to_le_bytes());
+        h.update(&col.to_le_bytes());
+        h.update(&counter.to_le_bytes());
+        buf.copy_from_slice(h.finalize().as_bytes());
         counter += 1;
 
         // Pack 3 bytes → 1 coefficient (like real Dilithium)
@@ -210,12 +209,12 @@ pub fn sample_small(seed: &[u8], domain: u8, idx: usize) -> Poly {
     let mut filled = 0;
 
     while filled < N {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(seed);
-        h.update([domain]);
-        h.update(idx.to_le_bytes());
-        h.update(ctr.to_le_bytes());
-        let hash = h.finalize();
+        h.update(&[domain]);
+        h.update(&idx.to_le_bytes());
+        h.update(&ctr.to_le_bytes());
+        let hash = *h.finalize().as_bytes();
         ctr += 1;
 
         for &byte in hash.iter() {
@@ -246,12 +245,12 @@ pub fn sample_mask(seed: &[u8], nonce: u16, idx: usize) -> Poly {
     let range = 2 * GAMMA1;
 
     while filled < N {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(seed);
-        h.update(nonce.to_le_bytes());
-        h.update(idx.to_le_bytes());
-        h.update(ctr.to_le_bytes());
-        let hash = h.finalize();
+        h.update(&nonce.to_le_bytes());
+        h.update(&idx.to_le_bytes());
+        h.update(&ctr.to_le_bytes());
+        let hash = *h.finalize().as_bytes();
         ctr += 1;
 
         // 5 bytes → 2 coefficients in [0, 2*gamma1)
@@ -280,10 +279,10 @@ pub fn sample_challenge(hash: &[u8]) -> Poly {
     let mut ctr = 0u64;
 
     while positions.len() < TAU {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(hash);
-        h.update(ctr.to_le_bytes());
-        let buf = h.finalize();
+        h.update(&ctr.to_le_bytes());
+        let buf = *h.finalize().as_bytes();
         ctr += 1;
 
         for chunk in buf.chunks(3) {
@@ -336,13 +335,13 @@ impl PolyVec {
 
     /// Hash all coefficients to a 32-byte digest
     pub fn hash(&self) -> Vec<u8> {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         for p in &self.polys {
             for &c in &p.coeffs {
-                h.update(c.to_le_bytes());
+                h.update(&c.to_le_bytes());
             }
         }
-        h.finalize().to_vec()
+        h.finalize().as_bytes().to_vec()
     }
 }
 
@@ -400,10 +399,10 @@ pub struct Signature {
 
 pub fn keygen(seed: &[u8]) -> (PublicKey, SecretKey) {
     // Derive seeds
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"dilithium_keygen_v30");
     h.update(seed);
-    let master = h.finalize();
+    let master = *h.finalize().as_bytes();
 
     let seed_a = master[..16].to_vec();
     let seed_s = master[16..].to_vec();
@@ -445,11 +444,11 @@ pub fn expand_a(seed_a: &[u8]) -> PolyMatrix {
 
 pub fn sign(sk: &SecretKey, message: &[u8]) -> Signature {
     let a = expand_a(&sk.seed_a);
-    let mut rng_seed = Sha256::new();
+    let mut rng_seed = blake3::Hasher::new();
     rng_seed.update(b"dilithium_sign_v30");
     rng_seed.update(&sk.seed_s);
     rng_seed.update(message);
-    let rng_base = rng_seed.finalize();
+    let rng_base = *rng_seed.finalize().as_bytes();
 
     let mut nonce: u16 = 0;
     let mut aborts = 0u32;
@@ -465,11 +464,11 @@ pub fn sign(sk: &SecretKey, message: &[u8]) -> Signature {
         let w = a.mul_vec(&y);
 
         // 3. Compute challenge c = H(message || HighBits(w))
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"dilithium_challenge");
         h.update(message);
         h.update(&w.high_bits().hash());
-        let c_hash = h.finalize().to_vec();
+        let c_hash = h.finalize().as_bytes().to_vec();
 
         let c_poly = sample_challenge(&c_hash);
 
@@ -520,11 +519,11 @@ pub fn verify(pk: &PublicKey, message: &[u8], sig: &Signature) -> bool {
     let w_prime = az.sub(&ct);
 
     // 5. Recompute challenge hash from w'
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"dilithium_challenge");
     h.update(message);
     h.update(&w_prime.high_bits().hash());
-    let expected_hash = h.finalize().to_vec();
+    let expected_hash = h.finalize().as_bytes().to_vec();
 
     // 6. Check c_hash matches
     sig.c_hash == expected_hash
@@ -541,11 +540,11 @@ pub struct DilithiumKeypair {
 impl DilithiumKeypair {
     pub fn generate(seed: &[u8]) -> Self {
         let (pk, sk) = keygen(seed);
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"dilithium_address");
         h.update(&pk.seed_a);
         h.update(&pk.t.hash());
-        let address = format!("dil1{}", &hex::encode(h.finalize())[..40]);
+        let address = format!("dil1{}", &hex::encode(h.finalize().as_bytes())[..40]);
         DilithiumKeypair { pk, sk, address }
     }
 
@@ -617,9 +616,9 @@ pub struct LweProblem {
 
 impl LweProblem {
     pub fn new(n: usize, q: i64, seed: &[u8]) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(seed);
-        let hash = h.finalize();
+        let hash = *h.finalize().as_bytes();
 
         // Sample A (random), s (small secret), e (small error)
         let a: Vec<i64> = (0..n).map(|i| ((hash[i % 32] as i64) * 37 + i as i64 * 13) % q).collect();

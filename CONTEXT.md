@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v6.2 ✅ — 168/168 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v6.3 ✅ — 179/179 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -47,7 +47,7 @@
 - [x] v6.0 — **BLAKE3 Hash Engine**: thay SHA-256 cho PoW, `hash_version` field, benchmark BLAKE3 vs SHA-256 (`src/blake3_hash.rs`) 🔴
 - [x] v6.1 — **CPU Multi-thread Miner**: `rayon` work-stealing, nonce splitting N threads, `AtomicBool` stop flag, default = `cores/3` (`src/cpu_miner.rs`) 🔴
 - [x] v6.2 — **Thread-safe Chain**: `Arc<RwLock<Blockchain>>`, multiple readers + single writer, `ConcurrentChain` (`src/chain_concurrent.rs`) 🟡
-- [ ] v6.3 — **Parallel Block Validation**: `rayon::par_iter()` validate N blocks đồng thời khi sync, `ValidationResult` (`src/validator.rs`) 🟡
+- [x] v6.3 — **Parallel Block Validation**: `rayon::par_iter()` validate N blocks đồng thời khi sync, `ValidationResult` (`src/validator.rs`) 🟡
 - [ ] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
 - [ ] v6.5 — **OpenCL Kernel**: BLAKE3 OpenCL C kernel, `OpenClDevice`, feature-gated `--features opencl`, CPU fallback (`src/opencl_kernel.rs`) 🟢
 - [ ] v6.6 — **CUDA Kernel**: BLAKE3 PTX kernel, `CudaDevice`, feature-gated `--features cuda`, CPU fallback (`src/cuda_kernel.rs`) 🟢
@@ -202,8 +202,8 @@ num_cpus = "1.16"         # v6.1: detect core count
 ## 🔖 Checkpoint
 
 ```
-Version:   v6.2 ✅
-Tests:     168/168 pass
+Version:   v6.3 ✅
+Tests:     179/179 pass
 Warnings:  0
 Errors:    0
 
@@ -271,5 +271,15 @@ Stack đã có:
                Escape hatch: with_read/with_write closures
                clone_handle(): Arc clone, same chain, ref_count()
 
-Next: v6.3 Parallel Block Validation (rayon::par_iter)
+  v6.3       Parallel Block Validation (src/validator.rs):
+               ValidationError: HashMismatch/DifficultyNotMet/WitnessRootMismatch/
+                 MissingCoinbase/InvalidTransaction/BrokenChainLink
+               ValidationResult { block_index, is_valid, errors }
+               validate_block(block, diff): single block individual check
+               validate_blocks_individual_parallel(blocks, diff): par_iter
+               validate_chain_links_parallel(blocks): prev_hash checks par
+               validate_blocks_parallel(blocks, diff): rayon::join both passes
+               ParallelValidator { difficulty }: validate_one/validate_many
+
+Next: v6.4 GPU Miner Abstraction
 ```

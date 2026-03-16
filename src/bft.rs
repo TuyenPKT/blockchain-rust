@@ -24,7 +24,6 @@
 ///   - Instant finality: block committed = finalized (không cần xác nhận thêm)
 ///   - Lock mechanism: validator không vote block khác sau khi đã lock
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Step / Phase ────────────────────────────────────────────────────────────
@@ -78,13 +77,13 @@ impl Vote {
     }
 
     fn sign_vote(vt: &VoteType, height: u64, round: u32, hash: &Option<String>, validator: &str) -> Vec<u8> {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(validator.as_bytes());
-        h.update(height.to_le_bytes());
-        h.update(round.to_le_bytes());
+        h.update(&height.to_le_bytes());
+        h.update(&round.to_le_bytes());
         match vt { VoteType::Prevote => h.update(b"prevote"), VoteType::Precommit => h.update(b"precommit") };
         h.update(hash.as_deref().unwrap_or("nil").as_bytes());
-        h.finalize().to_vec()
+        h.finalize().as_bytes().to_vec()
     }
 
     pub fn verify(&self) -> bool {
@@ -116,13 +115,13 @@ impl Proposal {
     }
 
     fn sign(height: u64, round: u32, proposer: &str, block_hash: &str) -> Vec<u8> {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"proposal_v20");
         h.update(proposer.as_bytes());
-        h.update(height.to_le_bytes());
-        h.update(round.to_le_bytes());
+        h.update(&height.to_le_bytes());
+        h.update(&round.to_le_bytes());
         h.update(block_hash.as_bytes());
-        h.finalize().to_vec()
+        h.finalize().as_bytes().to_vec()
     }
 
     pub fn verify(&self) -> bool {
@@ -161,14 +160,14 @@ impl BftBlock {
     }
 
     fn compute_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"bft_v20");
-        h.update(self.height.to_le_bytes());
-        h.update(self.round.to_le_bytes());
+        h.update(&self.height.to_le_bytes());
+        h.update(&self.round.to_le_bytes());
         h.update(self.prev_hash.as_bytes());
         h.update(self.proposer.as_bytes());
         h.update(self.payload.as_bytes());
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 

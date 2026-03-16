@@ -10,7 +10,6 @@
 ///
 /// Tham khảo: Ethereum Yellow Paper, GHOST paper (Sompolinsky & Zohar 2013)
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -45,13 +44,13 @@ impl UncleBlock {
     }
 
     fn compute_hash_fields(height: u64, miner: &str, parent: &str, nonce: u64) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"uncle_v19");
-        h.update(height.to_le_bytes());
+        h.update(&height.to_le_bytes());
         h.update(miner.as_bytes());
         h.update(parent.as_bytes());
-        h.update(nonce.to_le_bytes());
-        hex::encode(h.finalize())
+        h.update(&nonce.to_le_bytes());
+        hex::encode(h.finalize().as_bytes())
     }
 
     /// Uncle reward = (uncle_height + 8 - nephew_height) / 8 × base_reward
@@ -108,15 +107,15 @@ impl GhostBlock {
         height: u64, prev_hash: &str, miner: &str,
         nonce: u64, timestamp: u64, payload: &str,
     ) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"ghost_v19");
-        h.update(height.to_le_bytes());
+        h.update(&height.to_le_bytes());
         h.update(prev_hash.as_bytes());
         h.update(miner.as_bytes());
-        h.update(nonce.to_le_bytes());
-        h.update(timestamp.to_le_bytes());
+        h.update(&nonce.to_le_bytes());
+        h.update(&timestamp.to_le_bytes());
         h.update(payload.as_bytes());
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 
     /// Thêm uncle vào block, tính lại rewards

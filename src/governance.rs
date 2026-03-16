@@ -22,7 +22,6 @@
 ///
 /// Tham khảo: Compound Governor Bravo, OpenZeppelin Governor, Uniswap governance
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -166,12 +165,12 @@ impl Proposal {
     }
 
     pub fn proposal_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"proposal_v28");
-        h.update(self.id.to_le_bytes());
+        h.update(&self.id.to_le_bytes());
         h.update(self.proposer.as_bytes());
         h.update(self.title.as_bytes());
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 

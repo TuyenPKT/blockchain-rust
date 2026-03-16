@@ -45,7 +45,6 @@
 ///
 /// References: ICS-02, ICS-03, ICS-04; cosmos/ibc-go; IBC spec v1.0
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -184,7 +183,7 @@ impl Packet {
     /// Packet commitment = H(sequence ‖ ports ‖ channels ‖ data ‖ timeout)
     /// Stored on source chain; verified by destination chain
     pub fn commitment(&self) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"packet_commitment_v1");
         h.update(&self.sequence.to_le_bytes());
         h.update(self.src_port.as_bytes());
@@ -193,10 +192,7 @@ impl Packet {
         h.update(self.dst_channel.as_bytes());
         h.update(&self.data);
         h.update(&self.timeout_height.to_le_bytes());
-        let out = h.finalize();
-        let mut r = [0u8; 32];
-        r.copy_from_slice(&out);
-        r
+        *h.finalize().as_bytes()
     }
 }
 
@@ -247,7 +243,7 @@ impl IbcChain {
     }
 
     fn recompute_state_root(&mut self) {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(self.chain_id.as_bytes());
         h.update(&self.height.to_le_bytes());
         let mut keys: Vec<_> = self.commitments.keys().cloned().collect();
@@ -257,8 +253,7 @@ impl IbcChain {
             h.update(&k.1.to_le_bytes());
             h.update(&self.commitments[k]);
         }
-        let out = h.finalize();
-        self.state_root.copy_from_slice(&out);
+        self.state_root.copy_from_slice(h.finalize().as_bytes());
     }
 
     fn log(&mut self, msg: &str) {
@@ -267,14 +262,11 @@ impl IbcChain {
 
     /// Block header hash (relayer submits this to counterparty light client)
     pub fn header_hash(&self) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(self.chain_id.as_bytes());
         h.update(&self.height.to_le_bytes());
         h.update(&self.state_root);
-        let out = h.finalize();
-        let mut r = [0u8; 32];
-        r.copy_from_slice(&out);
-        r
+        *h.finalize().as_bytes()
     }
 
     // ── Light Client ──────────────────────────────────────────────────────────

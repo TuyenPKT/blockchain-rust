@@ -26,7 +26,6 @@
 ///
 /// Tham khảo: Chainlink Data Feeds, Band Protocol, Pyth Network
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Price (fixed-point) ──────────────────────────────────────────────────────
@@ -67,14 +66,14 @@ impl OracleReport {
         let feed_id  = feed_id.into();
         let reporter = reporter.into();
 
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"oracle_report_v27");
         h.update(feed_id.as_bytes());
-        h.update(price.to_le_bytes());
-        h.update(timestamp.to_le_bytes());
+        h.update(&price.to_le_bytes());
+        h.update(&timestamp.to_le_bytes());
         h.update(reporter.as_bytes());
-        h.update(round.to_le_bytes());
-        let signature = hex::encode(h.finalize());
+        h.update(&round.to_le_bytes());
+        let signature = hex::encode(h.finalize().as_bytes());
 
         OracleReport { feed_id, price, timestamp, reporter, round, signature }
     }

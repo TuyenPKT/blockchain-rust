@@ -13,7 +13,6 @@
 ///
 /// Tham chiếu: https://github.com/cjdelisle/PacketCrypt
 
-use sha2::{Sha256, Digest};
 
 // ─── Difficulty helpers ────────────────────────────────────────────────────────
 
@@ -72,12 +71,12 @@ pub struct Announcement {
 impl Announcement {
     /// Tính hash của announcement (không dùng stored work_hash)
     pub fn compute_hash(parent: &[u8; 32], key: &[u8; 32], nonce: u64) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"PacketCrypt_Ann_v1:");
         h.update(parent);
         h.update(key);
-        h.update(nonce.to_le_bytes());
-        h.finalize().into()
+        h.update(&nonce.to_le_bytes());
+        *h.finalize().as_bytes()
     }
 
     /// Xác minh announcement hợp lệ với min_difficulty
@@ -172,10 +171,10 @@ impl AnnouncementPool {
         while layer.len() > 1 {
             let mut next = Vec::new();
             for pair in layer.chunks(2) {
-                let mut h = Sha256::new();
-                h.update(pair[0]);
+                let mut h = blake3::Hasher::new();
+                h.update(&pair[0]);
                 h.update(pair.get(1).unwrap_or(&pair[0]));
-                next.push(h.finalize().into());
+                next.push(*h.finalize().as_bytes());
             }
             layer = next;
         }
@@ -214,15 +213,15 @@ impl PcBlock {
         ann_count: u32,
         nonce: u64,
     ) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"PacketCrypt_Block_v1:");
-        h.update(height.to_le_bytes());
+        h.update(&height.to_le_bytes());
         h.update(prev_hash.as_bytes());
         h.update(miner_address.as_bytes());
         h.update(ann_root.as_bytes());
-        h.update(ann_count.to_le_bytes());
-        h.update(nonce.to_le_bytes());
-        hex::encode(h.finalize())
+        h.update(&ann_count.to_le_bytes());
+        h.update(&nonce.to_le_bytes());
+        hex::encode(h.finalize().as_bytes())
     }
 
     pub fn verify(&self) -> bool {
@@ -327,7 +326,7 @@ impl PcChain {
             base_difficulty,
             effective_difficulty: 0,  // genesis không cần PoW
             nonce: 0,
-            hash: hex::encode(Sha256::digest(b"PKT_Genesis_v4.1")),
+            hash: hex::encode(blake3::hash(b"PKT_Genesis_v4.1").as_bytes()),
             timestamp: 0,
         };
         Self {

@@ -27,7 +27,6 @@
 ///
 /// Tham khảo: Polygon zkEVM, zkSync Era, Scroll, Taiko
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── EvmOpcode ────────────────────────────────────────────────────────────────
@@ -171,15 +170,15 @@ pub struct TraceStep {
 
 impl TraceStep {
     pub fn new(pc: usize, opcode: EvmOpcode, stack_in: Vec<u64>, stack_out: Vec<u64>, gas_used: u64) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"trace_step_v25");
-        h.update((pc as u64).to_le_bytes());
-        h.update([opcode.opcode_byte()]);
-        for v in &stack_in  { h.update(v.to_le_bytes()); }
+        h.update(&(pc as u64).to_le_bytes());
+        h.update(&[opcode.opcode_byte()]);
+        for v in &stack_in  { h.update(&v.to_le_bytes()); }
         h.update(b"|");
-        for v in &stack_out { h.update(v.to_le_bytes()); }
-        h.update(gas_used.to_le_bytes());
-        let step_hash = hex::encode(h.finalize());
+        for v in &stack_out { h.update(&v.to_le_bytes()); }
+        h.update(&gas_used.to_le_bytes());
+        let step_hash = hex::encode(h.finalize().as_bytes());
         TraceStep { pc, opcode, stack_in, stack_out, gas_used, step_hash }
     }
 }
@@ -357,12 +356,12 @@ impl ExecutionTrace {
         let gas_used    = gas_limit - executor.gas;
 
         // Trace root: H(all step_hashes)
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"trace_root_v25");
         for step in &steps {
             h.update(step.step_hash.as_bytes());
         }
-        let trace_root = hex::encode(h.finalize());
+        let trace_root = hex::encode(h.finalize().as_bytes());
 
         ExecutionTrace { steps, final_stack, gas_used, trace_root }
     }
@@ -372,13 +371,13 @@ impl ExecutionTrace {
     /// Trong thực tế: Plonkish table, Halo2 circuits
     pub fn to_constraints(&self) -> Vec<Constraint> {
         self.steps.iter().map(|step| {
-            let mut h = Sha256::new();
+            let mut h = blake3::Hasher::new();
             h.update(b"constraint_v25");
-            h.update([step.opcode.opcode_byte()]);
-            for v in &step.stack_in  { h.update(v.to_le_bytes()); }
+            h.update(&[step.opcode.opcode_byte()]);
+            for v in &step.stack_in  { h.update(&v.to_le_bytes()); }
             h.update(b"|");
-            for v in &step.stack_out { h.update(v.to_le_bytes()); }
-            let witness_hash = hex::encode(h.finalize());
+            for v in &step.stack_out { h.update(&v.to_le_bytes()); }
+            let witness_hash = hex::encode(h.finalize().as_bytes());
 
             Constraint {
                 pc:           step.pc,
@@ -423,28 +422,28 @@ pub struct ZkEvmProof {
 impl ZkEvmProof {
     pub fn generate(trace: &ExecutionTrace, constraints: &[Constraint]) -> Self {
         // Hash constraints
-        let mut ch = Sha256::new();
+        let mut ch = blake3::Hasher::new();
         ch.update(b"constraints_v25");
         for c in constraints {
-            ch.update([c.satisfied as u8]);
+            ch.update(&[c.satisfied as u8]);
             ch.update(c.witness_hash.as_bytes());
         }
-        let constraints_hash = ch.finalize();
+        let constraints_hash = *ch.finalize().as_bytes();
 
         // Hash final stack
-        let mut sh = Sha256::new();
+        let mut sh = blake3::Hasher::new();
         sh.update(b"final_stack_v25");
-        for v in &trace.final_stack { sh.update(v.to_le_bytes()); }
-        let final_stack_hash = hex::encode(sh.finalize());
+        for v in &trace.final_stack { sh.update(&v.to_le_bytes()); }
+        let final_stack_hash = hex::encode(sh.finalize().as_bytes());
 
         // Proof = H(trace_root || final_stack_hash || gas || constraints)
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"zkevm_proof_v25");
         h.update(trace.trace_root.as_bytes());
         h.update(final_stack_hash.as_bytes());
-        h.update(trace.gas_used.to_le_bytes());
+        h.update(&trace.gas_used.to_le_bytes());
         h.update(&constraints_hash);
-        let proof_bytes = h.finalize().to_vec();
+        let proof_bytes = h.finalize().as_bytes().to_vec();
 
         ZkEvmProof {
             trace_root:       trace.trace_root.clone(),
@@ -464,9 +463,9 @@ impl ZkEvmProof {
     }
 
     pub fn proof_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(&self.proof_bytes);
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 
@@ -512,11 +511,11 @@ impl SmartContract {
     }
 
     pub fn bytecode_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"contract_v25");
         for op in &self.bytecode {
-            h.update([op.opcode_byte()]);
+            h.update(&[op.opcode_byte()]);
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }

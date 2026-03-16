@@ -26,7 +26,6 @@
 //!   Chứng minh v ∈ [0, 2^64) — ngăn overflow attacks
 //!   Simplified: dùng hash-based commitment scheme thay Bulletproofs đầy đủ
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 
 // ── Pedersen Commitment ──────────────────────────────────────
@@ -51,8 +50,8 @@ impl Commitment {
         let mut data = Vec::with_capacity(40);
         data.extend_from_slice(blinding);
         data.extend_from_slice(&value.to_le_bytes());
-        let hash = Sha256::digest(Sha256::digest(data));
-        Commitment(hash.into())
+        let hash = blake3::hash(blake3::hash(&data).as_bytes());
+        Commitment(*hash.as_bytes())
     }
 
     /// Zero commitment (cho fee khi không cần blinding)
@@ -66,8 +65,8 @@ impl Commitment {
         let mut data = [0u8; 64];
         data[..32].copy_from_slice(&self.0);
         data[32..].copy_from_slice(&other.0);
-        let hash = Sha256::digest(&data);
-        Commitment(hash.into())
+        let hash = blake3::hash(&data);
+        Commitment(*hash.as_bytes())
     }
 
     /// Blinding factor addition (mod field order simulation)
@@ -75,7 +74,7 @@ impl Commitment {
         let mut data = [0u8; 64];
         data[..32].copy_from_slice(r1);
         data[32..].copy_from_slice(r2);
-        Sha256::digest(&data).into()
+        *blake3::hash(&data).as_bytes()
     }
 
     pub fn to_hex(&self) -> String { hex::encode(self.0) }
@@ -122,11 +121,11 @@ impl RangeProof {
             // bit blinding = H(r || i)
             let mut bit_blind_data = blinding.to_vec();
             bit_blind_data.push(i);
-            let bit_blind: [u8; 32] = Sha256::digest(&bit_blind_data).into();
+            let bit_blind: [u8; 32] = *blake3::hash(&bit_blind_data).as_bytes();
             let bit_commit = Commitment::commit(&bit_blind, bit as u64);
             bit_data.extend_from_slice(&bit_commit.0);
         }
-        let proof_hash = Sha256::digest(&bit_data).into();
+        let proof_hash = *blake3::hash(&bit_data).as_bytes();
 
         RangeProof { commitment, proof_hash, bit_count: 64 }
     }
@@ -231,7 +230,7 @@ impl ConfidentialTx {
         let mut excess_data = Vec::new();
         for (_, _, _, blind, _) in &inputs { excess_data.extend_from_slice(blind); }
         for b in &out_blindings { excess_data.extend_from_slice(b); }
-        let excess_hash: [u8; 32] = Sha256::digest(&excess_data).into();
+        let excess_hash: [u8; 32] = *blake3::hash(&excess_data).as_bytes();
         let excess = Commitment(excess_hash);
 
         let ct_inputs: Vec<ConfidentialInput> = inputs.into_iter()
@@ -244,7 +243,7 @@ impl ConfidentialTx {
             let mut data = Vec::new();
             for i in &ct_inputs { data.extend_from_slice(i.utxo_tx_id.as_bytes()); }
             for o in &ct_outputs { data.extend_from_slice(&o.commitment.0); }
-            hex::encode(Sha256::digest(&data))
+            hex::encode(blake3::hash(&data).as_bytes())
         };
 
         Ok((ConfidentialTx { tx_id, inputs: ct_inputs, outputs: ct_outputs, fee, excess }, out_blindings))
@@ -302,7 +301,7 @@ pub fn ecdh_blinding(
     data.extend_from_slice(&sender_sk[..]);
     data.extend_from_slice(&recipient_pk.serialize());
     data.extend_from_slice(&output_index.to_le_bytes());
-    Sha256::digest(&data).into()
+    *blake3::hash(&data).as_bytes()
 }
 
 /// Recipient recover blinding từ ECDH
@@ -318,7 +317,7 @@ pub fn ecdh_recover_blinding(
     data.extend_from_slice(&recipient_sk[..]);
     data.extend_from_slice(&sender_pk.serialize());
     data.extend_from_slice(&output_index.to_le_bytes());
-    Sha256::digest(&data).into()
+    *blake3::hash(&data).as_bytes()
 }
 
 /// Recipient decrypt amount từ commitment + ECDH-recovered blinding

@@ -28,7 +28,6 @@
 ///
 /// Tham khảo: Ethereum EVM, CosmWasm, Near WASM, Polkadot ink!
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── WasmValue ────────────────────────────────────────────────────────────────
@@ -196,7 +195,7 @@ impl WasmModule {
     }
 
     pub fn bytecode_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"wasm_module_v26");
         h.update(self.name.as_bytes());
         let mut names: Vec<_> = self.functions.keys().collect();
@@ -204,7 +203,7 @@ impl WasmModule {
         for name in names {
             h.update(name.as_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 
@@ -232,13 +231,13 @@ impl ContractStorage {
     pub fn storage_root(&self) -> String {
         let mut keys: Vec<_> = self.data.keys().collect();
         keys.sort();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"storage_v26");
         for k in keys {
             h.update(k.as_bytes());
-            h.update(self.data[k].to_le_bytes());
+            h.update(&self.data[k].to_le_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 
@@ -440,12 +439,12 @@ pub struct ContractInstance {
 impl ContractInstance {
     pub fn new(module: WasmModule, creator: impl Into<String>, block: u64) -> Self {
         let creator = creator.into();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"contract_addr_v26");
         h.update(module.bytecode_hash().as_bytes());
         h.update(creator.as_bytes());
-        h.update(block.to_le_bytes());
-        let address = format!("0x{}", &hex::encode(h.finalize())[..40]);
+        h.update(&block.to_le_bytes());
+        let address = format!("0x{}", &hex::encode(h.finalize().as_bytes())[..40]);
 
         ContractInstance {
             address,

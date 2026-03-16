@@ -44,7 +44,6 @@
 ///
 /// Tham khảo: SPHINCS+ spec (v3.1), NIST FIPS 205 (2024)
 
-use sha2::{Sha256, Digest};
 
 // ─── Parameters ───────────────────────────────────────────────────────────────
 
@@ -69,12 +68,12 @@ pub const WOTS_LEN:  usize = WOTS_LEN1 + WOTS_LEN2;        // 67
 /// Tweakable hash: H(seed || addr || data) → n bytes
 /// In real SPHINCS+: uses SHA-256 or SHAKE-256 with address encoding
 pub fn thash(seed: &[u8; N], addr: &[u8; 32], data: &[&[u8]]) -> [u8; N] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"sphincs_thash_v31");
     h.update(seed);
     h.update(addr);
     for d in data { h.update(d); }
-    let out = h.finalize();
+    let out = *h.finalize().as_bytes();
     let mut r = [0u8; N];
     r.copy_from_slice(&out[..N]);
     r
@@ -82,11 +81,11 @@ pub fn thash(seed: &[u8; N], addr: &[u8; 32], data: &[&[u8]]) -> [u8; N] {
 
 /// PRF: deterministic pseudo-random value from seed + addr
 pub fn prf(seed: &[u8; N], addr: &[u8; 32]) -> [u8; N] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"sphincs_prf_v31");
     h.update(seed);
     h.update(addr);
-    let out = h.finalize();
+    let out = *h.finalize().as_bytes();
     let mut r = [0u8; N];
     r.copy_from_slice(&out[..N]);
     r
@@ -94,12 +93,12 @@ pub fn prf(seed: &[u8; N], addr: &[u8; 32]) -> [u8; N] {
 
 /// PRF_msg: randomize message
 pub fn prf_msg(sk_prf: &[u8; N], opt_rand: &[u8; N], msg: &[u8]) -> [u8; N] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"sphincs_prf_msg");
     h.update(sk_prf);
     h.update(opt_rand);
     h.update(msg);
-    let out = h.finalize();
+    let out = *h.finalize().as_bytes();
     let mut r = [0u8; N];
     r.copy_from_slice(&out[..N]);
     r
@@ -107,14 +106,14 @@ pub fn prf_msg(sk_prf: &[u8; N], opt_rand: &[u8; N], msg: &[u8]) -> [u8; N] {
 
 /// H_msg: hash message with randomizer + pk
 pub fn h_msg(r: &[u8; N], pk_seed: &[u8; N], pk_root: &[u8; N], msg: &[u8]) -> Vec<u8> {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"sphincs_h_msg");
     h.update(r);
     h.update(pk_seed);
     h.update(pk_root);
     h.update(msg);
     // Returns k*a + h bits = 4*2 + 8 = 16 bits minimum → we return 32 bytes
-    h.finalize().to_vec()
+    h.finalize().as_bytes().to_vec()
 }
 
 /// Build address bytes encoding (layer, tree, type, keypair, chain, hash)
@@ -232,10 +231,10 @@ impl XmssTree {
             let addr = make_addr(layer, tree_idx, 0, i as u32, 0, 0);
             let wots = WotsKeypair::generate(sk_seed, pk_seed, &addr);
             // Compress WOTS+ pk to n bytes
-            let mut h = Sha256::new();
+            let mut h = blake3::Hasher::new();
             h.update(b"sphincs_wots_pk");
             for pk_i in &wots.pk { h.update(pk_i); }
-            let out = h.finalize();
+            let out = *h.finalize().as_bytes();
             let mut r = [0u8; N];
             r.copy_from_slice(&out[..N]);
             r
@@ -409,10 +408,10 @@ fn simple_verify_path(leaf: &[u8; N], leaf_idx: usize, path: &[[u8; N]], pk_seed
 }
 
 fn hash_concat(vals: &[[u8; N]], tag: &[u8]) -> [u8; N] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(tag);
     for v in vals { h.update(v); }
-    let out = h.finalize();
+    let out = *h.finalize().as_bytes();
     let mut r = [0u8; N];
     r.copy_from_slice(&out[..N]);
     r
@@ -489,10 +488,10 @@ impl HtSig {
             );
 
             // Hash WOTS+ PK to leaf
-            let mut h = Sha256::new();
+            let mut h = blake3::Hasher::new();
             h.update(b"sphincs_wots_pk");
             for v in &pk_vals { h.update(v); }
-            let out = h.finalize();
+            let out = *h.finalize().as_bytes();
             let mut leaf = [0u8; N];
             leaf.copy_from_slice(&out[..N]);
 
@@ -535,10 +534,10 @@ pub struct SphincsSignature {
 // ─── Keygen ───────────────────────────────────────────────────────────────────
 
 pub fn keygen(seed: &[u8]) -> (SphincsPublicKey, SphincsSecretKey) {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"sphincs_keygen_v31");
     h.update(seed);
-    let master = h.finalize();
+    let master = *h.finalize().as_bytes();
 
     let mut sk_seed = [0u8; N];
     let mut sk_prf  = [0u8; N];
@@ -627,11 +626,11 @@ pub struct SphincsKeypair {
 impl SphincsKeypair {
     pub fn generate(seed: &[u8]) -> Self {
         let (pk, sk) = keygen(seed);
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"sphincs_address");
         h.update(&pk.pk_seed);
         h.update(&pk.pk_root);
-        let addr = format!("spx1{}", &hex::encode(h.finalize())[..40]);
+        let addr = format!("spx1{}", &hex::encode(h.finalize().as_bytes())[..40]);
         SphincsKeypair { pk, sk, address: addr }
     }
 

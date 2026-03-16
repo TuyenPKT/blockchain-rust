@@ -1,5 +1,5 @@
 [Unit]
-Description=Blockchain Rust Miner
+Description=Blockchain Rust REST API
 After=network.target blockchain-node.service
 Wants=blockchain-node.service
 
@@ -8,15 +8,12 @@ Type=simple
 # đổi thành username của bạn:
 User=tuyenpkt
 WorkingDirectory=/home/tuyenpkt/blockchain-rust
-
-# Đổi REWARD_ADDRESS thành địa chỉ ví của bạn (40 hex chars)
-Environment=REWARD_ADDRESS=aabbccddee112233445566778899aabbccddee11
-ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust mine ${REWARD_ADDRESS}
+ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust api 3000
 Restart=always
 RestartSec=3
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=blockchain-miner
+SyslogIdentifier=blockchain-api
 
 LimitNOFILE=65535
 

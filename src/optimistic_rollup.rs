@@ -24,7 +24,6 @@
 ///
 /// Tham khảo: Arbitrum, Optimism (OP Stack)
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── OptimisticTx ─────────────────────────────────────────────────────────────
@@ -44,14 +43,14 @@ impl OptimisticTx {
     pub fn new(from: impl Into<String>, to: impl Into<String>, amount: u64, nonce: u64, fee: u64) -> Self {
         let from = from.into();
         let to   = to.into();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"opt_tx_v23");
         h.update(from.as_bytes());
         h.update(to.as_bytes());
-        h.update(amount.to_le_bytes());
-        h.update(nonce.to_le_bytes());
-        h.update(fee.to_le_bytes());
-        let tx_hash = hex::encode(h.finalize());
+        h.update(&amount.to_le_bytes());
+        h.update(&nonce.to_le_bytes());
+        h.update(&fee.to_le_bytes());
+        let tx_hash = hex::encode(h.finalize().as_bytes());
         OptimisticTx { from, to, amount, nonce, fee, tx_hash }
     }
 }
@@ -86,14 +85,14 @@ impl OptimisticState {
     pub fn state_root(&self) -> String {
         let mut keys: Vec<&String> = self.balances.keys().collect();
         keys.sort();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"opt_state_v23");
         for k in keys {
             h.update(k.as_bytes());
-            h.update(self.balances[k].to_le_bytes());
-            h.update(self.nonces.get(k).copied().unwrap_or(0).to_le_bytes());
+            h.update(&self.balances[k].to_le_bytes());
+            h.update(&self.nonces.get(k).copied().unwrap_or(0).to_le_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 
     /// Apply 1 TX. Trả về Err nếu không hợp lệ.

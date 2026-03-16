@@ -44,7 +44,6 @@
 ///
 /// References: Celestia whitepaper, Rollkit, LazyLedger, Modular Blockchain thesis
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Namespace ────────────────────────────────────────────────────────────────
@@ -162,12 +161,11 @@ impl DaBlob {
 }
 
 fn blob_hash(ns: &Namespace, data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"blob_v1");
     h.update(ns.as_ref());
     h.update(data);
-    let out = h.finalize();
-    let mut r = [0u8; 32]; r.copy_from_slice(&out); r
+    *h.finalize().as_bytes()
 }
 
 // ─── DA Block ─────────────────────────────────────────────────────────────────
@@ -180,7 +178,7 @@ pub struct DaBlock {
 
 impl DaBlock {
     fn compute_data_root(blobs: &[DaBlob]) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"nmt_root");
         // Sort by namespace (NMT property: namespaces are in order)
         let mut sorted: Vec<_> = blobs.iter().collect();
@@ -189,8 +187,7 @@ impl DaBlock {
             h.update(&blob.namespace);
             h.update(&blob.commitment);
         }
-        let out = h.finalize();
-        let mut r = [0u8; 32]; r.copy_from_slice(&out); r
+        *h.finalize().as_bytes()
     }
 }
 
@@ -487,7 +484,7 @@ impl SovereignRollup {
     }
 
     fn recompute_state_root(&mut self) {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"rollup_state_v1");
         h.update(self.name.as_bytes());
         h.update(&self.height.to_le_bytes());
@@ -497,8 +494,7 @@ impl SovereignRollup {
             h.update(k.as_bytes());
             h.update(&self.balances[k].to_le_bytes());
         }
-        let out = h.finalize();
-        self.state_root.copy_from_slice(&out);
+        self.state_root.copy_from_slice(h.finalize().as_bytes());
     }
 
     pub fn print_events_since(&self, from: usize) {
@@ -507,9 +503,8 @@ impl SovereignRollup {
 }
 
 fn tx_root(txs: &[RollupTx]) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"tx_root_v1");
     for tx in txs { h.update(&tx.encode()); }
-    let out = h.finalize();
-    let mut r = [0u8; 32]; r.copy_from_slice(&out); r
+    *h.finalize().as_bytes()
 }

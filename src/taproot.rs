@@ -19,7 +19,6 @@
 //! TapBranch: tagged_hash("TapBranch", sorted(left, right))
 //! TapTweak: Q = P + tagged_hash("TapTweak", P||merkle_root) * G
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 
 // ── Tagged Hash (BIP340) ─────────────────────────────────────
@@ -28,12 +27,12 @@ use serde::{Serialize, Deserialize};
 // Ngăn hash collision giữa các domain khác nhau
 
 pub fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(tag.as_bytes());
-    let mut h    = Sha256::new();
-    h.update(&tag_hash);
-    h.update(&tag_hash);
+    let tag_hash = blake3::hash(tag.as_bytes());
+    let mut h    = blake3::Hasher::new();
+    h.update(tag_hash.as_bytes());
+    h.update(tag_hash.as_bytes());
     h.update(data);
-    h.finalize().into()
+    *h.finalize().as_bytes()
 }
 
 // ── Schnorr Signature (BIP340) ───────────────────────────────

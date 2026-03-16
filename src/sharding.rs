@@ -22,7 +22,6 @@
 ///
 /// Tham khảo: Ethereum 2.0 Phase 1 sharding design
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -36,9 +35,9 @@ pub type ShardId = u32;
 
 /// Xác định TX thuộc shard nào dựa trên địa chỉ
 pub fn shard_of(address: &str) -> ShardId {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(address.as_bytes());
-    let bytes = h.finalize();
+    let bytes = *h.finalize().as_bytes();
     u32::from_le_bytes(bytes[..4].try_into().unwrap()) % NUM_SHARDS
 }
 
@@ -62,11 +61,11 @@ impl ShardTx {
         let from_shard = shard_of(&from);
         let to_shard   = shard_of(&to);
 
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(from.as_bytes());
         h.update(to.as_bytes());
-        h.update(amount.to_le_bytes());
-        let tx_hash = hex::encode(h.finalize());
+        h.update(&amount.to_le_bytes());
+        let tx_hash = hex::encode(h.finalize().as_bytes());
 
         ShardTx { from, to, amount, from_shard, to_shard, tx_hash }
     }
@@ -93,11 +92,11 @@ pub struct CrossShardReceipt {
 
 impl CrossShardReceipt {
     pub fn new(tx: &ShardTx, source_block: u64) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"receipt_v21");
         h.update(tx.tx_hash.as_bytes());
-        h.update(source_block.to_le_bytes());
-        let receipt_id = hex::encode(h.finalize());
+        h.update(&source_block.to_le_bytes());
+        let receipt_id = hex::encode(h.finalize().as_bytes());
 
         CrossShardReceipt {
             receipt_id,
@@ -159,28 +158,28 @@ impl ShardBlock {
     }
 
     fn compute_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"shard_v21");
-        h.update(self.shard_id.to_le_bytes());
-        h.update(self.height.to_le_bytes());
+        h.update(&self.shard_id.to_le_bytes());
+        h.update(&self.height.to_le_bytes());
         h.update(self.prev_hash.as_bytes());
         h.update(self.proposer.as_bytes());
         h.update(self.state_root.as_bytes());
         for tx in &self.txs {
             h.update(tx.tx_hash.as_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 
     fn compute_state_root(balances: &HashMap<String, u64>) -> String {
         let mut keys: Vec<_> = balances.keys().collect();
         keys.sort();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         for k in keys {
             h.update(k.as_bytes());
-            h.update(balances[k].to_le_bytes());
+            h.update(&balances[k].to_le_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 
@@ -316,22 +315,22 @@ impl BeaconBlock {
     }
 
     fn compute_hash(&self) -> String {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"beacon_v21");
-        h.update(self.height.to_le_bytes());
+        h.update(&self.height.to_le_bytes());
         h.update(self.prev_hash.as_bytes());
         h.update(self.proposer.as_bytes());
         // Sort shard headers deterministically
         let mut ids: Vec<ShardId> = self.shard_headers.keys().copied().collect();
         ids.sort();
         for id in ids {
-            h.update(id.to_le_bytes());
+            h.update(&id.to_le_bytes());
             h.update(self.shard_headers[&id].as_bytes());
         }
         for r in &self.receipts {
             h.update(r.receipt_id.as_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 }
 

@@ -23,7 +23,6 @@
 ///
 /// Tham khảo: zkSync, StarkNet, Polygon zkEVM
 
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 // ─── RollupTx ─────────────────────────────────────────────────────────────────
@@ -43,14 +42,14 @@ impl RollupTx {
     pub fn new(from: impl Into<String>, to: impl Into<String>, amount: u64, nonce: u64, fee: u64) -> Self {
         let from = from.into();
         let to   = to.into();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"rollup_tx_v22");
         h.update(from.as_bytes());
         h.update(to.as_bytes());
-        h.update(amount.to_le_bytes());
-        h.update(nonce.to_le_bytes());
-        h.update(fee.to_le_bytes());
-        let tx_hash = hex::encode(h.finalize());
+        h.update(&amount.to_le_bytes());
+        h.update(&nonce.to_le_bytes());
+        h.update(&fee.to_le_bytes());
+        let tx_hash = hex::encode(h.finalize().as_bytes());
         RollupTx { from, to, amount, nonce, fee, tx_hash }
     }
 }
@@ -85,14 +84,14 @@ impl RollupState {
     pub fn state_root(&self) -> String {
         let mut keys: Vec<&String> = self.balances.keys().collect();
         keys.sort();
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"state_root_v22");
         for k in keys {
             h.update(k.as_bytes());
-            h.update(self.balances[k].to_le_bytes());
-            h.update(self.nonces.get(k).copied().unwrap_or(0).to_le_bytes());
+            h.update(&self.balances[k].to_le_bytes());
+            h.update(&self.nonces.get(k).copied().unwrap_or(0).to_le_bytes());
         }
-        hex::encode(h.finalize())
+        hex::encode(h.finalize().as_bytes())
     }
 
     /// Apply 1 TX — trả về Err nếu không hợp lệ
@@ -135,14 +134,14 @@ pub struct ZkRollupProof {
 
 impl ZkRollupProof {
     pub fn generate(old_root: &str, new_root: &str, txs: &[RollupTx]) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"zk_validity_v22");
         h.update(old_root.as_bytes());
         h.update(new_root.as_bytes());
         for tx in txs {
             h.update(tx.tx_hash.as_bytes());
         }
-        let proof_bytes = h.finalize().to_vec();
+        let proof_bytes = h.finalize().as_bytes().to_vec();
 
         ZkRollupProof {
             old_root:    old_root.to_string(),
@@ -306,12 +305,12 @@ impl WithdrawalProof {
         let state_root = state.state_root();
 
         // Simplified merkle path (trong thực tế: Merkle Patricia Trie)
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"withdrawal_v22");
         h.update(user.as_bytes());
-        h.update(amount.to_le_bytes());
+        h.update(&amount.to_le_bytes());
         h.update(state_root.as_bytes());
-        let proof = h.finalize().to_vec();
+        let proof = h.finalize().as_bytes().to_vec();
 
         Some(WithdrawalProof {
             user:        user.to_string(),
@@ -326,11 +325,11 @@ impl WithdrawalProof {
     pub fn verify(&self, current_root: &str) -> bool {
         if self.state_root != current_root { return false; }
 
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"withdrawal_v22");
         h.update(self.user.as_bytes());
-        h.update(self.amount.to_le_bytes());
+        h.update(&self.amount.to_le_bytes());
         h.update(self.state_root.as_bytes());
-        h.finalize().as_slice() == self.proof.as_slice()
+        h.finalize().as_bytes().as_ref() == self.proof.as_slice()
     }
 }

@@ -11,7 +11,6 @@
 //! With a secondary index those lookups become O(owned_utxos).
 
 use std::collections::HashMap;
-use sha2::{Sha256, Digest};
 use crate::block::Block;
 use crate::transaction::{Transaction, TxOutput};
 use crate::script::Opcode;
@@ -214,9 +213,9 @@ pub fn fast_merkle(leaves: &[[u8; 32]]) -> [u8; 32] {
             let mut buf = [0u8; 64];
             buf[..32].copy_from_slice(&pair[0]);
             buf[32..].copy_from_slice(&pair[1]);
-            let first  = Sha256::digest(&buf);
-            let second = Sha256::digest(&first);
-            second.into()
+            let first  = blake3::hash(&buf);
+            let second = blake3::hash(first.as_bytes());
+            *second.as_bytes()
         }).collect();
     }
     current[0]

@@ -51,7 +51,6 @@
 ///
 /// References: Regev LWE (2009), BFV scheme (2012), TFHE, Zama concrete
 
-use sha2::{Sha256, Digest};
 
 // ─── Parameters ───────────────────────────────────────────────────────────────
 
@@ -116,10 +115,10 @@ fn vec_scale(a: &SecVec, c: i64) -> SecVec {
 
 /// Deterministic PRG: H(seed ‖ counter) → integer in [0, range)
 fn prg(seed: &[u8], counter: u64, range: i64) -> i64 {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(seed);
     h.update(&counter.to_le_bytes());
-    let out = h.finalize();
+    let out = *h.finalize().as_bytes();
     let v = i64::from_le_bytes(out[..8].try_into().unwrap()).abs();
     v % range
 }

@@ -3,7 +3,6 @@
 //! Block header commit đến cả txid_root lẫn witness_root
 //! → không thể thay đổi witness data mà không làm vô hiệu block hash
 
-use sha2::{Sha256, Digest};
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use crate::transaction::Transaction;
@@ -49,7 +48,7 @@ impl Block {
             }
             hashes = hashes.chunks(2).map(|pair| {
                 let combined = format!("{}{}", pair[0], pair[1]);
-                hex::encode(Sha256::digest(Sha256::digest(combined.as_bytes())))
+                hex::encode(blake3::hash(combined.as_bytes()).as_bytes())
             }).collect();
         }
         hashes.into_iter().next().unwrap_or_else(|| "0".repeat(64))
@@ -63,7 +62,7 @@ impl Block {
         let txid_root    = Self::merkle_root_txid(transactions);
         let witness_root = Self::merkle_root_wtxid(transactions);
         let input = format!("{}|{}|{}|{}|{}|{}", index, timestamp, txid_root, witness_root, prev_hash, nonce);
-        hex::encode(Sha256::digest(Sha256::digest(input.as_bytes())))
+        hex::encode(blake3::hash(input.as_bytes()).as_bytes())
     }
 
     pub fn mine(&mut self, difficulty: usize) {

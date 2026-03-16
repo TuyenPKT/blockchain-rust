@@ -12,8 +12,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use sha2::{Sha256, Digest};
-use ripemd::Ripemd160;
+use ripemd::{Ripemd160, Digest as RipemdDigest};
 
 // ─── Wallet file format ───────────────────────────────────────────────────────
 
@@ -57,20 +56,20 @@ fn load_wallet() -> Result<(String, String), String> {
 
 fn pubkey_to_address(public_key: &PublicKey) -> String {
     let pub_bytes     = public_key.serialize(); // 33 bytes compressed
-    let sha256_hash   = Sha256::digest(&pub_bytes);
-    let ripemd_hash   = Ripemd160::digest(&sha256_hash);
+    let sha256_hash   = blake3::hash(&pub_bytes);
+    let ripemd_hash   = Ripemd160::digest(sha256_hash.as_bytes());
     let mut payload   = vec![0x00u8];
     payload.extend_from_slice(&ripemd_hash);
-    let checksum_full = Sha256::digest(&Sha256::digest(&payload));
-    payload.extend_from_slice(&checksum_full[..4]);
+    let checksum_full = blake3::hash(blake3::hash(&payload).as_bytes());
+    payload.extend_from_slice(&checksum_full.as_bytes()[..4]);
     bs58::encode(payload).into_string()
 }
 
 /// Cũng trả về pubkey_hash hex (40 chars) để dùng với miner
 fn pubkey_to_hash_hex(public_key: &PublicKey) -> String {
     let pub_bytes   = public_key.serialize();
-    let sha256_hash = Sha256::digest(&pub_bytes);
-    let ripemd_hash = Ripemd160::digest(&sha256_hash);
+    let sha256_hash = blake3::hash(&pub_bytes);
+    let ripemd_hash = Ripemd160::digest(sha256_hash.as_bytes());
     hex::encode(ripemd_hash)
 }
 

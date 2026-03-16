@@ -48,7 +48,6 @@
 ///
 /// References: CRYSTALS-Kyber spec v3.02, NIST FIPS 203 (2024)
 
-use sha2::{Sha256, Digest};
 
 // ─── Parameters ───────────────────────────────────────────────────────────────
 
@@ -195,24 +194,18 @@ impl PolyMatrix {
 // ─── Hash helpers ─────────────────────────────────────────────────────────────
 
 fn h256(label: &[u8], data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(label);
     h.update(data);
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *h.finalize().as_bytes()
 }
 
 fn h256_2(label: &[u8], a: &[u8], b: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(label);
     h.update(a);
     h.update(b);
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *h.finalize().as_bytes()
 }
 
 // ─── Sampling ─────────────────────────────────────────────────────────────────
@@ -226,11 +219,11 @@ fn sample_uniform(seed: &[u8; 32], row: u8, col: u8) -> Poly {
 
     'outer: loop {
         let buf = {
-            let mut h = Sha256::new();
+            let mut h = blake3::Hasher::new();
             h.update(b"kyber_gen_a");
             h.update(seed);
             h.update(&[row, col, ctr]);
-            h.finalize()
+            *h.finalize().as_bytes()
         };
         ctr = ctr.wrapping_add(1);
 
@@ -254,11 +247,11 @@ fn sample_uniform(seed: &[u8; 32], row: u8, col: u8) -> Poly {
 fn sample_cbd(seed: &[u8; 32], nonce: u8, eta: usize) -> Poly {
     // Need 2·η·N bits = 2·3·16 = 96 bits for eta=3, n=16 → fits in 32-byte SHA-256 output
     let buf = {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"kyber_prf");
         h.update(seed);
         h.update(&[nonce]);
-        h.finalize()
+        *h.finalize().as_bytes()
     };
 
     let get_bit = |idx: usize| -> i64 {
@@ -306,7 +299,7 @@ pub struct KyberCiphertext {
 pub struct SharedKey(pub [u8; 32]);
 
 fn hash_pk(pk: &KyberPublicKey) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"kyber_H_pk");
     h.update(&pk.rho);
     for poly in &pk.t.0 {
@@ -314,14 +307,11 @@ fn hash_pk(pk: &KyberPublicKey) -> [u8; 32] {
             h.update(&c.to_le_bytes());
         }
     }
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *h.finalize().as_bytes()
 }
 
 fn hash_ct(ct: &KyberCiphertext) -> [u8; 32] {
-    let mut h = Sha256::new();
+    let mut h = blake3::Hasher::new();
     h.update(b"kyber_H_ct");
     for poly in &ct.u.0 {
         for &c in &poly.0 {
@@ -331,10 +321,7 @@ fn hash_ct(ct: &KyberCiphertext) -> [u8; 32] {
     for &c in &ct.v.0 {
         h.update(&c.to_le_bytes());
     }
-    let out = h.finalize();
-    let mut r = [0u8; 32];
-    r.copy_from_slice(&out);
-    r
+    *h.finalize().as_bytes()
 }
 
 // ─── KeyGen ───────────────────────────────────────────────────────────────────

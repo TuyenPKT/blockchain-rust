@@ -566,7 +566,6 @@ impl Blockchain {
     ///   hash160(pubkey) phải == hash trong scriptPubKey
     fn validate_p2wpkh(&self, tx: &Transaction, input_index: usize, utxo: &crate::transaction::TxOutput) -> bool {
         use secp256k1::{Secp256k1, PublicKey, Message, ecdsa::Signature};
-        use sha2::{Sha256, Digest};
 
         let input = &tx.inputs[input_index];
         if input.witness.len() < 2 { return false; }
@@ -589,8 +588,8 @@ impl Blockchain {
         let signing_data = tx.segwit_signing_data(input_index, utxo_amount);
         let secp   = Secp256k1::new();
         let pubkey = match PublicKey::from_slice(pub_bytes)        { Ok(k) => k, Err(_) => return false };
-        let hash   = Sha256::digest(&signing_data);
-        let msg    = match Message::from_slice(&hash)              { Ok(m) => m, Err(_) => return false };
+        let hash   = blake3::hash(&signing_data);
+        let msg    = match Message::from_slice(hash.as_bytes())    { Ok(m) => m, Err(_) => return false };
         let sig    = match Signature::from_compact(sig_bytes)      { Ok(s) => s, Err(_) => return false };
         secp.verify_ecdsa(&msg, &sig, &pubkey).is_ok()
     }

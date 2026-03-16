@@ -42,7 +42,6 @@
 /// References: W3C DID Core 1.0, W3C VC Data Model 2.0,
 ///             DIF DID Auth, did:key method spec
 
-use sha2::{Sha256, Digest};
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message};
 use std::collections::HashMap;
 
@@ -67,10 +66,10 @@ impl Did {
 
     /// Derive DID from compressed public key bytes
     pub fn from_pubkey(pk_bytes: &[u8]) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"did_id_v1");
         h.update(pk_bytes);
-        let out = h.finalize();
+        let out = *h.finalize().as_bytes();
         Did {
             method: "chain".to_string(),
             id:     hex::encode(&out[..8]),  // 16 hex chars — compact, collision-safe for demo
@@ -310,7 +309,7 @@ pub struct VerifiableCredential {
 impl VerifiableCredential {
     /// Canonical bytes to sign: H(issuer ‖ subject ‖ claims_sorted ‖ issuance_date)
     pub fn signing_bytes(&self) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"vc_signing_v1");
         h.update(self.issuer.as_bytes());
         h.update(self.subject_id.as_bytes());
@@ -329,10 +328,7 @@ impl VerifiableCredential {
         for t in &self.type_ {
             h.update(t.as_bytes());
         }
-        let out = h.finalize();
-        let mut r = [0u8; 32];
-        r.copy_from_slice(&out);
-        r
+        *h.finalize().as_bytes()
     }
 }
 
@@ -351,12 +347,12 @@ pub fn issue_credential(
 
     let block = registry.block;
     let vc_id = {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"vc_id");
         h.update(issuer_did.as_bytes());
         h.update(subject_did.as_bytes());
         h.update(&block.to_le_bytes());
-        format!("urn:uuid:{}", hex::encode(&h.finalize()[..8]))
+        format!("urn:uuid:{}", hex::encode(&h.finalize().as_bytes()[..8]))
     };
 
     let mut vc = VerifiableCredential {
@@ -458,13 +454,11 @@ pub struct AuthChallenge {
 
 impl AuthChallenge {
     pub fn new(block: u64, domain: &str) -> Self {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"auth_challenge");
         h.update(&block.to_le_bytes());
         h.update(domain.as_bytes());
-        let out = h.finalize();
-        let mut nonce = [0u8; 32];
-        nonce.copy_from_slice(&out);
+        let nonce = *h.finalize().as_bytes();
         AuthChallenge {
             nonce,
             domain:     domain.to_string(),
@@ -475,15 +469,12 @@ impl AuthChallenge {
 
     /// Bytes that must be signed: H(nonce ‖ domain ‖ issued_at)
     pub fn signing_bytes(&self) -> [u8; 32] {
-        let mut h = Sha256::new();
+        let mut h = blake3::Hasher::new();
         h.update(b"did_auth_v1");
         h.update(&self.nonce);
         h.update(self.domain.as_bytes());
         h.update(&self.issued_at.to_le_bytes());
-        let out = h.finalize();
-        let mut r = [0u8; 32];
-        r.copy_from_slice(&out);
-        r
+        *h.finalize().as_bytes()
     }
 }
 
@@ -562,9 +553,6 @@ pub fn verify_auth(
 
 /// Derive a deterministic secret key from a seed label
 pub fn derive_sk(label: &[u8], seed: &[u8]) -> SecretKey {
-    let mut h = Sha256::new();
-    h.update(label);
-    h.update(seed);
-    let out = h.finalize();
-    SecretKey::from_slice(&out).expect("valid 32-byte key")
+    let out = blake3::hash(&[label, seed].concat());
+    SecretKey::from_slice(out.as_bytes()).expect("valid 32-byte key")
 }

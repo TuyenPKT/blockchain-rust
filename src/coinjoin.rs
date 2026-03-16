@@ -18,7 +18,6 @@
 //! Observer thấy 3 inputs và 6 outputs — không thể biết input nào → output nào.
 //! Anonymity set = N (số participants) với equal-amount outputs.
 
-use sha2::{Sha256, Digest};
 use crate::transaction::{Transaction, TxOutput};
 use crate::wallet::Wallet;
 use crate::script::Script;
@@ -343,7 +342,7 @@ pub struct CoinJoinTranscript {
 impl CoinJoinTranscript {
     pub fn from_session(session: &CoinJoinSession, cj_tx: &CoinJoinTx) -> Self {
         // session_id = H(tx_id)
-        let session_id = hex::encode(Sha256::digest(cj_tx.tx.tx_id.as_bytes()));
+        let session_id = hex::encode(blake3::hash(cj_tx.tx.tx_id.as_bytes()).as_bytes());
         CoinJoinTranscript {
             session_id:        session_id[..16].to_string(),
             denomination:      session.denomination,

@@ -18,7 +18,6 @@
 //!
 //! Đây là simplified model — Lightning thực tế dùng HTLC cho multi-hop
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::wallet::Wallet;
 
@@ -55,7 +54,7 @@ impl CommitmentTx {
             "commitment|{}|{}|{}|{}",
             self.sequence, self.balance_local, self.balance_remote, self.csv_delay
         );
-        Sha256::digest(data.as_bytes()).to_vec()
+        blake3::hash(data.as_bytes()).as_bytes().to_vec()
     }
 
     pub fn is_fully_signed(&self) -> bool {
@@ -65,7 +64,7 @@ impl CommitmentTx {
     /// "txid" của commitment TX (để tham chiếu)
     pub fn txid(&self) -> String {
         let data = format!("cmttx|{}|{}|{}", self.sequence, self.balance_local, self.balance_remote);
-        hex::encode(Sha256::digest(data.as_bytes()))
+        hex::encode(blake3::hash(data.as_bytes()).as_bytes())
     }
 }
 
@@ -90,7 +89,7 @@ impl RevocationSecret {
         secret_bytes[0] ^= (sequence & 0xff) as u8;
         secret_bytes[1] ^= ((sequence >> 8) & 0xff) as u8;
         let secret = secret_bytes.to_vec();
-        let hash   = hex::encode(Sha256::digest(&secret));
+        let hash   = hex::encode(blake3::hash(&secret).as_bytes());
         RevocationSecret { secret, hash, for_sequence: sequence }
     }
 
@@ -125,7 +124,7 @@ impl Htlc {
     /// Settle HTLC khi reveal preimage: SHA256(preimage) == payment_hash
     pub fn can_settle(&self, preimage_hex: &str) -> bool {
         let preimage = match hex::decode(preimage_hex) { Ok(b) => b, Err(_) => return false };
-        hex::encode(Sha256::digest(&preimage)) == self.payment_hash
+        hex::encode(blake3::hash(&preimage).as_bytes()) == self.payment_hash
     }
 }
 
@@ -164,9 +163,9 @@ impl Channel {
     /// Tạo channel mới — chưa mở
     pub fn new(local_wallet: &Wallet, remote_pubkey_hex: &str, capacity: u64) -> Self {
         let local_pubkey = local_wallet.public_key_hex();
-        let channel_id   = hex::encode(Sha256::digest(
+        let channel_id   = hex::encode(blake3::hash(
             format!("channel|{}|{}|{}", local_pubkey, remote_pubkey_hex, capacity).as_bytes()
-        ));
+        ).as_bytes());
         Channel {
             channel_id,
             state:             ChannelState::PendingOpen,

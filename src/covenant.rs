@@ -21,7 +21,6 @@
 //!      [payer] → congestion_TX (1 output) → expand_TX (nhiều outputs)
 //!   3. Payment pool: nhiều người dùng chung 1 UTXO, rút dần
 
-use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::transaction::{Transaction, TxOutput};
 use crate::script::Script;
@@ -46,14 +45,14 @@ pub fn ctv_template_hash(tx: &CtvTemplate) -> [u8; 32] {
         out_data.extend_from_slice(&(script_bytes.len() as u32).to_le_bytes());
         out_data.extend_from_slice(&script_bytes);
     }
-    let outputs_hash = Sha256::digest(&out_data);
+    let outputs_hash = *blake3::hash(&out_data).as_bytes();
 
     // sequences_hash = SHA256(concat of all sequences)
     let mut seq_data = Vec::new();
     for s in &tx.sequences {
         seq_data.extend_from_slice(&s.to_le_bytes());
     }
-    let sequences_hash = Sha256::digest(&seq_data);
+    let sequences_hash = *blake3::hash(&seq_data).as_bytes();
 
     // template_hash = tagged_hash("CTV", version || locktime || sequences_hash || outputs_hash || input_count || input_index)
     let mut data = Vec::new();

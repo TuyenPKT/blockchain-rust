@@ -57,6 +57,7 @@ mod bench;
 mod blake3_hash;
 mod cpu_miner;
 mod chain_concurrent;
+mod validator;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -176,7 +177,7 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v6.2                     ║");
+    println!("║              ⛓   Blockchain Rust  v6.3                     ║");
     println!("║         Bitcoin 2009 → PKT Native Chain 2036+               ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
@@ -410,14 +411,13 @@ mod tests {
     fn test_wallet_sign_verify() {
         use crate::wallet::Wallet;
         use secp256k1::{Secp256k1, ecdsa::Signature};
-        use sha2::{Sha256, Digest};
 
         let w       = Wallet::new();
         let msg     = b"test transaction data";
         let sig_hex = w.sign(msg);
         let secp    = Secp256k1::new();
-        let hash    = Sha256::digest(msg);
-        let smsg    = secp256k1::Message::from_slice(&hash).unwrap();
+        let hash    = blake3::hash(msg);
+        let smsg    = secp256k1::Message::from_slice(hash.as_bytes()).unwrap();
         let sig     = Signature::from_compact(&hex::decode(&sig_hex).unwrap()).unwrap();
         assert!(secp.verify_ecdsa(&smsg, &sig, &w.public_key).is_ok());
     }
@@ -510,14 +510,13 @@ mod tests {
     fn test_script_p2pkh_execute() {
         use crate::script::{Script, ScriptInterpreter};
         use crate::wallet::Wallet;
-        use sha2::{Sha256, Digest};
-        use ripemd::Ripemd160;
+        use ripemd::{Ripemd160, Digest as RipemdDigest};
 
         let w       = Wallet::new();
         let msg     = b"pay to pubkey hash";
         let sig_hex = w.sign(msg);
 
-        let pubhash_hex = hex::encode(Ripemd160::digest(Sha256::digest(w.public_key.serialize())));
+        let pubhash_hex = hex::encode(Ripemd160::digest(blake3::hash(&w.public_key.serialize()).as_bytes()));
         let script_sig  = Script::p2pkh_sig(&sig_hex, &hex::encode(w.public_key.serialize()));
         let script_pk   = Script::p2pkh_pubkey(&pubhash_hex);
 
