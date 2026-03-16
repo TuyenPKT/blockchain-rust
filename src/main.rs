@@ -54,6 +54,7 @@ mod fuzz;
 mod monitoring;
 mod peer_discovery;
 mod bench;
+mod blake3_hash;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -126,6 +127,9 @@ fn main() {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("all");
             bench::cmd_bench(target);
         }
+        Some("blake3") => {
+            blake3_hash::cmd_blake3_bench();
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -164,8 +168,8 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v5.9                     ║");
-    println!("║         Bitcoin 2009 → PKT Native Chain 2031                ║");
+    println!("║              ⛓   Blockchain Rust  v6.0                     ║");
+    println!("║         Bitcoin 2009 → PKT Native Chain 2036+               ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
     println!("  Commands:");
@@ -186,6 +190,7 @@ fn print_help() {
     println!("    cargo run -- metrics [node:port]     hashrate, peers, mempool, block time");
     println!("    cargo run -- monitor [port]          health endpoint (mặc định 3001)");
     println!("    cargo run -- bench [target]          benchmark (hash|mining|tps|merkle|utxo|mempool|all)");
+    println!("    cargo run -- blake3                  BLAKE3 vs SHA-256 benchmark");
     println!("    cargo test                           chạy integration tests");
     println!();
 

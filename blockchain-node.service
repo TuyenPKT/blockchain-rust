@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/tuyenpkt/blockchain-rust
-ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust node 8333
+WorkingDirectory=/opt/blockchain-rust
+ExecStart=/opt/blockchain-rust/target/release/blockchain-rust node 8333
 Restart=always
 RestartSec=5
 StandardOutput=journal

@@ -4,9 +4,9 @@
 
 set -e
 
-SERVER="180.93.1.235"
+SERVER="oceif.com"
 USER="root"          # đổi nếu dùng user khác
-REMOTE_DIR="/home/tuyenpkt/blockchain-rust"
+REMOTE_DIR="/opt/blockchain-rust"
 BINARY="blockchain-rust"
 
 echo "=== [1/3] Build release binary (macOS → Linux cross-compile) ==="
@@ -26,7 +26,7 @@ rsync -avz --exclude target --exclude .git \
 echo ""
 echo "=== [3/3] Build + start trên server ==="
 ssh "$USER@$SERVER" << 'REMOTE'
-cd /home/tuyenpkt/blockchain-rust
+cd /opt/blockchain-rust
 
 # Cài Rust nếu chưa có
 if ! command -v cargo &>/dev/null; then
@@ -39,7 +39,7 @@ cargo build --release
 echo "✅ Build xong: $(ls -lh target/release/blockchain-rust)"
 
 # Setup systemd
-cp /home/tuyenpkt/blockchain-rust/blockchain-node.service /etc/systemd/system/
+cp /opt/blockchain-rust/blockchain-node.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable blockchain-node
 systemctl restart blockchain-node

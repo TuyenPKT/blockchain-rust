@@ -27,6 +27,8 @@ proptest = { version = "1.4", optional = true }
 # v5.7: structured logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# v6.0: BLAKE3 hash engine (3–4x faster than SHA-256 for PoW)
+blake3 = "1.5"
 
 [features]
 default = []
