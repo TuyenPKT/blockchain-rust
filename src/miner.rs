@@ -16,13 +16,18 @@
 ///   cargo run -- mine <addr> <node>             → kết nối node cụ thể
 ///   cargo run -- mine <addr> <n> <node>         → dừng sau n blocks
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
+use rayon::prelude::*;
+
 use crate::block::Block;
 use crate::message::Message;
 use crate::transaction::Transaction;
+use crate::cpu_miner::default_threads;
 
 pub const DEFAULT_NODE: &str = "seed.testnet.oceif.com:8333";
 
@@ -112,39 +117,94 @@ fn node_rpc(addr: &str, msg: &Message) -> Option<Message> {
     }
 }
 
-// ─── Live mining loop ─────────────────────────────────────────────────────────
+// ─── Live mining loop (rayon parallel) ───────────────────────────────────────
 
 struct MineResult { hashes: u64, elapsed_ms: u64 }
 
 fn mine_live(block: &mut Block, difficulty: usize) -> MineResult {
-    let target  = "0".repeat(difficulty);
-    let start   = Instant::now();
-    let mut last_report = Instant::now();
-    let mut hashes: u64 = 0;
+    let t0           = Instant::now();
+    let stop         = Arc::new(AtomicBool::new(false));
+    let total_hashes = Arc::new(AtomicU64::new(0));
+    let target       = "0".repeat(difficulty);
+    let n            = default_threads();
+    let chunk        = u64::MAX / n as u64;
 
-    loop {
-        let hash = Block::calculate_hash(
-            block.index, block.timestamp,
-            &block.transactions, &block.prev_hash, block.nonce,
-        );
-        hashes += 1;
+    // Precompute roots once — only nonce changes per iteration.
+    let txid_root    = Block::merkle_root_txid(&block.transactions);
+    let witness_root = block.witness_root.clone();
+    let prefix = format!(
+        "{}|{}|{}|{}|{}|",
+        block.index, block.timestamp, txid_root, witness_root, block.prev_hash,
+    );
 
-        if hash.starts_with(&target) {
-            print!("\r{}\r", " ".repeat(72));
-            let _ = std::io::stdout().flush();
-            block.hash = hash;
-            return MineResult { hashes, elapsed_ms: start.elapsed().as_millis() as u64 };
-        }
-
-        block.nonce += 1;
-
-        if last_report.elapsed() >= Duration::from_millis(300) {
-            let rate = hashes as f64 / start.elapsed().as_secs_f64().max(0.001);
+    // Progress reporter: shares latest_nonce to display hash preview.
+    let latest_nonce = Arc::new(AtomicU64::new(0));
+    let stop_prog    = Arc::clone(&stop);
+    let hashes_prog  = Arc::clone(&total_hashes);
+    let nonce_prog   = Arc::clone(&latest_nonce);
+    let prefix_prog  = prefix.clone();
+    let start_prog   = t0;
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_millis(300));
+            if stop_prog.load(Ordering::Relaxed) { break; }
+            let h      = hashes_prog.load(Ordering::Relaxed);
+            let nonce  = nonce_prog.load(Ordering::Relaxed);
+            let rate   = h as f64 / start_prog.elapsed().as_secs_f64().max(0.001);
+            let header = format!("{}{}", prefix_prog, nonce);
+            let hash   = hex::encode(blake3::hash(header.as_bytes()).as_bytes());
             print!("\r  ⛏  nonce={:<12}  {:<12}  {}...",
-                block.nonce, hashrate_str(rate), &hash[..10]);
+                nonce, hashrate_str(rate), &hash[..10]);
             let _ = std::io::stdout().flush();
-            last_report = Instant::now();
         }
+    });
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(n)
+        .build()
+        .expect("miner: build thread pool");
+
+    let found = pool.install(|| {
+        (0..n).into_par_iter().find_map_any(|tid| {
+            let start_nonce = (tid as u64).saturating_mul(chunk);
+            let end_nonce   = if tid == n - 1 { u64::MAX } else { start_nonce.saturating_add(chunk) };
+            let mut local   = 0u64;
+
+            for nonce in start_nonce..end_nonce {
+                if stop.load(Ordering::Relaxed) {
+                    total_hashes.fetch_add(local, Ordering::Relaxed);
+                    return None;
+                }
+                let header = format!("{}{}", prefix, nonce);
+                let hash   = hex::encode(blake3::hash(header.as_bytes()).as_bytes());
+                local     += 1;
+                // Flush every 50k so progress reporter sees live data
+                if local % 50_000 == 0 {
+                    total_hashes.fetch_add(50_000, Ordering::Relaxed);
+                    latest_nonce.store(nonce, Ordering::Relaxed);
+                    local = 0;
+                }
+                if hash.starts_with(&target) {
+                    stop.store(true, Ordering::Relaxed);
+                    total_hashes.fetch_add(local, Ordering::Relaxed);
+                    return Some((nonce, hash));
+                }
+            }
+            total_hashes.fetch_add(local, Ordering::Relaxed);
+            None
+        })
+    });
+
+    print!("\r{}\r", " ".repeat(72));
+    let _ = std::io::stdout().flush();
+
+    let (nonce, hash) = found.unwrap_or((0, "f".repeat(64)));
+    block.nonce = nonce;
+    block.hash  = hash;
+
+    MineResult {
+        hashes:     total_hashes.load(Ordering::Relaxed),
+        elapsed_ms: t0.elapsed().as_millis() as u64,
     }
 }
 

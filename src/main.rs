@@ -58,6 +58,7 @@ mod blake3_hash;
 mod cpu_miner;
 mod chain_concurrent;
 mod validator;
+mod gpu_miner;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -139,6 +140,13 @@ fn main() {
             let n    = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(3u32);
             cpu_miner::cmd_cpu_mine(addr, diff, n);
         }
+        Some("gpumine") => {
+            let addr    = args.get(2).map(|s| s.as_str()).unwrap_or("0000000000000000000000000000000000000000");
+            let diff    = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(2usize);
+            let blocks  = args.get(4).and_then(|s| s.parse().ok());
+            let backend = args.get(5).map(|s| s.as_str()).unwrap_or("software");
+            gpu_miner::cmd_gpu_mine(addr, diff, blocks, backend);
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -201,6 +209,7 @@ fn print_help() {
     println!("    cargo run -- bench [target]          benchmark (hash|mining|tps|merkle|utxo|mempool|all)");
     println!("    cargo run -- blake3                  BLAKE3 vs SHA-256 benchmark");
     println!("    cargo run -- cpumine [addr] [d] [n]  CPU multi-thread miner (diff=d, n blocks)");
+    println!("    cargo run -- gpumine [addr] [d] [n] [backend]  GPU miner (software|opencl|cuda)");
     println!("    cargo test                           chạy integration tests");
     println!();
 

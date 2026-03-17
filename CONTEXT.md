@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v6.3 ✅ — 179/179 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v6.4 ✅ — 192/192 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -48,7 +48,7 @@
 - [x] v6.1 — **CPU Multi-thread Miner**: `rayon` work-stealing, nonce splitting N threads, `AtomicBool` stop flag, default = `cores/3` (`src/cpu_miner.rs`) 🔴
 - [x] v6.2 — **Thread-safe Chain**: `Arc<RwLock<Blockchain>>`, multiple readers + single writer, `ConcurrentChain` (`src/chain_concurrent.rs`) 🟡
 - [x] v6.3 — **Parallel Block Validation**: `rayon::par_iter()` validate N blocks đồng thời khi sync, `ValidationResult` (`src/validator.rs`) 🟡
-- [ ] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
+- [x] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
 - [ ] v6.5 — **OpenCL Kernel**: BLAKE3 OpenCL C kernel, `OpenClDevice`, feature-gated `--features opencl`, CPU fallback (`src/opencl_kernel.rs`) 🟢
 - [ ] v6.6 — **CUDA Kernel**: BLAKE3 PTX kernel, `CudaDevice`, feature-gated `--features cuda`, CPU fallback (`src/cuda_kernel.rs`) 🟢
 - [ ] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, difficulty targeting (`src/mining_pool.rs`) 🟡
@@ -281,5 +281,15 @@ Stack đã có:
                validate_blocks_parallel(blocks, diff): rayon::join both passes
                ParallelValidator { difficulty }: validate_one/validate_many
 
-Next: v6.4 GPU Miner Abstraction
+  v6.4       GPU Miner Abstraction (src/gpu_miner.rs):
+               GpuBackend { Software, OpenCL, Cuda } — is_available(), from_str()
+               GpuDeviceInfo { backend, name, compute_units, memory_mb, available }
+               detect_devices() -> Vec<GpuDeviceInfo>  (Software=real, OCL/CUDA=stub)
+               default_compute_units() = max(1, cores/3)
+               GpuMinerConfig builder: with_backend/difficulty/max_blocks/compute_units
+               GpuMineResult { nonce, hash, hashes_tried, elapsed_ms, backend_used }
+               GpuMiner::mine_block(&Blake3Block) -> GpuMineResult (fallback to Software)
+               CLI: cargo run -- gpumine [addr] [diff] [blocks] [software|opencl|cuda]
+
+Next: v6.5 OpenCL Kernel
 ```
