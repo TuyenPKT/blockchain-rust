@@ -59,6 +59,7 @@ mod cpu_miner;
 mod chain_concurrent;
 mod validator;
 mod gpu_miner;
+mod opencl_kernel;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -261,14 +262,22 @@ fn run_miner(args: &[String]) {
         None                       => (None,               None),
     };
 
+    // --threads N hoặc -t N ở bất kỳ vị trí nào
+    let threads: Option<usize> = args.windows(2).find_map(|w| {
+        if w[0] == "--threads" || w[0] == "-t" { w[1].parse().ok() } else { None }
+    });
+
     let cfg = match max_blks {
         Some(n) => MinerConfig::with_limit(&address, n),
         None    => MinerConfig::new(&address),
     };
-    // Ghi đè node nếu user chỉ định, mặc định là seed.testnet.oceif.com:8333
     let cfg = match node_addr {
         Some(ref addr) => cfg.with_node(addr),
         None           => cfg,
+    };
+    let cfg = match threads {
+        Some(t) => cfg.with_threads(t),
+        None    => cfg,
     };
 
     let mut miner = Miner::new(cfg);

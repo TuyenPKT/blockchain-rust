@@ -40,18 +40,24 @@ pub struct MinerConfig {
     pub max_blocks: Option<u32>,
     /// P2P node để lấy template + submit blocks
     pub node_addr:  String,
+    /// Số rayon threads (mặc định = cores/3)
+    pub threads:    usize,
 }
 
 impl MinerConfig {
     pub fn new(address: &str) -> Self {
-        MinerConfig { address: address.to_string(), max_blocks: None, node_addr: DEFAULT_NODE.to_string() }
+        MinerConfig { address: address.to_string(), max_blocks: None,
+            node_addr: DEFAULT_NODE.to_string(), threads: default_threads() }
     }
     pub fn with_limit(address: &str, n: u32) -> Self {
-        MinerConfig { address: address.to_string(), max_blocks: Some(n), node_addr: DEFAULT_NODE.to_string() }
+        MinerConfig { address: address.to_string(), max_blocks: Some(n),
+            node_addr: DEFAULT_NODE.to_string(), threads: default_threads() }
     }
     pub fn with_node(mut self, node_addr: &str) -> Self {
-        self.node_addr = node_addr.to_string();
-        self
+        self.node_addr = node_addr.to_string(); self
+    }
+    pub fn with_threads(mut self, n: usize) -> Self {
+        self.threads = n.max(1); self
     }
 }
 
@@ -121,12 +127,12 @@ fn node_rpc(addr: &str, msg: &Message) -> Option<Message> {
 
 struct MineResult { hashes: u64, elapsed_ms: u64 }
 
-fn mine_live(block: &mut Block, difficulty: usize) -> MineResult {
+fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult {
     let t0           = Instant::now();
     let stop         = Arc::new(AtomicBool::new(false));
     let total_hashes = Arc::new(AtomicU64::new(0));
     let target       = "0".repeat(difficulty);
-    let n            = default_threads();
+    let n            = threads.max(1);
     let chunk        = u64::MAX / n as u64;
 
     // Precompute roots once — only nonce changes per iteration.
@@ -153,8 +159,8 @@ fn mine_live(block: &mut Block, difficulty: usize) -> MineResult {
             let rate   = h as f64 / start_prog.elapsed().as_secs_f64().max(0.001);
             let header = format!("{}{}", prefix_prog, nonce);
             let hash   = hex::encode(blake3::hash(header.as_bytes()).as_bytes());
-            print!("\r  ⛏  nonce={:<12}  {:<12}  {}...",
-                nonce, hashrate_str(rate), &hash[..10]);
+            print!("\r  ⛏  hashes={:<12}  {:<12}  {}...",
+                h, hashrate_str(rate), &hash[..10]);
             let _ = std::io::stdout().flush();
         }
     });
@@ -227,6 +233,7 @@ impl Miner {
         println!("╚══════════════════════════════════════════════════════════════╝");
         println!();
         println!("  Reward address : {}", self.cfg.address);
+        println!("  Threads        : {}  (cores/3 default = {})", self.cfg.threads, default_threads());
         println!("  Node           : {}", self.cfg.node_addr);
         match self.cfg.max_blocks {
             Some(n) => println!("  Target         : {} blocks", n),
@@ -276,7 +283,7 @@ impl Miner {
             height, diff, block.transactions.len() - 1, &node);
 
         // ── 3. Mine ───────────────────────────────────────────────────────────
-        let result = mine_live(&mut block, diff);
+        let result = mine_live(&mut block, diff, self.cfg.threads);
 
         // ── 4. Submit về node ─────────────────────────────────────────────────
         match node_rpc(&node, &Message::NewBlock { block: block.clone() }) {

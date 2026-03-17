@@ -113,6 +113,7 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v6.2", file: "chain_concurrent.rs", year: 2036, description: "Thread-safe chain: Arc<RwLock<Blockchain>>, multiple readers + single writer" },
     VersionInfo { version: "v6.3", file: "validator.rs",         year: 2036, description: "Parallel block validation: rayon par_iter, ValidationResult, chain link check" },
     VersionInfo { version: "v6.4", file: "gpu_miner.rs",         year: 2036, description: "GPU miner abstraction: GpuBackend{Software,OpenCL,Cuda}, software fallback, 1/3 CU" },
+    VersionInfo { version: "v6.5", file: "opencl_kernel.rs",     year: 2036, description: "OpenCL BLAKE3 kernel: full 7-round compress, G mixing, MSG_SCHEDULE, CPU rayon fallback" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 9", range: "2027–2030", versions: "v3.4–v3.9", count: 6, theme: "Autonomous Chain — IBC, DID, FHE, Sovereign Rollup" },
     Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.8", count: 9, theme: "PKT Native Chain — PacketCrypt PoW, REST API, Testnet, Metrics" },
     Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.9", count: 10, theme: "Optimization & Security — fee market, WAL, fuzz, monitoring, peer discovery, benchmarks" },
-    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 5,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
+    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 6,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -154,9 +155,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  63,
+    total_versions:  64,
     total_eras:      12,
-    total_src_files: 62,
+    total_src_files: 63,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",

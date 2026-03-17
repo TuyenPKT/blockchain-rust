@@ -56,14 +56,17 @@ impl GpuBackend {
     pub fn name(&self) -> &'static str {
         match self {
             GpuBackend::Software => "Software (CPU rayon)",
-            GpuBackend::OpenCL   => "OpenCL (stub — v6.5)",
+            GpuBackend::OpenCL   => "OpenCL (v6.5 — BLAKE3 kernel)",
             GpuBackend::Cuda     => "CUDA   (stub — v6.6)",
         }
     }
 
     pub fn is_available(&self) -> bool {
-        // OpenCL / CUDA: not yet compiled in — stub
-        matches!(self, GpuBackend::Software)
+        match self {
+            GpuBackend::Software => true,
+            GpuBackend::OpenCL   => crate::opencl_kernel::opencl_available(),
+            GpuBackend::Cuda     => false, // v6.6
+        }
     }
 }
 
@@ -112,10 +115,14 @@ pub fn detect_devices() -> Vec<GpuDeviceInfo> {
         },
         GpuDeviceInfo {
             backend:       GpuBackend::OpenCL,
-            name:          "OpenCL device (not compiled)".into(),
+            name:          if crate::opencl_kernel::opencl_available() {
+                               "OpenCL GPU (compiled)".into()
+                           } else {
+                               "OpenCL device (build with --features opencl)".into()
+                           },
             compute_units: 0,
             memory_mb:     0,
-            available:     false,
+            available:     crate::opencl_kernel::opencl_available(),
         },
         GpuDeviceInfo {
             backend:       GpuBackend::Cuda,
@@ -264,9 +271,10 @@ fn mine_software(block: &Blake3Block, compute_units: usize, difficulty: usize) -
 
 // ── Stub backends ─────────────────────────────────────────────────────────────
 
-fn mine_opencl_stub(block: &Blake3Block, difficulty: usize) -> GpuMineResult {
-    eprintln!("  [gpu] OpenCL not compiled — falling back to Software");
-    mine_software(block, default_compute_units(), difficulty)
+fn mine_opencl(block: &Blake3Block, difficulty: usize, compute_units: usize) -> GpuMineResult {
+    use crate::opencl_kernel::{opencl_mine, OpenClConfig};
+    let cfg = OpenClConfig { compute_units, ..OpenClConfig::default() };
+    opencl_mine(block, difficulty, &cfg)
 }
 
 fn mine_cuda_stub(block: &Blake3Block, difficulty: usize) -> GpuMineResult {
@@ -290,7 +298,7 @@ impl GpuMiner {
     pub fn mine_block(&mut self, block: &Blake3Block) -> GpuMineResult {
         let result = match &self.config.backend {
             GpuBackend::Software => mine_software(block, self.config.compute_units, self.config.difficulty),
-            GpuBackend::OpenCL   => mine_opencl_stub(block, self.config.difficulty),
+            GpuBackend::OpenCL   => mine_opencl(block, self.config.difficulty, self.config.compute_units),
             GpuBackend::Cuda     => mine_cuda_stub(block, self.config.difficulty),
         };
         self.stats.record(&result);

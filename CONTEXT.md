@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v6.4 ✅ — 192/192 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v6.5 ✅ — 205/205 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -49,7 +49,7 @@
 - [x] v6.2 — **Thread-safe Chain**: `Arc<RwLock<Blockchain>>`, multiple readers + single writer, `ConcurrentChain` (`src/chain_concurrent.rs`) 🟡
 - [x] v6.3 — **Parallel Block Validation**: `rayon::par_iter()` validate N blocks đồng thời khi sync, `ValidationResult` (`src/validator.rs`) 🟡
 - [x] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
-- [ ] v6.5 — **OpenCL Kernel**: BLAKE3 OpenCL C kernel, `OpenClDevice`, feature-gated `--features opencl`, CPU fallback (`src/opencl_kernel.rs`) 🟢
+- [x] v6.5 — **OpenCL BLAKE3 Kernel**: full 7-round BLAKE3 OCL C kernel, `opencl_mine()`, feature-gated `--features opencl`, CPU rayon fallback (`src/opencl_kernel.rs`) ✅
 - [ ] v6.6 — **CUDA Kernel**: BLAKE3 PTX kernel, `CudaDevice`, feature-gated `--features cuda`, CPU fallback (`src/cuda_kernel.rs`) 🟢
 - [ ] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, difficulty targeting (`src/mining_pool.rs`) 🟡
 - [ ] v6.8 — **SIMD Hash**: BLAKE3 batch 4x AVX2 lanes, `cfg(target_feature = "avx2")`, scalar fallback (`src/simd_hash.rs`) 🟢
@@ -176,7 +176,7 @@ proptest = { version = "1.4", optional = true }  # v5.6: fuzz
 blake3 = "1.5"            # v6.0: BLAKE3 hash (pure Rust)
 rayon = "1.10"            # v6.1: CPU parallel mining
 num_cpus = "1.16"         # v6.1: detect core count
-# ocl = { version = "0.19", optional = true }   # v6.5: OpenCL
+ocl = { version = "0.19", optional = true }     # v6.5: OpenCL GPU mining
 # cust = { version = "0.3", optional = true }   # v6.6: CUDA
 ```
 
@@ -291,5 +291,16 @@ Stack đã có:
                GpuMiner::mine_block(&Blake3Block) -> GpuMineResult (fallback to Software)
                CLI: cargo run -- gpumine [addr] [diff] [blocks] [software|opencl|cuda]
 
-Next: v6.5 OpenCL Kernel
+  v6.5       OpenCL BLAKE3 Kernel (src/opencl_kernel.rs):
+               BLAKE3_OCL_KERNEL: full 7-round compress, G mixing, MSG_SCHEDULE
+               OpenClConfig { compute_units, work_group_size, batch_size } + Default
+               opencl_available() -> bool  (const fn, feature-gated)
+               opencl_mine(block, difficulty, config) -> GpuMineResult
+               _mine_ocl_impl() — OCL setup: Platform/Device/Context/Queue/Program/Kernel
+               _mine_cpu_fallback() — rayon find_map_any, same as cpu_miner
+               GpuBackend::OpenCL wired via gpu_miner::mine_opencl()
+               Build with GPU: cargo build --features opencl
+               CLI: cargo run --features opencl -- gpumine [addr] [diff] [n] opencl
+
+Next: v6.6 CUDA Kernel
 ```
