@@ -1,14 +1,14 @@
-# 🦀 Blockchain Rust — 2009 → 2036+
+# 🦀 Blockchain Rust — 2009 → 2037+
 
 > Xây dựng một blockchain hoàn chỉnh từ Bitcoin 0.1 đến PKT Native Chain bằng Rust thuần — không dùng bất kỳ blockchain framework nào.
 
-**v5.9 ✅ · 58 versions · 12 eras · 136/136 tests · 0 warnings**
+**v7.9 ✅ · 75 versions · 13 eras · 307/307 tests · 0 warnings**
 
 ---
 
 ## Tổng quan
 
-Mỗi version build trực tiếp trên version trước, không viết lại từ đầu. Đọc code theo thứ tự là đọc lịch sử blockchain từ 2009 đến 2036+.
+Mỗi version build trực tiếp trên version trước, không viết lại từ đầu. Đọc code theo thứ tự là đọc lịch sử blockchain từ 2009 đến 2037+.
 
 ```
 Era 1  (2009)       — Bitcoin Genesis: Block, SHA-256, PoW, UTXO
@@ -20,9 +20,10 @@ Era 6  (2022–2023)  — BFT, Sharding, ZK-Rollup, Optimistic Rollup, zkEVM
 Era 7  (2023–2025)  — WASM Contracts, Oracle, Governance, AI Agent
 Era 8  (2025–2027)  — Post-Quantum: Dilithium, SPHINCS+, ML-KEM, Hybrid
 Era 9  (2027–2030)  — Self-Amend, IBC, W3C DID, FHE, Sovereign Rollup
-Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Testnet, Metrics
-Era 11 (2032–2035)  — Optimization & Security: UTXO index, Fee market, WAL, Fuzz, Monitoring, Benchmarks ✅
-Era 12 (2036+)      — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD, Mining Pool
+Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Testnet, Metrics  ✅
+Era 11 (2032–2035)  — Optimization & Security: UTXO index, Fee market, WAL, Fuzz, Monitoring  ✅
+Era 12 (2036)       — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA (v6.0–v6.6 ✅)
+Era 13 (2037+)      — Token Economy: Block Reward, ERC-20, EVM-lite, DeFi AMM, Staking         ✅
 ```
 
 ---
@@ -35,7 +36,13 @@ Era 12 (2036+)      — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD
 git clone https://github.com/TuyenPKT/blockchain-rust.git
 cd blockchain-rust
 cargo build
-cargo test        # 136 tests, 0 warnings
+cargo test        # 307 tests, 0 warnings
+```
+
+**GPU mining (tùy chọn):**
+```bash
+cargo build --features opencl   # OpenCL (AMD/Intel/NVIDIA)
+cargo build --features cuda     # CUDA (NVIDIA — yêu cầu nvcc)
 ```
 
 ---
@@ -47,10 +54,25 @@ cargo test        # 136 tests, 0 warnings
 cargo run -- wallet new
 cargo run -- wallet show
 
-# Mining
+# Mining (mặc định: cores/3 threads)
 cargo run -- mine                              # mine dùng ví đã tạo
 cargo run -- mine <addr_hex> <n>               # mine n blocks
 cargo run -- mine <addr_hex> <n> <node:port>   # mine + kết nối P2P node
+cargo run -- mine <addr> 0 --threads 8        # mine với 8 threads
+
+# CPU multi-thread miner (v6.1)
+cargo run -- cpumine                           # mine với rayon (cores/3)
+cargo run -- cpumine <addr> <diff> <n>         # mine n blocks, difficulty=diff
+
+# GPU miner (v6.4–v6.6)
+cargo run -- gpumine                                    # software backend (CPU rayon)
+cargo run -- gpumine <addr> <diff> <n> software        # CPU rayon fallback
+cargo run -- gpumine <addr> <diff> <n> opencl          # OpenCL GPU
+cargo run --features opencl -- gpumine <addr> 3 10 opencl
+cargo run --features cuda   -- gpumine <addr> 3 10 cuda
+
+# BLAKE3 benchmark (v6.0)
+cargo run -- blake3                            # BLAKE3 vs SHA-256 throughput
 
 # P2P Node (v5.8: tự động peer discovery)
 cargo run -- node 8333                         # chạy node + auto-discover peers
@@ -71,15 +93,11 @@ cargo run -- testnet                           # 3 nodes local testnet
 cargo run -- testnet 5 18444                   # 5 nodes, base port 18444
 cargo run -- genesis testnet                   # xem testnet config
 
-# Metrics (v4.8)
+# Metrics & Monitoring
 cargo run -- metrics                           # đọc từ local RocksDB
 cargo run -- metrics 127.0.0.1:8333            # + query peer count và remote height
-
-# Monitoring / Health endpoint (v5.7)
 cargo run -- monitor                           # health server tại port 3001
 cargo run -- monitor 3002                      # health server tại port 3002
-# → GET http://localhost:3001/health  (HealthStatus JSON)
-# → GET http://localhost:3001/ready   (503 nếu chưa synced)
 
 # Benchmark suite (v5.9)
 cargo run -- bench all                         # toàn bộ benchmarks
@@ -114,7 +132,7 @@ cargo test
 |--------|----------|-------|
 | GET | `/health` | HealthStatus JSON (uptime, height, fees, ...) |
 | GET | `/ready` | 200 OK hoặc 503 khi chưa synced |
-| GET | `/version` | `{"version": "v5.9"}` |
+| GET | `/version` | `{"version": "v7.9"}` |
 
 ---
 
@@ -133,29 +151,44 @@ cargo test
 | v5.8 | `peer_discovery.rs` | PeerStore, DnsSeedResolver, PEX, auto-connect |
 | v5.9 | `bench.rs` | BenchResult/Suite, hash/TPS/latency/merkle/UTXO/mempool |
 
-## Era 12 — Multi-threading & GPU (upcoming)
+## Era 12 — Multi-threading & GPU (v6.0–v6.6 ✅)
 
 | Version | Module | Nội dung |
 |---------|--------|---------|
-| v6.0 | `blake3_hash.rs` | BLAKE3 thay SHA-256 cho PoW (3–4x nhanh hơn) |
-| v6.1 | `cpu_miner.rs` | rayon multi-thread, nonce splitting, 1/3 cores |
-| v6.2 | `chain_concurrent.rs` | Arc<RwLock>, multi-reader + single-writer chain |
-| v6.3 | `validator.rs` | Parallel block validation với rayon |
-| v6.4 | `gpu_miner.rs` | GpuBackend abstraction, 1/3 compute units |
-| v6.5 | `opencl_kernel.rs` | BLAKE3 OpenCL C kernel (`--features opencl`) |
-| v6.6 | `cuda_kernel.rs` | BLAKE3 CUDA PTX kernel (`--features cuda`) |
-| v6.7 | `mining_pool.rs` | Stratum-like pool, WorkTemplate, Share |
-| v6.8 | `simd_hash.rs` | BLAKE3 AVX2 4x lanes SIMD |
-| v6.9 | `hw_config.rs` | HardwareProfile, auto-config, `cargo run -- hw-info` |
+| v6.0 | `blake3_hash.rs` | BLAKE3 thay SHA-256 cho PoW (3–4x nhanh hơn), `hash_version` |
+| v6.1 | `cpu_miner.rs` | rayon work-stealing, nonce splitting, default=cores/3 |
+| v6.2 | `chain_concurrent.rs` | `Arc<RwLock<Blockchain>>`, multi-reader + single-writer |
+| v6.3 | `validator.rs` | Parallel block validation với `rayon::par_iter()` |
+| v6.4 | `gpu_miner.rs` | `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units |
+| v6.5 | `opencl_kernel.rs` | BLAKE3 OpenCL C kernel, full 7-round, `--features opencl` |
+| v6.6 | `cuda_kernel.rs` | BLAKE3 CUDA PTX kernel, `atomicCAS`, `--features cuda` |
+| v6.7 | `mining_pool.rs` | Stratum-like pool, WorkTemplate, Share _(upcoming)_ |
+| v6.8 | `simd_hash.rs` | BLAKE3 AVX2 4x lanes SIMD _(upcoming)_ |
+| v6.9 | `hw_config.rs` | HardwareProfile, auto-config _(upcoming)_ |
+
+## Era 13 — Token Economy ✅
+
+| Version | Module | Nội dung |
+|---------|--------|---------|
+| v7.0 | `reward.rs` | Block Reward Engine: halving schedule, `subsidy_at()`, `estimated_supply()` |
+| v7.1 | `fee_calculator.rs` | Fee Calculator: vsize P2PKH, `FeePolicy`, `validate_coinbase()` |
+| v7.2 | `token.rs` | Token Standard (ERC-20): `TokenRegistry`, mint/transfer/burn/approve |
+| v7.3 | `token_tx.rs` | Token Transfer TX: OP_RETURN encoding, BLAKE3 txid, `TokenTxBuilder` |
+| v7.4 | `contract_state.rs` | Smart Contract State: `ContractStore`, storage_root, snapshot/restore |
+| v7.5 | `evm_lite.rs` | EVM-lite Executor: 30 opcodes, gas model, SLoad/SStore, Log, Revert |
+| v7.6 | `contract_deploy.rs` | Contract Deployment: CREATE/CREATE2 address, `AbiEncoder` |
+| v7.7 | `defi.rs` | DeFi AMM: `LiquidityPool` x\*y=k, swap, add/remove liquidity, `DEX` |
+| v7.8 | `staking.rs` | Staking & Delegation: delegate/slash/APY, distribute rewards |
+| v7.9 | `economics.rs` | Economic Model: `EraParams`, fee burn, `Simulator::project(n_blocks)` |
 
 ---
 
-## Cấu trúc source (57 files)
+## Cấu trúc source (74 files)
 
 ```
 src/
-├── main.rs              CLI dispatch + 136 integration tests
-├── block.rs             Block, SHA-256, Merkle root, PoW
+├── main.rs              CLI dispatch + 307 integration tests
+├── block.rs             Block, BLAKE3, Merkle root, PoW
 ├── chain.rs             Blockchain, validation, difficulty (target=300s)
 ├── transaction.rs       TxInput/TxOutput, txid/wtxid, SegWit
 ├── utxo.rs              UTXO set, P2PKH + P2TR balance lookup
@@ -164,7 +197,7 @@ src/
 ├── message.rs           P2P message protocol
 ├── node.rs              TCP node, chain sync, peer discovery
 ├── hd_wallet.rs         BIP32/39/44 HD Wallet
-├── script.rs            Script engine, P2PK/P2PKH/P2SH/P2WPKH
+├── script.rs            Script engine, P2PK/P2PKH/P2SH/P2WPKH/P2TR
 ├── lightning.rs         Payment channels, HTLC, commitment TX
 ├── taproot.rs           Schnorr BIP340, MAST, P2TR, MuSig2
 ├── covenant.rs          CTV (CheckTemplateVerify), Vault
@@ -201,16 +234,33 @@ src/
 ├── explorer.rs          Block Explorer CLI
 ├── genesis.rs           NetworkParams, testnet genesis config
 ├── metrics.rs           Runtime metrics: hashrate, peers, mempool, sync
-├── performance.rs       UTXO O(1) index, BlockCache, fast_merkle  ← v5.0
-├── security.rs          RateLimiter, BanList, PeerGuard            ← v5.1
-├── p2p.rs               PeerRegistry, ScoreEvent, MessageDedup     ← v5.2
-├── maturity.rs          CoinbaseGuard, TxReplayGuard, LockTime     ← v5.3
-├── fee_market.rs        FeeEstimator, RBF replace-by-fee           ← v5.4
-├── wal.rs               Atomic WAL, crash recovery                 ← v5.5
-├── fuzz.rs              Fuzz corpus, proptest invariants           ← v5.6
-├── monitoring.rs        tracing logs, HealthStatus, /health        ← v5.7
-├── peer_discovery.rs    PeerStore, DnsSeedResolver, PEX            ← v5.8
-└── bench.rs             BenchResult/Suite, all benchmarks          ← v5.9
+├── performance.rs       UTXO O(1) index, BlockCache, fast_merkle       ← v5.0
+├── security.rs          RateLimiter, BanList, PeerGuard                ← v5.1
+├── p2p.rs               PeerRegistry, ScoreEvent, MessageDedup         ← v5.2
+├── maturity.rs          CoinbaseGuard, TxReplayGuard, LockTime         ← v5.3
+├── fee_market.rs        FeeEstimator, RBF replace-by-fee               ← v5.4
+├── wal.rs               Atomic WAL, crash recovery                     ← v5.5
+├── fuzz.rs              Fuzz corpus, proptest invariants               ← v5.6
+├── monitoring.rs        tracing logs, HealthStatus, /health            ← v5.7
+├── peer_discovery.rs    PeerStore, DnsSeedResolver, PEX                ← v5.8
+├── bench.rs             BenchResult/Suite, all benchmarks              ← v5.9
+├── blake3_hash.rs       BLAKE3 hash engine, Blake3Block, benchmark     ← v6.0
+├── cpu_miner.rs         rayon multi-thread miner, nonce splitting      ← v6.1
+├── chain_concurrent.rs  Arc<RwLock> thread-safe chain                  ← v6.2
+├── validator.rs         Parallel block validation (rayon)              ← v6.3
+├── gpu_miner.rs         GpuBackend abstraction, detect_devices         ← v6.4
+├── opencl_kernel.rs     BLAKE3 OpenCL C kernel (--features opencl)    ← v6.5
+├── cuda_kernel.rs       BLAKE3 CUDA PTX kernel (--features cuda)      ← v6.6
+├── reward.rs            Block Reward Engine, halving schedule          ← v7.0
+├── fee_calculator.rs    Fee Calculator, FeePolicy, coinbase validation ← v7.1
+├── token.rs             ERC-20 TokenRegistry, mint/transfer/burn       ← v7.2
+├── token_tx.rs          Token Transfer TX, OP_RETURN, TokenTxBuilder   ← v7.3
+├── contract_state.rs    ContractStore, storage_root, snapshot/restore  ← v7.4
+├── evm_lite.rs          EVM-lite stack VM, 30 opcodes, gas model       ← v7.5
+├── contract_deploy.rs   CREATE/CREATE2, AbiEncoder, ContractDeployer   ← v7.6
+├── defi.rs              AMM LiquidityPool x*y=k, swap, DEX             ← v7.7
+├── staking.rs           Staking, delegate, slash, APY                  ← v7.8
+└── economics.rs         TokenEconomics, EraParams, Simulator           ← v7.9
 ```
 
 ---
@@ -218,7 +268,7 @@ src/
 ## Dependencies
 
 ```toml
-sha2       = "0.10"    # SHA-256 (PoW + ECDSA messages)
+sha2       = "0.10"    # SHA-256 (ECDSA messages, address)
 hex        = "0.4"
 chrono     = "0.4"
 serde      = { version = "1.0", features = ["derive"] }
@@ -233,11 +283,13 @@ rocksdb    = "0.21"    # v4.2: persistent storage
 axum       = "0.7"     # v4.4: REST API
 tracing    = "0.1"     # v5.7: structured logging
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+blake3     = "1.5"     # v6.0: BLAKE3 (3–4x faster than SHA-256 for PoW)
+rayon      = "1.10"    # v6.1: CPU parallel mining
+num_cpus   = "1.16"    # v6.1: core count detection
 
-# Upcoming Era 12:
-# blake3     = "1.5"   # v6.0: BLAKE3 (pure Rust, 3-4x faster than SHA-256)
-# rayon      = "1.10"  # v6.1: CPU parallel mining
-# num_cpus   = "1.16"  # v6.1: core count detection
+# Optional GPU backends:
+ocl  = { version = "0.19", optional = true }  # v6.5: OpenCL
+cust = { version = "0.3",  optional = true }  # v6.6: CUDA
 ```
 
 ---

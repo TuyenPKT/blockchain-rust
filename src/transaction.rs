@@ -159,7 +159,7 @@ impl Transaction {
     /// BIP34-style coinbase: encode block height vào coinbase input
     /// để mỗi block có tx_id duy nhất dù cùng miner address và fee.
     pub fn coinbase_at(miner_pubkey_hash: &str, total_fee: u64, height: u64) -> Self {
-        let subsidy = 50_000_000_00u64;
+        let subsidy = crate::reward::RewardEngine::subsidy_at(height);
         let outputs = vec![TxOutput::p2pkh(subsidy + total_fee, miner_pubkey_hash)];
         // Coinbase input: tx_id = all zeros, output_index = block height (BIP34)
         let coinbase_input = TxInput {

@@ -28,6 +28,17 @@ use crate::block::Block;
 use crate::message::Message;
 use crate::transaction::Transaction;
 use crate::cpu_miner::default_threads;
+use crate::reward::RewardEngine;
+
+/// Paklets per PKT (1 PKT = 1_000_000_000 paklets)
+const PAKLETS_PER_PKT: u64 = 1_000_000_000;
+
+/// Format paklets → "50.000 PKT"
+fn fmt_pkt(paklets: u64) -> String {
+    let whole = paklets / PAKLETS_PER_PKT;
+    let frac  = paklets % PAKLETS_PER_PKT;
+    format!("{}.{:09} PKT", whole, frac)
+}
 
 pub const DEFAULT_NODE: &str = "seed.testnet.oceif.com:8333";
 
@@ -271,7 +282,7 @@ impl Miner {
             .filter(|t| !t.is_coinbase)
             .collect();
         let total_fee: u64  = valid_txs.iter().map(|t| t.fee).sum();
-        let coinbase_reward = 5_000_000_000u64; // 50 PKT
+        let coinbase_reward = RewardEngine::subsidy_at(height);
         let earned          = coinbase_reward + total_fee;
 
         let coinbase    = Transaction::coinbase_at(&self.cfg.address, total_fee, height);
@@ -301,8 +312,8 @@ impl Miner {
         println!("  │  nonce={:<12}  hashes={:<12}  {:<12}",
             block.nonce, result.hashes, hashrate_str(rate));
         println!("  │  hash  = {}...{}", &block.hash[..16], &block.hash[56..]);
-        println!("  │  time  = {}  earned = {} pkt ({:.8} PKT)",
-            elapsed_str(result.elapsed_ms), earned, earned as f64 / 1e8);
+        println!("  │  time  = {}  earned = {}",
+            elapsed_str(result.elapsed_ms), fmt_pkt(earned));
         println!("  └─ total_blocks={}  total_hashes={}  uptime={}",
             self.stats.blocks_mined,
             fmt_big(self.stats.total_hashes),
@@ -319,7 +330,7 @@ impl Miner {
         println!("  Blocks mined   : {}", s.blocks_mined);
         println!("  Total hashes   : {}", fmt_big(s.total_hashes));
         println!("  Avg hashrate   : {}", hashrate_str(s.avg_hashrate()));
-        println!("  Total earnings : {} pkt  ({:.8} PKT)", s.total_earnings, s.total_earnings as f64 / 1e8);
+        println!("  Total earnings : {}", fmt_pkt(s.total_earnings));
         if s.blocks_mined > 0 {
             let best = if s.best_time_ms == u64::MAX { 0 } else { s.best_time_ms };
             println!("  Fastest block  : {}", elapsed_str(best));
