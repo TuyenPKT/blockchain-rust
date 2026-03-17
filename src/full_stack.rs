@@ -114,6 +114,18 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v6.3", file: "validator.rs",         year: 2036, description: "Parallel block validation: rayon par_iter, ValidationResult, chain link check" },
     VersionInfo { version: "v6.4", file: "gpu_miner.rs",         year: 2036, description: "GPU miner abstraction: GpuBackend{Software,OpenCL,Cuda}, software fallback, 1/3 CU" },
     VersionInfo { version: "v6.5", file: "opencl_kernel.rs",     year: 2036, description: "OpenCL BLAKE3 kernel: full 7-round compress, G mixing, MSG_SCHEDULE, CPU rayon fallback" },
+    VersionInfo { version: "v6.6", file: "cuda_kernel.rs",       year: 2036, description: "CUDA BLAKE3 PTX kernel: __global__ blake3_mine, atomicCAS, --features cuda, CPU fallback" },
+    // Era 13 — Token Economy (2037)
+    VersionInfo { version: "v7.0", file: "reward.rs",           year: 2037, description: "Block Reward Engine: halving schedule, subsidy_at, estimated_supply" },
+    VersionInfo { version: "v7.1", file: "fee_calculator.rs",   year: 2037, description: "Fee Calculator: FeePolicy, vsize estimation, coinbase validation" },
+    VersionInfo { version: "v7.2", file: "token.rs",            year: 2037, description: "Token Standard: ERC-20-like mint/transfer/burn/approve/transfer_from" },
+    VersionInfo { version: "v7.3", file: "token_tx.rs",         year: 2037, description: "Token Transfer TX: OP_RETURN encoding, BLAKE3 txid, TokenTxBuilder" },
+    VersionInfo { version: "v7.4", file: "contract_state.rs",   year: 2037, description: "Smart Contract State: ContractStore, storage_root, snapshot/restore" },
+    VersionInfo { version: "v7.5", file: "evm_lite.rs",         year: 2037, description: "EVM-lite Executor: stack VM, SLoad/SStore, Log, gas metering" },
+    VersionInfo { version: "v7.6", file: "contract_deploy.rs",  year: 2037, description: "Contract Deployment: CREATE/CREATE2 address, ABI encode/decode" },
+    VersionInfo { version: "v7.7", file: "defi.rs",             year: 2037, description: "DeFi AMM: LiquidityPool, x*y=k swap, fee, spot price, DEX" },
+    VersionInfo { version: "v7.8", file: "staking.rs",          year: 2037, description: "Staking & Delegation: Validator, Stake, distribute rewards, slash, APY" },
+    VersionInfo { version: "v7.9", file: "economics.rs",        year: 2037, description: "Economic Model: EraParams, TokenEconomics, Simulator, project N blocks" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -138,7 +150,8 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 9", range: "2027–2030", versions: "v3.4–v3.9", count: 6, theme: "Autonomous Chain — IBC, DID, FHE, Sovereign Rollup" },
     Era { name: "Era 10", range: "2031+",     versions: "v4.0–v4.8", count: 9, theme: "PKT Native Chain — PacketCrypt PoW, REST API, Testnet, Metrics" },
     Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.9", count: 10, theme: "Optimization & Security — fee market, WAL, fuzz, monitoring, peer discovery, benchmarks" },
-    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 6,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
+    Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 7,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
+    Era { name: "Era 13", range: "2037+",     versions: "v7.0–v7.9", count: 10, theme: "Token Economy — Block Reward, Fees, ERC-20 Token, EVM-lite, DeFi AMM, Staking, Economics" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -155,9 +168,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  64,
-    total_eras:      12,
-    total_src_files: 63,
+    total_versions:  75,
+    total_eras:      13,
+    total_src_files: 74,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",

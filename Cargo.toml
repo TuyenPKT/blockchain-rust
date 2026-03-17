@@ -34,11 +34,14 @@ rayon = "1.10"
 num_cpus = "1.16"
 # v6.5: OpenCL GPU mining (optional — cargo build --features opencl)
 ocl = { version = "0.19", optional = true }
+# v6.6: CUDA GPU mining (optional — cargo build --features cuda)
+cust = { version = "0.3", optional = true }
 
 [features]
 default = []
 fuzz = ["proptest"]
 opencl = ["dep:ocl"]
+cuda = ["dep:cust"]
 
 [dev-dependencies]
 proptest = "1.4"

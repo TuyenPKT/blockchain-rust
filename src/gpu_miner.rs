@@ -57,7 +57,7 @@ impl GpuBackend {
         match self {
             GpuBackend::Software => "Software (CPU rayon)",
             GpuBackend::OpenCL   => "OpenCL (v6.5 — BLAKE3 kernel)",
-            GpuBackend::Cuda     => "CUDA   (stub — v6.6)",
+            GpuBackend::Cuda     => "CUDA   (v6.6 — BLAKE3 PTX kernel)",
         }
     }
 
@@ -65,7 +65,7 @@ impl GpuBackend {
         match self {
             GpuBackend::Software => true,
             GpuBackend::OpenCL   => crate::opencl_kernel::opencl_available(),
-            GpuBackend::Cuda     => false, // v6.6
+            GpuBackend::Cuda     => crate::cuda_kernel::cuda_available(),
         }
     }
 }
@@ -126,10 +126,14 @@ pub fn detect_devices() -> Vec<GpuDeviceInfo> {
         },
         GpuDeviceInfo {
             backend:       GpuBackend::Cuda,
-            name:          "CUDA device (not compiled)".into(),
+            name:          if crate::cuda_kernel::cuda_available() {
+                               "CUDA GPU (compiled)".into()
+                           } else {
+                               "CUDA device (build with --features cuda)".into()
+                           },
             compute_units: 0,
             memory_mb:     0,
-            available:     false,
+            available:     crate::cuda_kernel::cuda_available(),
         },
     ]
 }
@@ -277,9 +281,12 @@ fn mine_opencl(block: &Blake3Block, difficulty: usize, compute_units: usize) -> 
     opencl_mine(block, difficulty, &cfg)
 }
 
-fn mine_cuda_stub(block: &Blake3Block, difficulty: usize) -> GpuMineResult {
-    eprintln!("  [gpu] CUDA not compiled — falling back to Software");
-    mine_software(block, default_compute_units(), difficulty)
+fn mine_cuda(block: &Blake3Block, difficulty: usize, compute_units: usize) -> GpuMineResult {
+    use crate::cuda_kernel::{cuda_mine, CudaConfig};
+    let block_size = (compute_units as u32).min(256).max(32);
+    let grid_size  = (compute_units as u32).min(128).max(1);
+    let cfg = CudaConfig::new(block_size, grid_size);
+    cuda_mine(block, difficulty, &cfg)
 }
 
 // ── GpuMiner ──────────────────────────────────────────────────────────────────
@@ -299,7 +306,7 @@ impl GpuMiner {
         let result = match &self.config.backend {
             GpuBackend::Software => mine_software(block, self.config.compute_units, self.config.difficulty),
             GpuBackend::OpenCL   => mine_opencl(block, self.config.difficulty, self.config.compute_units),
-            GpuBackend::Cuda     => mine_cuda_stub(block, self.config.difficulty),
+            GpuBackend::Cuda     => mine_cuda(block, self.config.difficulty, self.config.compute_units),
         };
         self.stats.record(&result);
         result

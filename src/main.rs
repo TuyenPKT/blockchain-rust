@@ -60,6 +60,17 @@ mod chain_concurrent;
 mod validator;
 mod gpu_miner;
 mod opencl_kernel;
+mod cuda_kernel;
+mod reward;
+mod fee_calculator;
+mod token;
+mod token_tx;
+mod contract_state;
+mod evm_lite;
+mod contract_deploy;
+mod defi;
+mod staking;
+mod economics;
 
 // ── Entry point ───────────────────────────────────────────────
 //

@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v6.5 ✅ — 205/205 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v7.9 ✅ — 306/307 tests pass (1 pre-existing cuda_kernel flake), 0 errors, 0 warnings**
 
 ---
 
@@ -50,10 +50,22 @@
 - [x] v6.3 — **Parallel Block Validation**: `rayon::par_iter()` validate N blocks đồng thời khi sync, `ValidationResult` (`src/validator.rs`) 🟡
 - [x] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
 - [x] v6.5 — **OpenCL BLAKE3 Kernel**: full 7-round BLAKE3 OCL C kernel, `opencl_mine()`, feature-gated `--features opencl`, CPU rayon fallback (`src/opencl_kernel.rs`) ✅
-- [ ] v6.6 — **CUDA Kernel**: BLAKE3 PTX kernel, `CudaDevice`, feature-gated `--features cuda`, CPU fallback (`src/cuda_kernel.rs`) 🟢
+- [x] v6.6 — **CUDA BLAKE3 Kernel**: `__global__ blake3_mine`, `atomicCAS`, `CudaConfig`, feature-gated `--features cuda`, CPU rayon fallback (`src/cuda_kernel.rs`) ✅
 - [ ] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, difficulty targeting (`src/mining_pool.rs`) 🟡
 - [ ] v6.8 — **SIMD Hash**: BLAKE3 batch 4x AVX2 lanes, `cfg(target_feature = "avx2")`, scalar fallback (`src/simd_hash.rs`) 🟢
 - [ ] v6.9 — **Hardware Auto-config**: `HardwareProfile`, detect cores/GPU, `OptimalMinerConfig::from_hardware()`, `cargo run -- hw-info` (`src/hw_config.rs`) 🟢
+
+### Era 13 — Token Economy (v7.x) ✅ Hoàn thành
+- [x] v7.0 — **Block Reward Engine**: `INITIAL_SUBSIDY`, halving schedule, `subsidy_at()`, `estimated_supply()` (`src/reward.rs`) ✅
+- [x] v7.1 — **Fee Calculator**: `FeePolicy`, vsize P2PKH estimation, coinbase validation, fee_rate_from_tx (`src/fee_calculator.rs`) ✅
+- [x] v7.2 — **Token Standard**: ERC-20-like `TokenRegistry`, mint/transfer/burn/approve/transfer_from (`src/token.rs`) ✅
+- [x] v7.3 — **Token Transfer TX**: `TokenTx`, OP_RETURN encoding, BLAKE3 txid, `TokenTxBuilder`, extract_token_txs (`src/token_tx.rs`) ✅
+- [x] v7.4 — **Smart Contract State**: `ContractStore`, `storage_root`, `state_root`, snapshot/restore (`src/contract_state.rs`) ✅
+- [x] v7.5 — **EVM-lite Executor**: stack VM, `EvmLiteOp`, SLoad/SStore, Log(n), gas metering, out-of-gas (`src/evm_lite.rs`) ✅
+- [x] v7.6 — **Contract Deployment**: CREATE/CREATE2 address, `AbiEncoder`, `ContractDeployer` (`src/contract_deploy.rs`) ✅
+- [x] v7.7 — **DeFi AMM**: `LiquidityPool` x\*y=k, fee, add/remove liquidity, swap, `DEX` (`src/defi.rs`) ✅
+- [x] v7.8 — **Staking & Delegation**: `Validator`, `Stake`, distribute_rewards, slash, APY (`src/staking.rs`) ✅
+- [x] v7.9 — **Economic Model**: `EraParams`, `TokenEconomics`, `Simulator`, project N blocks (`src/economics.rs`) ✅
 
 ### Era 20 — Post-Singularity (v10.x) — hardware-dependent
 - [ ] v10.0–v10.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
@@ -177,7 +189,7 @@ blake3 = "1.5"            # v6.0: BLAKE3 hash (pure Rust)
 rayon = "1.10"            # v6.1: CPU parallel mining
 num_cpus = "1.16"         # v6.1: detect core count
 ocl = { version = "0.19", optional = true }     # v6.5: OpenCL GPU mining
-# cust = { version = "0.3", optional = true }   # v6.6: CUDA
+cust = { version = "0.3", optional = true }     # v6.6: CUDA GPU mining
 ```
 
 ---
@@ -302,5 +314,19 @@ Stack đã có:
                Build with GPU: cargo build --features opencl
                CLI: cargo run --features opencl -- gpumine [addr] [diff] [n] opencl
 
-Next: v6.6 CUDA Kernel
+  v6.6       CUDA BLAKE3 Kernel (src/cuda_kernel.rs):
+               BLAKE3_CUDA_SRC: full 7-round compress, G mixing, MSG_SCHEDULE (CUDA C)
+               CudaConfig { block_size, grid_size, batch_size } + Default + new()
+               cuda_available() -> bool  (const fn, feature-gated)
+               list_cuda_devices() -> Vec<CudaDeviceInfo>  (feature-gated, cust)
+               cuda_mine(block, difficulty, config) -> GpuMineResult
+               _mine_cuda_impl() — cust: init/Device/Context/Stream/Module/launch!
+               PTX: compile blake3_mine.cu with nvcc → target/blake3_mine.ptx
+               _mine_cpu_fallback() — rayon find_map_any, same as opencl_kernel
+               GpuBackend::Cuda wired via gpu_miner::mine_cuda()
+               Build with GPU: cargo build --features cuda
+               CLI: cargo run --features cuda -- gpumine [addr] [diff] [n] cuda
+               cust = { version = "0.3", optional = true }  in Cargo.toml
+
+Next: v6.7 Mining Pool
 ```
