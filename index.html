@@ -1,113 +1,464 @@
 <!DOCTYPE html>
-<html lang="vi" data-theme="">
+<html lang="en" data-theme="">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blockchain Rust — 2009 → 2036+</title>
+  <title>PKTScan — PKT Block Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
   <style>
     /* ── DESIGN TOKENS ───────────────────────────────── */
     :root {
-      --bg:       #0d1117;
-      --surface:  #161b22;
-      --surface2: #21262d;
-      --border:   #30363d;
-      --text:     #e6edf3;
-      --muted:    #8b949e;
-      --code-bg:  #1f2428;
-      --shadow:   rgba(0, 0, 0, 0.5);
-      /* Rust/blockchain accent colors */
-      --accent:  #f78166;
-      --gold:    #e3b341;
-      --green:   #3fb950;
-      --blue:    #58a6ff;
-      --purple:  #bc8cff;
-      --teal:    #39d353;
-      /* Transition */
-      --t: background 0.3s ease, color 0.3s ease,
-           border-color 0.3s ease, box-shadow 0.3s ease;
+      --bg:        #0b0f14;
+      --surface:   #131920;
+      --surface2:  #1a2230;
+      --border:    #243040;
+      --text:      #e2eaf5;
+      --muted:     #7a92b0;
+      --code-bg:   #0f1620;
+      --shadow:    rgba(0,0,0,.6);
+      --accent:    #f7a133;
+      --gold:      #f7a133;
+      --green:     #3ecf6e;
+      --blue:      #4fa8e8;
+      --purple:    #b07ff0;
+      --red:       #f06060;
+      --teal:      #2dd4bf;
+      --pkt:       #f7a133;
+      --t: background .3s, color .3s, border-color .3s, box-shadow .3s;
     }
-
-    /* Light theme overrides */
     [data-theme="light"] {
-      --bg:       #f6f8fa;
+      --bg:       #f0f4fa;
       --surface:  #ffffff;
-      --surface2: #eaeef2;
-      --border:   #d0d7de;
-      --text:     #24292f;
-      --muted:    #57606a;
-      --code-bg:  #f0f2f4;
-      --shadow:   rgba(0, 0, 0, 0.1);
+      --surface2: #e8eef7;
+      --border:   #cdd6e4;
+      --text:     #1a2535;
+      --muted:    #5a7090;
+      --code-bg:  #e4eaf4;
+      --shadow:   rgba(0,0,0,.1);
     }
 
-    html { transition: var(--t); }
+    html { transition: var(--t); scroll-behavior: smooth; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Sora', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-family: 'Sora', -apple-system, sans-serif;
       line-height: 1.6;
       transition: var(--t);
+      min-height: 100vh;
     }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
 
-    /* ── TOP BAR (same design as pwa-v2 3) ───────────── */
-    .top-bar {
-      position: fixed;
-      top: 8px;
-      right: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    /* ── NAVBAR ────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
       z-index: 100;
-    }
-    .lang-selector {
+      background: rgba(11,15,20,.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 60px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 5px 10px;
+      gap: 16px;
       transition: var(--t);
     }
-    .lang-selector select {
+    [data-theme="light"] nav {
+      background: rgba(240,244,250,.92);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      text-decoration: none;
+    }
+    .nav-logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #f7a133, #e07b10);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #000;
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+    .nav-logo-text {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+    }
+    .nav-logo-text span { color: var(--pkt); }
+    .search-wrap {
+      flex: 1;
+      max-width: 560px;
+      position: relative;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 16px 8px 40px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      outline: none;
+      transition: border-color .15s, var(--t);
+    }
+    .search-wrap input:focus { border-color: var(--pkt); }
+    .search-wrap input::placeholder { color: var(--muted); }
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .nav-link {
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: color .15s, background .15s;
+      white-space: nowrap;
+    }
+    .nav-link:hover { color: var(--text); background: var(--surface2); text-decoration: none; }
+    .theme-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: var(--t);
+      flex-shrink: 0;
+    }
+    .theme-btn:hover { border-color: var(--pkt); }
+
+    /* ── SEARCH MODAL ──────────────────────────────────── */
+    .search-modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 200;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 80px;
+    }
+    .search-modal-backdrop.open { display: flex; }
+    .search-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: min(600px, 94vw);
+      box-shadow: 0 24px 64px var(--shadow);
+      overflow: hidden;
+    }
+    .search-modal-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-modal-top input {
+      flex: 1;
       background: transparent;
       border: none;
       color: var(--text);
-      font-family: 'Sora', sans-serif;
-      font-size: 0.76rem;
-      font-weight: 600;
-      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
       outline: none;
-      appearance: none;
-      -webkit-appearance: none;
-      max-width: 110px;
     }
-    .lang-flag { font-size: 15px; }
-    .theme-toggle {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      width: 36px;
-      height: 32px;
+    .search-modal-top input::placeholder { color: var(--muted); }
+    .search-close {
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .search-close:hover { color: var(--text); background: var(--surface2); }
+    .search-results { padding: 12px; max-height: 400px; overflow-y: auto; }
+    .search-result-item {
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 15px;
-      transition: var(--t);
-      -webkit-tap-highlight-color: transparent;
+      transition: background .12s;
     }
-    .theme-toggle:hover { border-color: var(--accent); }
+    .search-result-item:hover { background: var(--surface2); }
+    .search-result-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .icon-block  { background: rgba(79,168,232,.15); color: var(--blue); border: 1px solid rgba(79,168,232,.25); }
+    .icon-tx     { background: rgba(62,207,110,.15); color: var(--green); border: 1px solid rgba(62,207,110,.25); }
+    .icon-addr   { background: rgba(247,161,51,.15); color: var(--pkt); border: 1px solid rgba(247,161,51,.25); }
+    .search-result-main { flex: 1; min-width: 0; }
+    .search-result-type { font-size: .7rem; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+    .search-result-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-empty { padding: 32px; text-align: center; color: var(--muted); font-size: .88rem; }
 
-    /* ── HERO ────────────────────────────────────────────── */
-    .hero {
-      background: linear-gradient(135deg, var(--bg) 0%, var(--surface) 50%, var(--bg) 100%);
+    /* ── STATS BAR ─────────────────────────────────────── */
+    .stats-bar {
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 120px 24px 60px;
+      padding: 0 24px;
+      transition: var(--t);
+    }
+    .stats-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .stats-inner::-webkit-scrollbar { display: none; }
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px 14px 0;
+      border-right: 1px solid var(--border);
+      margin-right: 24px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .stat-item:last-child { border-right: none; margin-right: 0; }
+    .stat-icon { font-size: 16px; }
+    .stat-body {}
+    .stat-lbl { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+    .stat-val { font-size: .92rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    .stat-val.pkt-color { color: var(--pkt); }
+    .stat-val.green { color: var(--green); }
+
+    /* ── MAIN LAYOUT ───────────────────────────────────── */
+    .main-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── PANEL ─────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: var(--t);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-title {
+      font-size: .88rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-title-icon {
+      width: 24px; height: 24px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+    }
+    .panel-more {
+      font-size: .76rem;
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .panel-more:hover { text-decoration: underline; }
+
+    /* ── BLOCK / TX LIST ───────────────────────────────── */
+    .list-item {
+      display: grid;
+      align-items: center;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      transition: background .1s;
+      cursor: pointer;
+    }
+    .list-item:last-child { border-bottom: none; }
+    .list-item:hover { background: var(--surface2); }
+    .block-item { grid-template-columns: 56px 1fr auto; }
+    .tx-item    { grid-template-columns: 1fr 80px; }
+    .item-icon {
+      width: 40px; height: 40px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+    .item-icon-block { background: rgba(79,168,232,.12); color: var(--blue); border: 1px solid rgba(79,168,232,.2); }
+    .item-icon-tx    { background: rgba(62,207,110,.12); color: var(--green); border: 1px solid rgba(62,207,110,.2); }
+    .item-main {}
+    .item-primary {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--blue);
+    }
+    .item-secondary { font-size: .73rem; color: var(--muted); margin-top: 2px; }
+    .item-right { text-align: right; }
+    .item-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--pkt);
+    }
+    .item-age { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 8px;
+      font-size: .7rem;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    .badge-coinbase { background: rgba(247,161,51,.12); color: var(--pkt); border: 1px solid rgba(247,161,51,.25); }
+    .badge-tx       { background: rgba(62,207,110,.12);  color: var(--green); border: 1px solid rgba(62,207,110,.25); }
+
+    /* ── TX DETAIL ROWS ────────────────────────────────── */
+    .tx-from-to {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .addr-short {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .75rem;
+      color: var(--blue);
+    }
+    .arrow { color: var(--muted); font-size: .7rem; }
+
+    /* ── DETAIL PAGE ───────────────────────────────────── */
+    .detail-page {
+      display: none;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+    .detail-page.active { display: block; }
+    .detail-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: .83rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background .12s, color .12s;
+    }
+    .detail-back:hover { background: var(--surface2); color: var(--text); }
+    .detail-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .detail-title .hash {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      font-weight: 400;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .kv-table { width: 100%; }
+    .kv-row {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 16px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      align-items: start;
+    }
+    .kv-row:last-child { border-bottom: none; }
+    .kv-key { font-size: .8rem; color: var(--muted); font-weight: 600; padding-top: 2px; }
+    .kv-val {
+      font-size: .85rem;
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-all;
+    }
+    .kv-val.normal { font-family: 'Sora', sans-serif; }
+    @media (max-width: 600px) {
+      .kv-row { grid-template-columns: 1fr; gap: 4px; }
+    }
+
+    /* ── TICKER ────────────────────────────────────────── */
+    .ticker-bar {
+      background: linear-gradient(90deg, #f7a133 0%, #e07b10 100%);
+      padding: 7px 0;
+      overflow: hidden;
+      position: relative;
+    }
+    .ticker-inner {
+      display: flex;
+      white-space: nowrap;
+      animation: ticker 40s linear infinite;
+    }
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 48px;
+      font-size: .75rem;
+      font-weight: 600;
+      color: rgba(0,0,0,.75);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .ticker-sep { color: rgba(0,0,0,.3); }
+    @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+    /* ── HERO SEARCH ───────────────────────────────────── */
+    .hero {
+      background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 24px 48px;
       text-align: center;
       position: relative;
       overflow: hidden;
@@ -115,1163 +466,733 @@
     }
     .hero::before {
       content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(88,166,255,.08) 0%, transparent 70%);
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(247,161,51,.1) 0%, transparent 70%);
       pointer-events: none;
     }
-    .hero-badge {
-      display: inline-block;
-      background: rgba(247,129,102,.12);
-      border: 1px solid rgba(247,129,102,.3);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: .08em;
-      padding: 4px 14px;
-      border-radius: 20px;
-      margin-bottom: 20px;
-      text-transform: uppercase;
-    }
-    .hero h1 {
-      font-size: clamp(2rem, 5vw, 3.6rem);
-      font-weight: 700;
-      letter-spacing: -.02em;
-      line-height: 1.15;
-      margin-bottom: 16px;
-    }
-    .hero h1 span { color: var(--accent); }
-    .hero-sub {
-      font-size: 1.05rem;
-      color: var(--muted);
-      max-width: 620px;
-      margin: 0 auto 32px;
-      transition: color 0.3s;
-    }
-    .hero-stats {
-      display: flex;
-      gap: 32px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 36px;
-    }
-    .stat { text-align: center; }
-    .stat-num { font-size: 2rem; font-weight: 700; color: var(--blue); }
-    .stat-lbl { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 22px;
-      border-radius: 8px;
-      font-size: .9rem;
-      font-family: 'Sora', sans-serif;
-      font-weight: 600;
-      text-decoration: none;
-      transition: opacity .15s, transform .15s;
-      cursor: pointer;
-      border: none;
-    }
-    .btn:hover { opacity: .85; transform: translateY(-1px); }
-    .btn-primary { background: var(--blue); color: #000; }
-    .btn-secondary {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
-
-    /* ── LAYOUT ──────────────────────────────────────────── */
-    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-    section { padding: 64px 0; border-bottom: 1px solid var(--border); transition: border-color 0.3s; }
-    section:last-child { border-bottom: none; }
-    h2 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    h2 .tag {
-      font-size: .75rem;
-      font-weight: 600;
-      background: rgba(88,166,255,.15);
-      color: var(--blue);
-      border: 1px solid rgba(88,166,255,.25);
-      padding: 2px 10px;
-      border-radius: 12px;
-      vertical-align: middle;
-      margin-left: 10px;
-      letter-spacing: .05em;
-    }
-    .section-sub { color: var(--muted); margin-bottom: 36px; font-size: .95rem; transition: color 0.3s; }
-
-    /* ── ERA TIMELINE ────────────────────────────────────── */
-    .timeline { display: flex; flex-direction: column; gap: 0; }
-    .era {
-      display: grid;
-      grid-template-columns: 140px 1px 1fr;
-      gap: 0 24px;
-    }
-    .era-meta { text-align: right; padding: 16px 0; }
-    .era-name {
-      font-weight: 700;
-      font-size: .9rem;
-      color: var(--gold);
-    }
-    .era-year { font-size: .78rem; color: var(--muted); }
-    .era-line {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .era-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--border);
-      border: 2px solid var(--blue);
-      margin-top: 20px;
-      flex-shrink: 0;
-      z-index: 1;
-    }
-    .era-connector {
-      width: 2px;
-      flex: 1;
-      background: var(--border);
-    }
-    .era:last-child .era-connector { display: none; }
-    .era-body { padding: 14px 0 14px; }
-    .era-theme {
-      font-size: .9rem;
-      color: var(--text);
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .version-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-    .vpill {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 3px 10px;
-      font-size: .75rem;
-      font-family: 'JetBrains Mono', "SFMono-Regular", Consolas, monospace;
-      color: var(--muted);
-      transition: border-color .15s, color .15s;
-      cursor: default;
-    }
-    .vpill:hover { border-color: var(--blue); color: var(--blue); }
-
-    /* ── ERA COLORS ─────────────────────────────────────── */
-    .era-1 .era-dot { border-color: #f78166; }
-    .era-2 .era-dot { border-color: #e3b341; }
-    .era-3 .era-dot { border-color: #58a6ff; }
-    .era-4 .era-dot { border-color: #bc8cff; }
-    .era-5 .era-dot { border-color: #3fb950; }
-    .era-6 .era-dot { border-color: #39d353; }
-    .era-7 .era-dot { border-color: #79c0ff; }
-    .era-8 .era-dot { border-color: #d2a8ff; }
-    .era-9  .era-dot { border-color: #ffa657; }
-    .era-10 .era-dot { border-color: #39d353; }
-    .era-11 .era-dot { border-color: #58a6ff; }
-
-    /* ── FEATURES GRID ───────────────────────────────────── */
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 16px;
-    }
-    .feature-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      transition: border-color .2s, transform .2s, var(--t);
-    }
-    .feature-card:hover {
-      border-color: var(--blue);
-      transform: translateY(-2px);
-    }
-    .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
-    .feature-title { font-weight: 700; font-size: .95rem; margin-bottom: 6px; }
-    .feature-desc { color: var(--muted); font-size: .83rem; line-height: 1.5; transition: color 0.3s; }
-
-    /* ── INSTALL / USAGE ─────────────────────────────────── */
-    .steps { display: flex; flex-direction: column; gap: 24px; }
-    .step {
-      display: grid;
-      grid-template-columns: 40px 1fr;
-      gap: 16px;
-      align-items: start;
-    }
-    .step-num {
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      background: rgba(88,166,255,.12);
-      border: 1px solid rgba(88,166,255,.3);
-      color: var(--blue);
-      font-weight: 700;
-      font-size: .95rem;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .step-content h3 { font-size: 1rem; margin-bottom: 8px; }
-    .step-content p { color: var(--muted); font-size: .88rem; margin-bottom: 10px; transition: color 0.3s; }
-    pre, code {
-      font-family: 'JetBrains Mono', "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: .85rem;
-    }
-    pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px 20px;
-      overflow-x: auto;
-      color: var(--text);
-      line-height: 1.6;
-      transition: var(--t);
-    }
-    pre .prompt { color: var(--muted); user-select: none; }
-    pre .cmd     { color: var(--green); }
-    pre .comment { color: var(--muted); font-style: italic; }
-    pre .out     { color: var(--blue); }
-    code {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 6px;
-      font-size: .82rem;
-      color: var(--accent);
-      transition: var(--t);
-    }
-
-    /* ── SECURITY TABLE ──────────────────────────────────── */
-    .table-wrap { overflow-x: auto; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .86rem;
-    }
-    th {
-      background: var(--surface);
-      color: var(--muted);
-      text-align: left;
-      padding: 10px 14px;
-      font-weight: 600;
-      font-size: .78rem;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      border-bottom: 1px solid var(--border);
-      transition: var(--t);
-    }
-    td {
-      padding: 11px 14px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-      transition: var(--t);
-    }
-    tr:hover td { background: rgba(255,255,255,.025); }
-    [data-theme="light"] tr:hover td { background: rgba(0,0,0,.025); }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
+    .hero-eyebrow {
       font-size: .72rem;
       font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--pkt);
+      margin-bottom: 12px;
     }
-    .badge-green  { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.25);  }
-    .badge-blue   { background: rgba(88,166,255,.15); color: var(--blue);   border: 1px solid rgba(88,166,255,.25); }
-    .badge-purple { background: rgba(188,140,255,.15);color: var(--purple); border: 1px solid rgba(188,140,255,.25);}
-    .badge-gold   { background: rgba(227,179,65,.15); color: var(--gold);   border: 1px solid rgba(227,179,65,.25); }
-    .badge-teal   { background: rgba(57,211,83,.15);  color: var(--teal);   border: 1px solid rgba(57,211,83,.25);  }
-    .badge-red    { background: rgba(247,129,102,.15);color: var(--accent); border: 1px solid rgba(247,129,102,.25);}
-
-    /* ── STACK DIAGRAM ───────────────────────────────────── */
-    .stack-diagram {
-      background: var(--code-bg);
+    .hero h1 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 700;
+      letter-spacing: -.02em;
+      margin-bottom: 8px;
+    }
+    .hero h1 span { color: var(--pkt); }
+    .hero-sub {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-bottom: 28px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-search {
+      max-width: 640px;
+      margin: 0 auto;
+      position: relative;
+    }
+    .hero-search input {
+      width: 100%;
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      overflow: hidden;
-      transition: var(--t);
-    }
-    .stack-row {
-      display: flex;
-      align-items: stretch;
-      border-bottom: 1px solid var(--border);
-    }
-    .stack-row:last-child { border-bottom: none; }
-    .stack-layer {
-      width: 150px;
-      flex-shrink: 0;
-      padding: 14px 16px;
-      font-size: .78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      display: flex;
-      align-items: center;
-      border-right: 1px solid var(--border);
-    }
-    .stack-content {
-      flex: 1;
-      padding: 14px 18px;
-      font-size: .83rem;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .stack-content .chip {
-      background: rgba(255,255,255,.05);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 2px 8px;
-      font-size: .75rem;
-      font-family: 'JetBrains Mono', monospace;
+      padding: 14px 56px 14px 20px;
       color: var(--text);
-      transition: var(--t);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .88rem;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s, var(--t);
+      box-shadow: 0 4px 20px var(--shadow);
     }
-    [data-theme="light"] .stack-content .chip { background: rgba(0,0,0,.04); }
-    .layer-identity  { color: #ffa657; }
-    .layer-app       { color: #79c0ff; }
-    .layer-cross     { color: #d2a8ff; }
-    .layer-crypto    { color: #bc8cff; }
-    .layer-consensus { color: #3fb950; }
-    .layer-base      { color: #58a6ff; }
+    .hero-search input:focus {
+      border-color: var(--pkt);
+      box-shadow: 0 0 0 3px rgba(247,161,51,.15), 0 4px 20px var(--shadow);
+    }
+    .hero-search input::placeholder { color: var(--muted); }
+    .hero-search-btn {
+      position: absolute;
+      right: 10px; top: 50%;
+      transform: translateY(-50%);
+      background: var(--pkt);
+      border: none;
+      border-radius: 8px;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: opacity .15s;
+    }
+    .hero-search-btn:hover { opacity: .85; }
 
-    /* ── FOOTER ──────────────────────────────────────────── */
+    /* ── PAGE TOGGLE ───────────────────────────────────── */
+    #home-page { display: block; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── FOOTER ────────────────────────────────────────── */
     footer {
       background: var(--surface);
       border-top: 1px solid var(--border);
-      padding: 32px 24px;
+      padding: 28px 24px;
       text-align: center;
       color: var(--muted);
-      font-size: .83rem;
+      font-size: .8rem;
       transition: var(--t);
     }
-    footer a { color: var(--blue); text-decoration: none; }
-    footer a:hover { text-decoration: underline; }
+    footer a { color: var(--blue); }
+    .footer-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); font-size: .85rem; }
 
-    /* ── RESPONSIVE ──────────────────────────────────────── */
+    /* ── RESPONSIVE ────────────────────────────────────── */
     @media (max-width: 640px) {
-      .era { grid-template-columns: 90px 1px 1fr; gap: 0 12px; }
-      .stack-layer { width: 100px; font-size: .7rem; }
-      .hero { padding: 100px 16px 48px; }
-      .top-bar { top: 6px; right: 8px; }
+      .nav-link { display: none; }
+      .hero { padding: 40px 16px 36px; }
+      .main-wrap { padding: 20px 16px; }
+      .kv-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-<!-- ═══ TOP BAR ═══════════════════════════════════════════ -->
-<div class="top-bar">
-  <div class="lang-selector">
-    <span class="lang-flag" id="langFlag">🇻🇳</span>
-    <select id="langSelect" onchange="doChangeLang(this.value)" aria-label="Language">
-      <option value="vi">Tiếng Việt</option>
-      <option value="en">English</option>
-      <option value="zh">中文</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
-      <option value="es">Español</option>
-      <option value="fr">Français</option>
-      <option value="de">Deutsch</option>
-      <option value="pt">Português</option>
-      <option value="ru">Русский</option>
-      <option value="ar">العربية</option>
-      <option value="hi">हिन्दी</option>
-      <option value="id">Indonesia</option>
-      <option value="th">ภาษาไทย</option>
-      <option value="tr">Türkçe</option>
-      <option value="it">Italiano</option>
-      <option value="nl">Nederlands</option>
-      <option value="pl">Polski</option>
-      <option value="uk">Українська</option>
-      <option value="fa">فارسی</option>
-    </select>
+<!-- ═══ TICKER ═══════════════════════════════════════════════════ -->
+<div class="ticker-bar" aria-hidden="true">
+  <div class="ticker-inner" id="tickerInner">
+    <!-- filled by JS -->
   </div>
-  <button class="theme-toggle" id="themeBtn" onclick="doToggleTheme()" aria-label="Toggle theme">☀️</button>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ HERO -->
-<header class="hero">
-  <div class="container">
-    <div class="hero-badge" data-i18n="hero-badge">🦀 Rust · PKT Native · Open Source</div>
-    <h1>Blockchain <span data-i18n="hero-h1-span">từ đầu</span><br/>2009 → 2036+</h1>
-    <p class="hero-sub" data-i18n="hero-sub">
-      Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block
-      đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet.
-      58+ versions. 12+ eras. Không thư viện blockchain.
-    </p>
-    <div class="hero-stats">
-      <div class="stat"><div class="stat-num">58+</div><div class="stat-lbl" data-i18n="stat-ver">Versions</div></div>
-      <div class="stat"><div class="stat-num">12+</div><div class="stat-lbl" data-i18n="stat-era">Eras</div></div>
-      <div class="stat"><div class="stat-num">47</div><div class="stat-lbl" data-i18n="stat-src">Src files</div></div>
-      <div class="stat"><div class="stat-num">57</div><div class="stat-lbl" data-i18n="stat-test">Tests pass</div></div>
+<!-- ═══ NAV ══════════════════════════════════════════════════════ -->
+<nav>
+  <a class="nav-logo" href="#" onclick="showHome(); return false;">
+    <div class="nav-logo-icon">P</div>
+    <span class="nav-logo-text">PKT<span>Scan</span></span>
+  </a>
+
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" placeholder="Search by Block / Tx Hash / Address…"
+           onclick="openSearch()" readonly aria-label="Search" />
+  </div>
+
+  <div class="nav-right">
+    <a class="nav-link" href="#" onclick="showBlocks(); return false;">Blocks</a>
+    <a class="nav-link" href="#" onclick="showTxs(); return false;">Transactions</a>
+    <a class="nav-link" href="#" onclick="showStats(); return false;">Stats</a>
+    <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme" id="themeBtn">☀️</button>
+  </div>
+</nav>
+
+<!-- ═══ SEARCH MODAL ═════════════════════════════════════════════ -->
+<div class="search-modal-backdrop" id="searchBackdrop" onclick="closeSearch(event)">
+  <div class="search-modal" role="dialog" aria-label="Search">
+    <div class="search-modal-top">
+      <span style="color:var(--muted);font-size:16px;">🔍</span>
+      <input type="text" placeholder="Block height, tx hash, or PKT address…"
+             id="searchInput" oninput="doSearch(this.value)" autofocus />
+      <span class="search-close" onclick="closeSearch()" aria-label="Close">✕</span>
     </div>
-    <div class="hero-btns">
-      <a href="#quickstart" class="btn btn-primary" data-i18n="btn-qs">⚡ Quick Start</a>
-      <a href="#timeline"   class="btn btn-secondary" data-i18n="btn-tl">📜 Timeline</a>
-      <a href="#stack"      class="btn btn-secondary" data-i18n="btn-stack">🔒 Stack 2036+</a>
-      <a href="https://github.com/TuyenPKT/blockchain-rust" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="btn-gh">⭐ GitHub</a>
+    <div class="search-results" id="searchResults">
+      <div class="search-empty">Type to search blocks, transactions, or addresses</div>
     </div>
   </div>
-</header>
+</div>
 
-<!-- ═══════════════════════════════════════════════════════════ WHY -->
-<section>
-  <div class="container">
-    <h2><span data-i18n="why-h2">Tại sao dự án này?</span> <span class="tag" data-i18n="why-tag">Giới thiệu</span></h2>
-    <p class="section-sub" data-i18n="why-sub">Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.</p>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">🧱</div>
-        <div class="feature-title" data-i18n="feat1-title">Build from scratch</div>
-        <div class="feature-desc" data-i18n="feat1-desc">Không dùng <code>bitcoin</code>, <code>ethereum</code> hay bất kỳ blockchain crate nào. SHA-256, ECDSA, PoW — tất cả tự viết để hiểu cơ chế bên trong.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔗</div>
-        <div class="feature-title" data-i18n="feat2-title">Incremental — mỗi version build trên version trước</div>
-        <div class="feature-desc" data-i18n="feat2-desc">v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔐</div>
-        <div class="feature-title" data-i18n="feat3-title">Cryptography thực tế</div>
-        <div class="feature-desc" data-i18n="feat3-desc">ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚛️</div>
-        <div class="feature-title" data-i18n="feat4-title">Post-Quantum ready</div>
-        <div class="feature-desc" data-i18n="feat4-desc">Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🌐</div>
-        <div class="feature-title" data-i18n="feat5-title">Ecosystem hiện đại</div>
-        <div class="feature-desc" data-i18n="feat5-desc">IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">📖</div>
-        <div class="feature-title" data-i18n="feat6-title">Code là tài liệu</div>
-        <div class="feature-desc" data-i18n="feat6-desc">Mỗi file có comment giải thích cơ chế, tradeoff và tham chiếu đến BIP/RFC/NIST paper tương ứng. Demo chạy được ngay với <code>cargo run</code>.</div>
-      </div>
+<!-- ═══ HOME PAGE ════════════════════════════════════════════════ -->
+<div id="home-page">
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-eyebrow">PKT Network Explorer</div>
+    <h1>Explore the <span>PKT</span> Blockchain</h1>
+    <p class="hero-sub">Search blocks, transactions, and addresses on the PKT network</p>
+    <div class="hero-search">
+      <input type="text" id="heroInput"
+             placeholder="Enter block height, tx hash, or PKT address…"
+             onkeydown="if(event.key==='Enter')heroSearch()" />
+      <button class="hero-search-btn" onclick="heroSearch()" aria-label="Search">🔍</button>
     </div>
-  </div>
-</section>
+  </header>
 
-<!-- ═══════════════════════════════════════════════════════════ QUICKSTART -->
-<section id="quickstart">
-  <div class="container">
-    <h2><span data-i18n="qs-h2">Quick Start</span> <span class="tag" data-i18n="qs-tag">Cài đặt</span></h2>
-    <p class="section-sub" data-i18n="qs-sub">Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.</p>
-    <div class="steps">
-
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-content">
-          <h3 data-i18n="qs-step1">Clone repository</h3>
-          <pre><span class="prompt">$ </span><span class="cmd">git clone https://github.com/TuyenPKT/blockchain-rust.git</span>
-<span class="prompt">$ </span><span class="cmd">cd blockchain-rust</span></pre>
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item">
+        <span class="stat-icon">📦</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Latest Block</div>
+          <div class="stat-val" id="stat-height">850,412</div>
         </div>
       </div>
-
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-content">
-          <h3 data-i18n="qs-step2">Cài Rust (nếu chưa có)</h3>
-          <pre><span class="prompt">$ </span><span class="cmd">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</span>
-<span class="prompt">$ </span><span class="cmd">source ~/.cargo/env</span>
-<span class="prompt">$ </span><span class="cmd">rustup update stable</span></pre>
+      <div class="stat-item">
+        <span class="stat-icon">⏱</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Block Time</div>
+          <div class="stat-val green" id="stat-blocktime">60s</div>
         </div>
       </div>
-
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-content">
-          <h3 data-i18n="qs-step3">Xem help &amp; version timeline</h3>
-          <pre><span class="prompt">$ </span><span class="cmd">cargo run</span>
-<span class="out">  PKT Blockchain — v4.8
-
-  Cách dùng:
-    cargo run -- wallet new             → tạo wallet mới
-    cargo run -- wallet show            → xem địa chỉ ví
-    cargo run -- mine [addr] [n]        → bắt đầu đào
-    cargo run -- node &lt;port&gt; [peer]    → P2P node
-    cargo run -- api [port]             → REST API (default 3000)
-    cargo run -- explorer chain         → block explorer CLI
-    cargo run -- genesis [regtest|testnet|mainnet]
-    cargo run -- testnet [n] [port]     → local testnet
-    cargo run -- metrics [node:port]    → hashrate, peers, mempool
-
-  ── Era 1  (2009)  Bitcoin Genesis ──   v0.1 … v0.4
-  ── Era 11 (2032) Optimization ──      v5.0 ✅ … v5.9 ✅
-  ── Era 12 (2036) Multi-thread &amp; GPU ── v6.0 … v6.9
-  58+ versions. 12+ eras.</span></pre>
+      <div class="stat-item">
+        <span class="stat-icon">⚡</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Hashrate</div>
+          <div class="stat-val" id="stat-hashrate">4.23 PH/s</div>
         </div>
       </div>
-
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-content">
-          <h3 data-i18n="qs-step4">Tạo ví PKT &amp; bắt đầu đào</h3>
-          <pre><span class="comment"># Tạo keypair mới, lưu ~/.pkt/wallet.key</span>
-<span class="prompt">$ </span><span class="cmd">cargo run -- wallet new</span>
-<span class="out">  Address      : 1PKTxxx...
-  Pubkey hash  : a3f2c1... (dùng cho miner)
-  Saved to     : ~/.pkt/wallet.key</span>
-
-<span class="comment"># Mine tự động đến ví vừa tạo</span>
-<span class="prompt">$ </span><span class="cmd">cargo run -- mine</span>
-
-<span class="comment"># Chạy 136 integration tests</span>
-<span class="prompt">$ </span><span class="cmd">cargo test</span>
-<span class="out">test result: ok. 57 passed; 0 failed</span></pre>
+      <div class="stat-item">
+        <span class="stat-icon">💰</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Block Reward</div>
+          <div class="stat-val pkt-color">50 PKT</div>
         </div>
       </div>
-
-      <div class="step">
-        <div class="step-num">5</div>
-        <div class="step-content">
-          <h3 data-i18n="qs-step5">Chạy P2P node (tùy chọn)</h3>
-          <p data-i18n="qs-step5-desc">Mở 2 terminal để test mạng ngang hàng:</p>
-          <pre><span class="comment"># Terminal 1 — node lắng nghe port 8333</span>
-<span class="prompt">$ </span><span class="cmd">cargo run -- node 8333</span>
-
-<span class="comment"># Terminal 2 — node kết nối tới node 1</span>
-<span class="prompt">$ </span><span class="cmd">cargo run -- node 8334 127.0.0.1:8333</span></pre>
+      <div class="stat-item">
+        <span class="stat-icon">🌐</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Active Nodes</div>
+          <div class="stat-val" id="stat-nodes">2,847</div>
         </div>
       </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════ TIMELINE -->
-<section id="timeline">
-  <div class="container">
-    <h2><span data-i18n="tl-h2">Journey Timeline</span> <span class="tag">58+ versions</span></h2>
-    <p class="section-sub" data-i18n="tl-sub">Mỗi era là một bước tiến lớn trong lịch sử blockchain.</p>
-    <div class="timeline">
-
-      <div class="era era-1">
-        <div class="era-meta"><div class="era-name">Era 1</div><div class="era-year">2009</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">⛏️ Bitcoin Genesis — PoW, Block, UTXO, SHA-256</div>
-          <div class="version-pills">
-            <span class="vpill">v0.1 Block + SHA-256</span>
-            <span class="vpill">v0.2 Transaction + Coinbase</span>
-            <span class="vpill">v0.3 Proof of Work</span>
-            <span class="vpill">v0.4 UTXO Model</span>
-          </div>
+      <div class="stat-item">
+        <span class="stat-icon">💸</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Transactions</div>
+          <div class="stat-val" id="stat-txs">24.7M</div>
         </div>
       </div>
-
-      <div class="era era-2">
-        <div class="era-meta"><div class="era-name">Era 2</div><div class="era-year">2010–2013</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🔑 Security &amp; Wallets — ECDSA, P2P, HD Wallet</div>
-          <div class="version-pills">
-            <span class="vpill">v0.5 ECDSA + Wallet</span>
-            <span class="vpill">v0.6 P2P TCP Node</span>
-            <span class="vpill">v0.7 Mempool + Fee</span>
-            <span class="vpill">v0.8 HD Wallet BIP32/39/44</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-3">
-        <div class="era-meta"><div class="era-name">Era 3</div><div class="era-year">2014–2021</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">⚡ Scale &amp; Script — SegWit, Lightning, Taproot, MAST</div>
-          <div class="version-pills">
-            <span class="vpill">v0.9 Script Engine</span>
-            <span class="vpill">v1.0 Multisig P2SH</span>
-            <span class="vpill">v1.1 SegWit P2WPKH</span>
-            <span class="vpill">v1.2 Lightning + HTLC</span>
-            <span class="vpill">v1.3 Taproot + Schnorr + MuSig2</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-4">
-        <div class="era-meta"><div class="era-name">Era 4</div><div class="era-year">2018–2020</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🕵️ Layer 2 &amp; Privacy — CTV, Confidential, CoinJoin, Swap</div>
-          <div class="version-pills">
-            <span class="vpill">v1.4 Covenants + CTV</span>
-            <span class="vpill">v1.5 Confidential TX</span>
-            <span class="vpill">v1.6 CoinJoin + PayJoin</span>
-            <span class="vpill">v1.7 Atomic Swap</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-5">
-        <div class="era-meta"><div class="era-name">Era 5</div><div class="era-year">2021</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🔮 Advanced Consensus — ZK-SNARK, GHOST Protocol</div>
-          <div class="version-pills">
-            <span class="vpill">v1.8 ZK-SNARK + Groth16</span>
-            <span class="vpill">v1.9 GHOST Protocol + Uncles</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-6">
-        <div class="era-meta"><div class="era-name">Era 6</div><div class="era-year">2022–2023</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🗜️ ZK &amp; Rollup — BFT, Sharding, zkEVM, Recursive ZK</div>
-          <div class="version-pills">
-            <span class="vpill">v2.0 BFT Tendermint</span>
-            <span class="vpill">v2.1 Sharding + Beacon</span>
-            <span class="vpill">v2.2 ZK-Rollup</span>
-            <span class="vpill">v2.3 Optimistic Rollup</span>
-            <span class="vpill">v2.4 Recursive ZK / IVC</span>
-            <span class="vpill">v2.5 zkEVM</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-7">
-        <div class="era-meta"><div class="era-name">Era 7</div><div class="era-year">2023–2025</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🤖 AI &amp; Programmable — Contracts, Oracle, AI Agent</div>
-          <div class="version-pills">
-            <span class="vpill">v2.6 WASM Smart Contract</span>
-            <span class="vpill">v2.7 Oracle + TWAP</span>
-            <span class="vpill">v2.8 On-chain Governance</span>
-            <span class="vpill">v2.9 AI Agent DCA/Rebalance</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-8">
-        <div class="era-meta"><div class="era-name">Era 8</div><div class="era-year">2025–2027</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">⚛️ Post-Quantum — Dilithium, SPHINCS+, ML-KEM, Hybrid</div>
-          <div class="version-pills">
-            <span class="vpill">v3.0 Dilithium NIST FIPS 204</span>
-            <span class="vpill">v3.1 SPHINCS+ NIST FIPS 205</span>
-            <span class="vpill">v3.2 ML-KEM NIST FIPS 203</span>
-            <span class="vpill">v3.3 Hybrid ECDSA∧Dilithium</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-9">
-        <div class="era-meta"><div class="era-name">Era 9</div><div class="era-year">2027–2030</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🌐 Autonomous Chain — IBC, DID, FHE, Sovereign Rollup</div>
-          <div class="version-pills">
-            <span class="vpill">v3.4 Self-Amending Chain</span>
-            <span class="vpill">v3.5 IBC Cross-chain</span>
-            <span class="vpill">v3.6 W3C DID + VC</span>
-            <span class="vpill">v3.7 FHE Privacy Contracts</span>
-            <span class="vpill">v3.8 Sovereign Rollup + DAS</span>
-            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v3.9 Full Stack ✅</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-10">
-        <div class="era-meta"><div class="era-name">Era 10</div><div class="era-year">2031+</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🪙 PKT Native Chain — PacketCrypt PoW, REST API, Testnet</div>
-          <div class="version-pills">
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.0 PKT Wallet CLI ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.1 PacketCrypt PoW ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.2 Persistent Storage ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.3 P2P Sync ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.4 REST API ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.5 Miner ↔ Node ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.6 Block Explorer ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v4.7 Testnet Config ✅</span>
-            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v4.8 Metrics ✅</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-11">
-        <div class="era-meta"><div class="era-name">Era 11</div><div class="era-year">2032–2035</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">🛡️ Optimization &amp; Security — Hardening, Perf, Audit, Fuzz ✅</div>
-          <div class="version-pills">
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.0 Performance ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.1 Security Hardening ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.2 P2P Improvements ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.3 Coinbase Maturity ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.4 Fee Market + RBF ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.5 Storage v2 WAL ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.6 Fuzz Testing ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.7 Monitoring ✅</span>
-            <span class="vpill" style="border-color:var(--teal);color:var(--teal)">v5.8 Peer Discovery ✅</span>
-            <span class="vpill" style="border-color:var(--gold);color:var(--gold)">v5.9 Benchmarks ✅</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="era era-12">
-        <div class="era-meta"><div class="era-name">Era 12</div><div class="era-year">2036+</div></div>
-        <div class="era-line"><div class="era-dot"></div><div class="era-connector"></div></div>
-        <div class="era-body">
-          <div class="era-theme">⚡ Multi-threading &amp; GPU — BLAKE3, rayon, OpenCL, CUDA, SIMD, Mining Pool</div>
-          <div class="version-pills">
-            <span class="vpill">v6.0 BLAKE3 Hash Engine</span>
-            <span class="vpill">v6.1 CPU Multi-thread Miner</span>
-            <span class="vpill">v6.2 Thread-safe Chain</span>
-            <span class="vpill">v6.3 Parallel Block Validation</span>
-            <span class="vpill">v6.4 GPU Miner Abstraction</span>
-            <span class="vpill">v6.5 OpenCL Kernel</span>
-            <span class="vpill">v6.6 CUDA Kernel</span>
-            <span class="vpill">v6.7 Mining Pool</span>
-            <span class="vpill">v6.8 SIMD Hash AVX2</span>
-            <span class="vpill">v6.9 Hardware Auto-config</span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════ STACK 2030 -->
-<section id="stack">
-  <div class="container">
-    <h2><span data-i18n="stack-h2">2036+ Blockchain Stack</span> <span class="tag">Architecture</span></h2>
-    <p class="section-sub" data-i18n="stack-sub">7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.</p>
-    <div class="stack-diagram">
-      <div class="stack-row">
-        <div class="stack-layer layer-identity">Identity</div>
-        <div class="stack-content">
-          <span class="chip">DID (W3C)</span>
-          <span class="chip">Verifiable Credentials</span>
-          <span class="chip">DID Auth</span>
-          <span class="chip">Key Rotation</span>
-          <span class="chip">Self-Sovereign</span>
-        </div>
-      </div>
-      <div class="stack-row">
-        <div class="stack-layer layer-app">Application</div>
-        <div class="stack-content">
-          <span class="chip">WASM Smart Contracts</span>
-          <span class="chip">Oracle + TWAP</span>
-          <span class="chip">AI Agent</span>
-          <span class="chip">Governance</span>
-          <span class="chip">FHE Privacy Contracts</span>
-        </div>
-      </div>
-      <div class="stack-row">
-        <div class="stack-layer layer-cross">Cross-chain</div>
-        <div class="stack-content">
-          <span class="chip">IBC (ICS-02/03/04/20)</span>
-          <span class="chip">Sovereign Rollup</span>
-          <span class="chip">Atomic Swap</span>
-          <span class="chip">DA Layer (Celestia)</span>
-        </div>
-      </div>
-      <div class="stack-row">
-        <div class="stack-layer layer-crypto">Cryptography</div>
-        <div class="stack-content">
-          <span class="chip">Taproot + Schnorr</span>
-          <span class="chip">Groth16 ZK-SNARK</span>
-          <span class="chip">Dilithium PQ-Sign</span>
-          <span class="chip">ML-KEM KEM</span>
-          <span class="chip">Hybrid ECDSA∧Dil</span>
-          <span class="chip">FHE-LWE</span>
-        </div>
-      </div>
-      <div class="stack-row">
-        <div class="stack-layer layer-consensus">Consensus</div>
-        <div class="stack-content">
-          <span class="chip">BFT Tendermint</span>
-          <span class="chip">GHOST PoW</span>
-          <span class="chip">Sharding</span>
-          <span class="chip">Self-Amending Vote</span>
-          <span class="chip">Recursive ZK / IVC</span>
-        </div>
-      </div>
-      <div class="stack-row">
-        <div class="stack-layer layer-base">Base Layer</div>
-        <div class="stack-content">
-          <span class="chip">Block + SHA-256</span>
-          <span class="chip">UTXO</span>
-          <span class="chip">SegWit</span>
-          <span class="chip">Lightning</span>
-          <span class="chip">P2P TCP</span>
-          <span class="chip">Mempool</span>
+      <div class="stat-item">
+        <span class="stat-icon">🔄</span>
+        <div class="stat-body">
+          <div class="stat-lbl">Difficulty</div>
+          <div class="stat-val" id="stat-diff">4</div>
         </div>
       </div>
     </div>
   </div>
-</section>
 
-<!-- ═══════════════════════════════════════════════════════════ SECURITY TABLE -->
-<section>
-  <div class="container">
-    <h2><span data-i18n="sec-h2">Security Layer Stack</span> <span class="tag">Defense in Depth</span></h2>
-    <p class="section-sub" data-i18n="sec-sub">Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.</p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th data-i18n="sec-col1">Tầng</th>
-            <th data-i18n="sec-col2">Cơ chế</th>
-            <th data-i18n="sec-col3">Bảo vệ chống</th>
-            <th data-i18n="sec-col4">Mức độ</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Classical Crypto</strong></td>
-            <td>ECDSA secp256k1, Schnorr, SHA-256</td>
-            <td>Classical computers</td>
-            <td><span class="badge badge-green">128-bit security</span></td>
-          </tr>
-          <tr>
-            <td><strong>Post-Quantum (PQ)</strong></td>
-            <td>Dilithium FIPS-204, SPHINCS+ FIPS-205, ML-KEM FIPS-203</td>
-            <td>Quantum (Shor/Grover)</td>
-            <td><span class="badge badge-purple">128-bit PQ security</span></td>
-          </tr>
-          <tr>
-            <td><strong>Hybrid Transition</strong></td>
-            <td>ECDSA ∧ Dilithium (AND policy)</td>
-            <td data-i18n="sec-hybrid-prot">Phải phá cả 2 cùng lúc</td>
-            <td><span class="badge badge-gold">Defense in depth</span></td>
-          </tr>
-          <tr>
-            <td><strong>Zero-Knowledge</strong></td>
-            <td>Groth16, Recursive ZK/IVC, zkEVM</td>
-            <td>Privacy leak khi verify</td>
-            <td><span class="badge badge-blue">Verifiable w/o witness</span></td>
-          </tr>
-          <tr>
-            <td><strong>Privacy</strong></td>
-            <td>FHE-LWE, Pedersen Commitment, CoinJoin</td>
-            <td>Plaintext trên chain</td>
-            <td><span class="badge badge-teal">Chain sees only ciphertext</span></td>
-          </tr>
-          <tr>
-            <td><strong>Identity</strong></td>
-            <td>W3C DID + VC, DID Auth</td>
-            <td>Central identity authority</td>
-            <td><span class="badge badge-blue">Self-sovereign</span></td>
-          </tr>
-          <tr>
-            <td><strong>Availability</strong></td>
-            <td>Erasure coding (2x) + DAS sampling</td>
-            <td>Data withholding attack</td>
-            <td><span class="badge badge-green">99.6% detection @ k=8</span></td>
-          </tr>
-        </tbody>
-      </table>
+  <!-- Main two-col -->
+  <div class="main-wrap">
+    <div class="two-col">
+
+      <!-- Latest Blocks -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <div class="panel-title-icon item-icon-block">📦</div>
+            Latest Blocks
+          </div>
+          <a class="panel-more" href="#" onclick="showBlocks(); return false;">View all →</a>
+        </div>
+        <div id="latestBlocks"></div>
+      </div>
+
+      <!-- Latest Transactions -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <div class="panel-title-icon item-icon-tx">💸</div>
+            Latest Transactions
+          </div>
+          <a class="panel-more" href="#" onclick="showTxs(); return false;">View all →</a>
+        </div>
+        <div id="latestTxs"></div>
+      </div>
+
     </div>
   </div>
-</section>
+</div><!-- /home-page -->
 
-<!-- ═══════════════════════════════════════════════════════════ EXPLORE -->
-<section>
-  <div class="container">
-    <h2><span data-i18n="explore-h2">Khám phá từng module</span> <span class="tag">Source Code</span></h2>
-    <p class="section-sub" data-i18n="explore-sub">Mỗi file trong <code>src/</code> là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.</p>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">📦</div>
-        <div class="feature-title">block.rs + chain.rs</div>
-        <div class="feature-desc">Block header, Merkle root, SHA-256 mining, difficulty adjustment mỗi 5 block. Genesis block hardcoded như Bitcoin thực.</div>
+<!-- ═══ BLOCKS PAGE ═══════════════════════════════════════════════ -->
+<div id="blocks-page" class="page">
+  <div class="main-wrap">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon item-icon-block">📦</div>
+          All Blocks
+        </div>
+        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">💳</div>
-        <div class="feature-title">wallet.rs + hd_wallet.rs</div>
-        <div class="feature-desc">ECDSA keypair, Base58Check address, BIP32 child key derivation, BIP39 mnemonic, BIP44 account/change/index path.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚡</div>
-        <div class="feature-title">lightning.rs</div>
-        <div class="feature-desc">Payment channel funding (2-of-2 P2SH), commitment TX off-chain, HTLC routing, cooperative/force close.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🌳</div>
-        <div class="feature-title">taproot.rs</div>
-        <div class="feature-desc">Schnorr BIP340, tagged_hash, MAST (Merkelized Alternative Script Trees), P2TR output, MuSig2 key aggregation.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔮</div>
-        <div class="feature-title">zk_proof.rs</div>
-        <div class="feature-desc">Schnorr ZK interactive protocol, Hash Preimage proof, R1CS constraint system, Groth16 proving/verification.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🗜️</div>
-        <div class="feature-title">zk_rollup.rs + zkevm.rs</div>
-        <div class="feature-desc">ZK-Rollup batch settlement trên L1, Optimistic Rollup fraud proof 7-day window, zkEVM per-opcode constraint generation.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚛️</div>
-        <div class="feature-title">dilithium.rs + kyber.rs</div>
-        <div class="feature-desc">CRYSTALS-Dilithium Module-LWE ring signature (NIST FIPS 204), ML-KEM key encapsulation với FO transform (NIST FIPS 203).</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🌐</div>
-        <div class="feature-title">ibc.rs</div>
-        <div class="feature-desc">ICS-02 light client, ICS-03 connection 4-way handshake, ICS-04 channel handshake, packet lifecycle, ICS-20 token transfer.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🆔</div>
-        <div class="feature-title">did.rs</div>
-        <div class="feature-desc">W3C DID Core 1.0, <code>did:chain:&lt;hex&gt;</code> method, DID Document, VC issuance/verify, DID Auth challenge-response.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔒</div>
-        <div class="feature-title">fhe_contract.rs</div>
-        <div class="feature-desc">LWE-based Fully Homomorphic Encryption, HE-ADD/MUL-PLAIN, noise budget tracking, encrypted vote contract, salary sum, sealed bid auction.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🛸</div>
-        <div class="feature-title">sovereign_rollup.rs</div>
-        <div class="feature-desc">DA layer với namespace blobs, Namespace Merkle Tree, erasure coding (2x), DAS sampling (99.6% @ k=8), sovereign upgrade.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🗺️</div>
-        <div class="feature-title">full_stack.rs</div>
-        <div class="feature-desc">Version registry (58+v), era descriptions (12+ eras), stack statistics, security layers — tích hợp và demo tất cả từ v0.1 → v5.9.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🪙</div>
-        <div class="feature-title">wallet_cli.rs + miner.rs</div>
-        <div class="feature-desc">PKT Wallet CLI: <code>wallet new/show/address</code>, lưu keypair tại <code>~/.pkt/wallet.key</code>. Miner: live hashrate, difficulty auto-adjust, submit block qua P2P.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚡</div>
-        <div class="feature-title">packetcrypt.rs</div>
-        <div class="feature-desc">PacketCrypt PoW: announcement mining với nonce collision avoidance, block mining với effective_bits = base_bits − floor(log₂(ann_count+1)).</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">💾</div>
-        <div class="feature-title">storage.rs</div>
-        <div class="feature-desc">RocksDB persistent storage: lưu/load chain + UTXO qua restart. Key schema: <code>block:{height:016x}</code>, <code>utxo:{txid}:{index}</code>, <code>meta:height</code>.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🌐</div>
-        <div class="feature-title">api.rs</div>
-        <div class="feature-desc">REST API axum 0.7: <code>GET /chain</code>, <code>GET /chain/:height</code>, <code>GET /balance/:addr</code>, <code>GET /mempool</code>, <code>POST /tx</code>, <code>GET /status</code>, <code>GET /metrics</code>.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔍</div>
-        <div class="feature-title">explorer.rs</div>
-        <div class="feature-desc">Block Explorer CLI: <code>explorer chain/block/tx/balance/utxo</code> — đọc chain từ RocksDB, hiển thị 5 blocks gần nhất, tìm TX theo prefix.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🧪</div>
-        <div class="feature-title">genesis.rs</div>
-        <div class="feature-desc">Testnet config: <code>NetworkParams</code> (magic bytes, coin params, ports), <code>build_genesis()</code>, local testnet N-node simulation. Bootstrap: <code>seed.testnet.oceif.com:18333</code>.</div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">📊</div>
-        <div class="feature-title">metrics.rs</div>
-        <div class="feature-desc">Runtime metrics: height, difficulty, UTXO count, mempool depth + fees, avg block time (20-block window), estimated hashrate (2^diff / block_time), peer count, sync status local vs remote. CLI: <code>cargo run -- metrics</code> · REST: <code>GET /metrics</code>.</div>
-      </div>
+      <div id="allBlocks"></div>
     </div>
   </div>
-</section>
+</div>
 
-<!-- ═══════════════════════════════════════════════════════════ DEPENDENCIES -->
-<section>
-  <div class="container">
-    <h2><span data-i18n="dep-h2">Dependencies</span> <span class="tag">Cargo.toml</span></h2>
-    <p class="section-sub" data-i18n="dep-sub">Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.</p>
-    <pre><span class="comment"># Cargo.toml</span>
-[dependencies]
-sha2       = "0.10"          <span class="comment"># SHA-256, SHA-512</span>
-hex        = "0.4"           <span class="comment"># hex encode/decode</span>
-chrono     = "0.4"           <span class="comment"># timestamps</span>
-serde      = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-secp256k1  = { version = "0.27", features = ["rand-std", "global-context"] }
-ripemd     = "0.1"           <span class="comment"># RIPEMD-160 (Bitcoin address)</span>
-bs58       = "0.5"           <span class="comment"># Base58Check encoding</span>
-tokio      = { version = "1", features = ["full"] }  <span class="comment"># async P2P</span>
-hmac       = "0.12"          <span class="comment"># HMAC-SHA512 (BIP32 HD wallet)</span>
-pbkdf2     = { version = "0.12", features = ["hmac"] }  <span class="comment"># BIP39 mnemonic</span>
-rocksdb    = "0.21"          <span class="comment"># v4.2: persistent chain + UTXO storage</span>
-axum       = "0.7"           <span class="comment"># v4.4: REST API (GET /chain, POST /tx, ...)</span></pre>
+<!-- ═══ TXS PAGE ══════════════════════════════════════════════════ -->
+<div id="txs-page" class="page">
+  <div class="main-wrap">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon item-icon-tx">💸</div>
+          All Transactions
+        </div>
+        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
+      </div>
+      <div id="allTxs"></div>
+    </div>
   </div>
-</section>
+</div>
 
-<!-- ═══════════════════════════════════════════════════════════ FOOTER -->
+<!-- ═══ STATS PAGE ════════════════════════════════════════════════ -->
+<div id="stats-page" class="page">
+  <div class="main-wrap">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon" style="background:rgba(176,127,240,.15);color:var(--purple);border:1px solid rgba(176,127,240,.25);">📊</div>
+          Network Statistics
+        </div>
+        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
+      </div>
+      <div id="statsContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BLOCK DETAIL ══════════════════════════════════════════════ -->
+<div id="block-detail" class="page">
+  <div class="main-wrap">
+    <div class="detail-back" onclick="showBlocks()">← Back to Blocks</div>
+    <div id="blockDetailContent"></div>
+  </div>
+</div>
+
+<!-- ═══ TX DETAIL ═════════════════════════════════════════════════ -->
+<div id="tx-detail" class="page">
+  <div class="main-wrap">
+    <div class="detail-back" onclick="showTxs()">← Back to Transactions</div>
+    <div id="txDetailContent"></div>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ════════════════════════════════════════════════════ -->
 <footer>
-  <div class="container">
-    <p style="font-size:1.1rem; font-weight:700; margin-bottom:8px;" data-i18n="footer-title">
-      🦀 Blockchain Rust — 2009 → 2036+
-    </p>
-    <p style="margin-bottom:16px;" data-i18n="footer-stats">
-      58+ versions &bull; 12+ eras &bull; 136/136 tests &bull; 0 errors &bull; 0 warnings
-    </p>
-    <p>
-      <a href="https://github.com/TuyenPKT/blockchain-rust">⭐ GitHub: TuyenPKT/blockchain-rust</a> &bull;
-      Built with Rust edition 2021 &bull;
-      Testnet: <a href="https://oceif.com">oceif.com</a> (<code style="font-size:.78rem">seed.testnet.oceif.com:18333</code>)
-    </p>
-    <p style="margin-top:10px; font-size:.78rem;">
-      Tham chiếu: <a href="https://github.com/bitcoin/bips">Bitcoin BIPs</a> &bull;
-      <a href="https://csrc.nist.gov/projects/post-quantum-cryptography">NIST PQC</a> &bull;
-      <a href="https://www.w3.org/TR/did-core/">W3C DID</a> &bull;
-      <a href="https://github.com/cosmos/ibc">IBC Protocol</a>
-    </p>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <div class="nav-logo-icon" style="width:24px;height:24px;font-size:11px;">P</div>
+      PKTScan
+    </div>
+    <div>PKT Blockchain Explorer — built with <a href="https://github.com/tuyennguyen/blockchain-rust">blockchain-rust</a></div>
+    <div>© 2026 PKTScan</div>
   </div>
 </footer>
 
 <script>
-(function () {
-  'use strict';
+/* ── MOCK DATA ─────────────────────────────────────────────── */
+const ADDRS = [
+  '1KgwuW1giVnAHgsJmE9SBMRxMmRo5CVDc5',
+  '1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf4a',
+  '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+  '1CounterpartyXXXXXXXXXXXXXXXUWLpVr',
+  '1PKTPool1minexxxxxxxxxxxxxxxxxxxxx',
+  '1PKT2nodexxxxxxxxxxxxxxxxxxxxxxxxxxW',
+];
 
-  /* ── THEME ─────────────────────────────────────────── */
-  var THEME_KEY = 'br_theme';
+function rndAddr() { return ADDRS[Math.floor(Math.random() * ADDRS.length)]; }
+function rndHash(len=64) {
+  const hex = '0123456789abcdef';
+  return Array.from({length: len}, () => hex[Math.floor(Math.random()*16)]).join('');
+}
+function shortHash(h) { return h.slice(0,10)+'…'+h.slice(-8); }
+function shortAddr(a) { return a.slice(0,8)+'…'+a.slice(-6); }
+function ago(secs) {
+  if (secs < 60) return secs + 's ago';
+  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
+  return Math.floor(secs/3600) + 'h ago';
+}
 
-  function getTheme() {
-    var s = localStorage.getItem(THEME_KEY);
-    if (s === 'light' || s === 'dark') return s;
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  }
+let BASE_HEIGHT = 850412;
+let blocks = [];
+let txs = [];
+let tickInterval;
 
-  function applyTheme(t) {
-    document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : '');
-    localStorage.setItem(THEME_KEY, t);
-    var btn = document.getElementById('themeBtn');
-    if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
-  }
-
-  window.doToggleTheme = function () {
-    var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-    applyTheme(cur === 'light' ? 'dark' : 'light');
-  };
-
-  /* ── I18N ──────────────────────────────────────────── */
-  var LANG_KEY = 'br_lang';
-
-  var LANG_META = {
-    vi: '🇻🇳', en: '🇬🇧', zh: '🇨🇳', ja: '🇯🇵', ko: '🇰🇷',
-    es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪', pt: '🇵🇹', ru: '🇷🇺',
-    ar: '🇸🇦', hi: '🇮🇳', id: '🇮🇩', th: '🇹🇭', tr: '🇹🇷',
-    it: '🇮🇹', nl: '🇳🇱', pl: '🇵🇱', uk: '🇺🇦', fa: '🇮🇷'
-  };
-
-  var I18N = {
-    vi: {
-      'hero-badge':   '🦀 Rust · PKT Native · Mã nguồn mở',
-      'hero-h1-span': 'từ đầu',
-      'hero-sub':     'Xây dựng một blockchain hoàn chỉnh bằng Rust — từ Bitcoin Genesis block đến PKT Native Chain với PacketCrypt PoW, REST API, RocksDB storage, và Testnet. 58+ versions. 12+ eras. Không thư viện blockchain.',
-      'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Tệp nguồn', 'stat-test': 'Tests pass',
-      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2036+', 'btn-gh': '⭐ GitHub',
-      'why-h2': 'Tại sao dự án này?', 'why-tag': 'Giới thiệu',
-      'why-sub': 'Mỗi version là một bài học riêng biệt — đọc code là đọc lịch sử blockchain.',
-      'feat1-title': 'Build from scratch',
-      'feat2-title': 'Incremental — mỗi version build trên version trước',
-      'feat2-desc': 'v0.1 là Bitcoin Genesis. v1.1 thêm SegWit. v3.9 tích hợp tất cả. Không viết lại — chỉ mở rộng.',
-      'feat3-title': 'Cryptography thực tế',
-      'feat3-desc': 'ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — triển khai chi tiết từng thuật toán.',
-      'feat4-title': 'Post-Quantum ready',
-      'feat4-desc': 'Era 8 implement đầy đủ NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM và Hybrid ECDSA∧Dilithium migration path.',
-      'feat5-title': 'Ecosystem hiện đại',
-      'feat5-desc': 'IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup với DA layer — những công nghệ đang thực sự production năm 2030.',
-      'feat6-title': 'Code là tài liệu',
-      'qs-h2': 'Quick Start', 'qs-tag': 'Cài đặt',
-      'qs-sub': 'Yêu cầu: Rust 1.75+ và Cargo. Không cần dependencies ngoài.',
-      'qs-step1': 'Clone repository', 'qs-step2': 'Cài Rust (nếu chưa có)',
-      'qs-step3': 'Xem help & version timeline', 'qs-step4': 'Tạo ví PKT & bắt đầu đào',
-      'qs-step5': 'Chạy P2P node (tùy chọn)', 'qs-step5-desc': 'Mở 2 terminal để test mạng ngang hàng:',
-      'tl-h2': 'Journey Timeline', 'tl-sub': 'Mỗi era là một bước tiến lớn trong lịch sử blockchain.',
-      'stack-h2': '2036+ Blockchain Stack',
-      'stack-sub': '7 tầng bảo mật độc lập — tấn công một tầng không phá vỡ toàn bộ hệ thống.',
-      'sec-h2': 'Security Layer Stack',
-      'sec-sub': 'Mỗi tầng bảo vệ một threat model khác nhau — hệ thống an toàn ngay cả khi một tầng bị compromised.',
-      'sec-col1': 'Tầng', 'sec-col2': 'Cơ chế', 'sec-col3': 'Bảo vệ chống', 'sec-col4': 'Mức độ',
-      'sec-hybrid-prot': 'Phải phá cả 2 cùng lúc',
-      'explore-h2': 'Khám phá từng module',
-      'explore-sub': 'Mỗi file trong src/ là một version độc lập — đọc tuần tự để theo dõi sự tiến hóa.',
-      'dep-h2': 'Dependencies',
-      'dep-sub': 'Minimal dependencies — chỉ cryptographic primitives cốt lõi, không có blockchain framework.',
-      'footer-title': '🦀 Blockchain Rust — 2009 → 2036+',
-      'footer-stats': '58+ versions • 12+ eras • 136/136 tests • 0 errors • 0 warnings'
-    },
-    en: {
-      'hero-badge':   '🦀 Rust · PKT Native · Open Source',
-      'hero-h1-span': 'from scratch',
-      'hero-sub':     'Build a complete blockchain in Rust — from Bitcoin Genesis block to PKT Native Chain with PacketCrypt PoW, REST API, RocksDB storage, and Testnet. 58+ versions. 12+ eras. No blockchain libraries.',
-      'stat-ver': 'Versions', 'stat-era': 'Eras', 'stat-src': 'Src files', 'stat-test': 'Tests pass',
-      'btn-qs': '⚡ Quick Start', 'btn-tl': '📜 Timeline', 'btn-stack': '🔒 Stack 2036+', 'btn-gh': '⭐ GitHub',
-      'why-h2': 'Why this project?', 'why-tag': 'About',
-      'why-sub': 'Each version is a standalone lesson — reading the code is reading blockchain history.',
-      'feat1-title': 'Build from scratch',
-      'feat2-title': 'Incremental — each version builds on the previous',
-      'feat2-desc': 'v0.1 is Bitcoin Genesis. v1.1 adds SegWit. v3.9 integrates everything. No rewrites — only extensions.',
-      'feat3-title': 'Real-world Cryptography',
-      'feat3-desc': 'ECDSA secp256k1, Schnorr BIP340, Taproot, ZK-SNARK Groth16, CRYSTALS-Dilithium, ML-KEM/KYBER, FHE-LWE — detailed implementation of each algorithm.',
-      'feat4-title': 'Post-Quantum ready',
-      'feat4-desc': 'Era 8 fully implements NIST FIPS 203/204/205: Dilithium, SPHINCS+, ML-KEM and Hybrid ECDSA∧Dilithium migration path.',
-      'feat5-title': 'Modern Ecosystem',
-      'feat5-desc': 'IBC cross-chain, W3C DID, FHE privacy contracts, ZK-Rollup, zkEVM, Sovereign Rollup with DA layer — technologies actually in production by 2030.',
-      'feat6-title': 'Code as documentation',
-      'qs-h2': 'Quick Start', 'qs-tag': 'Install',
-      'qs-sub': 'Requires: Rust 1.75+ and Cargo. No external dependencies needed.',
-      'qs-step1': 'Clone repository', 'qs-step2': 'Install Rust (if not yet)',
-      'qs-step3': 'View help & version timeline', 'qs-step4': 'Create PKT wallet & start mining',
-      'qs-step5': 'Run P2P node (optional)', 'qs-step5-desc': 'Open 2 terminals to test peer-to-peer networking:',
-      'tl-h2': 'Journey Timeline', 'tl-sub': 'Each era is a major leap in blockchain history.',
-      'stack-h2': '2036+ Blockchain Stack',
-      'stack-sub': '7 independent security layers — compromising one layer does not break the entire system.',
-      'sec-h2': 'Security Layer Stack',
-      'sec-sub': 'Each layer protects against a different threat model — the system stays secure even if one layer is compromised.',
-      'sec-col1': 'Layer', 'sec-col2': 'Mechanism', 'sec-col3': 'Protects against', 'sec-col4': 'Level',
-      'sec-hybrid-prot': 'Must break both simultaneously',
-      'explore-h2': 'Explore each module',
-      'explore-sub': 'Each file in src/ is a standalone version — read sequentially to trace the evolution.',
-      'dep-h2': 'Dependencies',
-      'dep-sub': 'Minimal dependencies — only core cryptographic primitives, no blockchain framework.',
-      'footer-title': '🦀 Blockchain Rust — 2009 → 2036+',
-      'footer-stats': '58+ versions • 12+ eras • 136/136 tests • 0 errors • 0 warnings'
-    }
-  };
-
-  function applyLang(code) {
-    if (!LANG_META[code]) code = 'vi';
-    localStorage.setItem(LANG_KEY, code);
-    document.documentElement.lang = code;
-    document.documentElement.dir = (code === 'ar' || code === 'fa') ? 'rtl' : 'ltr';
-
-    var flagEl = document.getElementById('langFlag');
-    if (flagEl) flagEl.textContent = LANG_META[code] || '🌐';
-
-    var selectEl = document.getElementById('langSelect');
-    if (selectEl) selectEl.value = code;
-
-    /* Apply translations — fallback to 'vi' if lang not in I18N */
-    var t = I18N[code] || I18N['vi'];
-    document.querySelectorAll('[data-i18n]').forEach(function (el) {
-      var key = el.getAttribute('data-i18n');
-      if (t[key] !== undefined) el.textContent = t[key];
+function genBlocks(n=20) {
+  blocks = [];
+  for (let i = 0; i < n; i++) {
+    const height = BASE_HEIGHT - i;
+    const nTxs = Math.floor(Math.random() * 12) + 1;
+    blocks.push({
+      height,
+      hash: '0000' + rndHash(60),
+      prevHash: '0000' + rndHash(60),
+      timestamp: Date.now() - i * 60000 - Math.random() * 15000,
+      txCount: nTxs,
+      miner: rndAddr(),
+      reward: 50,
+      difficulty: 4,
+      nonce: Math.floor(Math.random() * 9999999),
+      size: Math.floor(Math.random() * 800 + 200),
     });
   }
+}
 
-  window.doChangeLang = applyLang;
+function genTxs(n=20) {
+  txs = [];
+  for (let i = 0; i < n; i++) {
+    const amount = +(Math.random() * 200 + 0.001).toFixed(6);
+    const fee    = +(Math.random() * 0.01).toFixed(6);
+    const isCoinbase = i % 7 === 0;
+    txs.push({
+      txid:      rndHash(64),
+      blockHeight: BASE_HEIGHT - Math.floor(i / 3),
+      timestamp: Date.now() - i * 18000 - Math.random() * 5000,
+      from:      isCoinbase ? 'coinbase' : rndAddr(),
+      to:        rndAddr(),
+      amount,
+      fee:       isCoinbase ? 0 : fee,
+      isCoinbase,
+    });
+  }
+}
 
-  /* ── INIT ──────────────────────────────────────────── */
-  applyTheme(getTheme());
-  applyLang(localStorage.getItem(LANG_KEY) || 'vi');
-
-  /* Watch OS-level theme changes */
-  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function (e) {
-    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
-  });
+/* ── THEME ──────────────────────────────────────────────────── */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? '' : 'light');
+  document.getElementById('themeBtn').textContent = isLight ? '☀️' : '🌙';
+  localStorage.setItem('pkt-theme', isLight ? '' : 'light');
+}
+(function initTheme() {
+  const t = localStorage.getItem('pkt-theme') || '';
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
 })();
+
+/* ── TICKER ─────────────────────────────────────────────────── */
+function buildTicker() {
+  const items = [
+    `📦 Block #${BASE_HEIGHT.toLocaleString()}`,
+    `⚡ 4.23 PH/s`,
+    `💰 50 PKT reward`,
+    `🌐 2,847 nodes`,
+    `🔄 Difficulty 4`,
+    `⏱ 60s block time`,
+    `💸 24.7M total txs`,
+    `🔐 BLAKE3 PoW`,
+    `🛡 Post-Quantum ready`,
+    `📦 Block #${BASE_HEIGHT.toLocaleString()}`,
+    `⚡ 4.23 PH/s`,
+    `💰 50 PKT reward`,
+    `🌐 2,847 nodes`,
+    `🔄 Difficulty 4`,
+    `⏱ 60s block time`,
+    `💸 24.7M total txs`,
+    `🔐 BLAKE3 PoW`,
+    `🛡 Post-Quantum ready`,
+  ];
+  const el = document.getElementById('tickerInner');
+  el.innerHTML = items.map(t => `<span class="ticker-item">${t}<span class="ticker-sep"> ◆ </span></span>`).join('');
+}
+
+/* ── RENDER BLOCKS ──────────────────────────────────────────── */
+function renderBlockItem(b, container, clickFn) {
+  const secsAgo = Math.floor((Date.now() - b.timestamp) / 1000);
+  const div = document.createElement('div');
+  div.className = 'list-item block-item';
+  div.innerHTML = `
+    <div class="item-icon item-icon-block">#${b.height % 1000}</div>
+    <div class="item-main">
+      <div class="item-primary">#${b.height.toLocaleString()}</div>
+      <div class="item-secondary">${b.txCount} txns &nbsp;·&nbsp; Miner: <span class="addr-short">${shortAddr(b.miner)}</span></div>
+    </div>
+    <div class="item-right">
+      <div class="item-amount">${b.reward} PKT</div>
+      <div class="item-age">${ago(secsAgo)}</div>
+    </div>
+  `;
+  div.onclick = clickFn || (() => showBlockDetail(b));
+  container.appendChild(div);
+}
+
+function renderTxItem(tx, container, clickFn) {
+  const secsAgo = Math.floor((Date.now() - tx.timestamp) / 1000);
+  const div = document.createElement('div');
+  div.className = 'list-item tx-item';
+  div.innerHTML = `
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+        <span class="item-primary">${shortHash(tx.txid)}</span>
+        <span class="badge ${tx.isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${tx.isCoinbase ? 'coinbase' : 'transfer'}</span>
+      </div>
+      <div class="tx-from-to item-secondary">
+        <span class="addr-short">${tx.isCoinbase ? 'coinbase' : shortAddr(tx.from)}</span>
+        <span class="arrow">→</span>
+        <span class="addr-short">${shortAddr(tx.to)}</span>
+      </div>
+    </div>
+    <div class="item-right">
+      <div class="item-amount">${tx.amount.toFixed(4)} PKT</div>
+      <div class="item-age">${ago(secsAgo)}</div>
+    </div>
+  `;
+  div.onclick = clickFn || (() => showTxDetail(tx));
+  container.appendChild(div);
+}
+
+/* ── PAGES ──────────────────────────────────────────────────── */
+function hideAll() {
+  document.getElementById('home-page').style.display = 'none';
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+}
+function showHome() {
+  hideAll();
+  document.getElementById('home-page').style.display = 'block';
+  renderHome();
+}
+function showBlocks() {
+  hideAll();
+  document.getElementById('blocks-page').classList.add('active');
+  const el = document.getElementById('allBlocks');
+  el.innerHTML = '';
+  blocks.forEach(b => renderBlockItem(b, el));
+}
+function showTxs() {
+  hideAll();
+  document.getElementById('txs-page').classList.add('active');
+  const el = document.getElementById('allTxs');
+  el.innerHTML = '';
+  txs.forEach(tx => renderTxItem(tx, el));
+}
+function showStats() {
+  hideAll();
+  document.getElementById('stats-page').classList.add('active');
+  const el = document.getElementById('statsContent');
+  el.innerHTML = '';
+  const rows = [
+    ['Network', 'PKT Mainnet'],
+    ['Algorithm', 'BLAKE3 PacketCrypt PoW'],
+    ['Block Time', '60 seconds'],
+    ['Latest Block', `#${BASE_HEIGHT.toLocaleString()}`],
+    ['Block Reward', '50 PKT (50,000,000,000 paklets)'],
+    ['Halving Interval', '87,600 blocks (~2 years)'],
+    ['Difficulty', '4'],
+    ['Hashrate', '4.23 PH/s'],
+    ['Active Nodes', '2,847'],
+    ['Total Transactions', '24,700,000'],
+    ['Total Supply', '21,000,000,000 PKT'],
+    ['P2P Port', '8333'],
+    ['P2P Protocol', 'TCP (async tokio)'],
+    ['Signature', 'ECDSA + Dilithium (hybrid post-quantum)'],
+    ['Hash Function', 'BLAKE3 (PoW) · SHA-256 (address)'],
+    ['Address Format', 'Base58Check (P2PKH / P2TR)'],
+  ];
+  const div = document.createElement('div');
+  rows.forEach(([k, v]) => {
+    div.innerHTML += `
+      <div class="kv-row">
+        <div class="kv-key">${k}</div>
+        <div class="kv-val normal">${v}</div>
+      </div>`;
+  });
+  el.appendChild(div);
+}
+
+function showBlockDetail(b) {
+  hideAll();
+  document.getElementById('block-detail').classList.add('active');
+  const el = document.getElementById('blockDetailContent');
+  el.innerHTML = `
+    <div class="detail-title">
+      <span>📦 Block <span style="color:var(--blue)">#${b.height.toLocaleString()}</span></span>
+    </div>
+    <div class="panel">
+      <div class="kv-row"><div class="kv-key">Block Height</div><div class="kv-val">${b.height.toLocaleString()}</div></div>
+      <div class="kv-row"><div class="kv-key">Hash</div><div class="kv-val">${b.hash}</div></div>
+      <div class="kv-row"><div class="kv-key">Previous Hash</div><div class="kv-val">${b.prevHash}</div></div>
+      <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${new Date(b.timestamp).toISOString()}</div></div>
+      <div class="kv-row"><div class="kv-key">Transactions</div><div class="kv-val normal">${b.txCount}</div></div>
+      <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${b.nonce.toLocaleString()}</div></div>
+      <div class="kv-row"><div class="kv-key">Difficulty</div><div class="kv-val normal">${b.difficulty}</div></div>
+      <div class="kv-row"><div class="kv-key">Block Reward</div><div class="kv-val normal" style="color:var(--pkt)">${b.reward} PKT</div></div>
+      <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${b.miner}</div></div>
+      <div class="kv-row"><div class="kv-key">Size</div><div class="kv-val normal">${b.size} bytes</div></div>
+    </div>
+  `;
+}
+
+function showTxDetail(tx) {
+  hideAll();
+  document.getElementById('tx-detail').classList.add('active');
+  const el = document.getElementById('txDetailContent');
+  el.innerHTML = `
+    <div class="detail-title">
+      <span>💸 Transaction</span>
+      <span class="hash">${tx.txid}</span>
+    </div>
+    <div class="panel">
+      <div class="kv-row"><div class="kv-key">TxID</div><div class="kv-val">${tx.txid}</div></div>
+      <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${tx.blockHeight.toLocaleString()}</div></div>
+      <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${new Date(tx.timestamp).toISOString()}</div></div>
+      <div class="kv-row"><div class="kv-key">Type</div><div class="kv-val normal"><span class="badge ${tx.isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${tx.isCoinbase ? 'coinbase' : 'transfer'}</span></div></div>
+      <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${tx.from}</div></div>
+      <div class="kv-row"><div class="kv-key">To</div><div class="kv-val" style="color:var(--blue)">${tx.to}</div></div>
+      <div class="kv-row"><div class="kv-key">Amount</div><div class="kv-val normal" style="color:var(--pkt)">${tx.amount.toFixed(8)} PKT</div></div>
+      <div class="kv-row"><div class="kv-key">Fee</div><div class="kv-val normal">${tx.fee.toFixed(8)} PKT</div></div>
+    </div>
+  `;
+}
+
+function renderHome() {
+  const lb = document.getElementById('latestBlocks');
+  const lt = document.getElementById('latestTxs');
+  lb.innerHTML = '';
+  lt.innerHTML = '';
+  blocks.slice(0, 8).forEach(b => renderBlockItem(b, lb));
+  txs.slice(0, 8).forEach(tx => renderTxItem(tx, lt));
+}
+
+/* ── SEARCH ─────────────────────────────────────────────────── */
+function openSearch() {
+  document.getElementById('searchBackdrop').classList.add('open');
+  setTimeout(() => document.getElementById('searchInput').focus(), 50);
+}
+function closeSearch(e) {
+  if (!e || e.target === document.getElementById('searchBackdrop')) {
+    document.getElementById('searchBackdrop').classList.remove('open');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchResults').innerHTML =
+      '<div class="search-empty">Type to search blocks, transactions, or addresses</div>';
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSearch();
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
+});
+
+function doSearch(query) {
+  const q = query.trim().toLowerCase();
+  const el = document.getElementById('searchResults');
+  if (!q) {
+    el.innerHTML = '<div class="search-empty">Type to search blocks, transactions, or addresses</div>';
+    return;
+  }
+  let results = [];
+  // match blocks by height
+  blocks.forEach(b => {
+    if (String(b.height).includes(q) || b.hash.startsWith(q)) {
+      results.push({ type: 'block', label: `Block #${b.height.toLocaleString()}`, value: b.hash, data: b });
+    }
+  });
+  // match txs
+  txs.forEach(tx => {
+    if (tx.txid.startsWith(q)) {
+      results.push({ type: 'tx', label: 'Transaction', value: tx.txid, data: tx });
+    }
+  });
+  // address match
+  ADDRS.forEach(addr => {
+    if (addr.toLowerCase().includes(q)) {
+      results.push({ type: 'address', label: 'Address', value: addr, data: null });
+    }
+  });
+  results = results.slice(0, 6);
+  if (!results.length) {
+    el.innerHTML = '<div class="search-empty">No results found</div>';
+    return;
+  }
+  el.innerHTML = results.map((r, i) => {
+    const icon = r.type === 'block' ? '📦' : r.type === 'tx' ? '💸' : '👤';
+    const cls  = r.type === 'block' ? 'icon-block' : r.type === 'tx' ? 'icon-tx' : 'icon-addr';
+    return `<div class="search-result-item" onclick="selectResult(${i})">
+      <div class="search-result-icon ${cls}">${icon}</div>
+      <div class="search-result-main">
+        <div class="search-result-type">${r.type}</div>
+        <div class="search-result-value">${r.value}</div>
+      </div>
+    </div>`;
+  }).join('');
+  el._results = results;
+}
+
+function selectResult(i) {
+  const results = document.getElementById('searchResults')._results;
+  if (!results) return;
+  const r = results[i];
+  closeSearch();
+  if (r.type === 'block') showBlockDetail(r.data);
+  else if (r.type === 'tx') showTxDetail(r.data);
+}
+
+function heroSearch() {
+  const q = document.getElementById('heroInput').value.trim();
+  if (!q) return;
+  // try block height
+  const height = parseInt(q);
+  if (!isNaN(height)) {
+    const b = blocks.find(x => x.height === height);
+    if (b) { showBlockDetail(b); return; }
+  }
+  // try tx hash prefix
+  const tx = txs.find(x => x.txid.startsWith(q.toLowerCase()));
+  if (tx) { showTxDetail(tx); return; }
+  // fallback: open search modal
+  document.getElementById('searchInput').value = q;
+  openSearch();
+  doSearch(q);
+}
+
+/* ── LIVE UPDATE ─────────────────────────────────────────────── */
+function liveUpdate() {
+  BASE_HEIGHT++;
+  const newBlock = {
+    height:    BASE_HEIGHT,
+    hash:      '0000' + rndHash(60),
+    prevHash:  blocks[0]?.hash || '0000' + rndHash(60),
+    timestamp: Date.now(),
+    txCount:   Math.floor(Math.random() * 12) + 1,
+    miner:     rndAddr(),
+    reward:    50,
+    difficulty: 4,
+    nonce:     Math.floor(Math.random() * 9999999),
+    size:      Math.floor(Math.random() * 800 + 200),
+  };
+  blocks.unshift(newBlock);
+  blocks = blocks.slice(0, 20);
+
+  // add a new tx
+  const newTx = {
+    txid:        rndHash(64),
+    blockHeight: BASE_HEIGHT,
+    timestamp:   Date.now(),
+    from:        rndAddr(),
+    to:          rndAddr(),
+    amount:      +(Math.random() * 200 + 0.001).toFixed(6),
+    fee:         +(Math.random() * 0.01).toFixed(6),
+    isCoinbase:  false,
+  };
+  txs.unshift(newTx);
+  txs = txs.slice(0, 20);
+
+  // update stat bar
+  document.getElementById('stat-height').textContent = BASE_HEIGHT.toLocaleString();
+
+  // re-render home if visible
+  if (document.getElementById('home-page').style.display !== 'none') {
+    renderHome();
+  }
+}
+
+/* ── INIT ────────────────────────────────────────────────────── */
+genBlocks();
+genTxs();
+buildTicker();
+renderHome();
+setInterval(liveUpdate, 60000); // new block every 60s
 </script>
 </body>
 </html>
