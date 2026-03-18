@@ -68,6 +68,7 @@ mod pktscan_api;
 mod pktscan_ws;
 mod address_index;
 mod search_index;
+mod mempool_stats;
 mod reward;
 mod fee_calculator;
 mod token;

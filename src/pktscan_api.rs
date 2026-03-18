@@ -278,21 +278,47 @@ async fn get_address(
 // ─── /api/mempool ─────────────────────────────────────────────────────────────
 
 async fn get_mempool(State(db): State<ScanDb>) -> Json<Value> {
-    let bc = db.lock().await;
-    let entries: Vec<Value> = bc.mempool.entries.values()
+    let bc    = db.lock().await;
+    let stats = crate::mempool_stats::MempoolStats::compute(&bc.mempool);
+
+    // Entries sorted by fee_rate descending
+    let mut sorted: Vec<_> = bc.mempool.entries.values().collect();
+    sorted.sort_by(|a, b| b.fee_rate.partial_cmp(&a.fee_rate).unwrap());
+    let txs: Vec<Value> = sorted.iter()
         .map(|e| json!({
-            "tx_id":      e.tx.tx_id,
-            "fee":        e.fee,
-            "fee_rate":   e.fee_rate,
-            "size_bytes": e.size_bytes,
+            "tx_id":       e.tx.tx_id,
+            "fee":         e.fee,
+            "fee_rate":    e.fee_rate,
+            "size_bytes":  e.size_bytes,
             "is_coinbase": e.tx.is_coinbase,
         }))
         .collect();
 
+    let buckets: Vec<Value> = stats.fee_buckets.iter()
+        .map(|b| json!({
+            "label":       b.label,
+            "count":       b.count,
+            "total_fees":  b.total_fees,
+        }))
+        .collect();
+
     Json(json!({
-        "count":       entries.len(),
-        "total_fees":  bc.mempool.total_pending_fees(),
-        "txs":         entries,
+        "count":             stats.count,
+        "total_fees":        stats.total_fees,
+        "total_size_bytes":  stats.total_size_bytes,
+        "min_fee_rate":      stats.min_fee_rate,
+        "max_fee_rate":      stats.max_fee_rate,
+        "avg_fee_rate":      stats.avg_fee_rate,
+        "fee_percentiles": {
+            "p25": stats.percentiles.p25,
+            "p50": stats.percentiles.p50,
+            "p75": stats.percentiles.p75,
+            "p90": stats.percentiles.p90,
+        },
+        "suggested_fast_fee":    stats.suggested_fast_fee(),
+        "suggested_economy_fee": stats.suggested_economy_fee(),
+        "fee_distribution":  buckets,
+        "txs":               txs,
     }))
 }
 

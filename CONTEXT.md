@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v8.3 ✅ — 389 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v8.4 ✅ — 405 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -72,7 +72,7 @@
 - [x] v8.1 — **Live Feed (WebSocket)**: `src/pktscan_ws.rs` — `WsHub` broadcast channel, `WsEvent` (new_block/new_tx/stats), `/ws` endpoint, `spawn_poller()` 5s interval, merged vào pktscan_api router
 - [x] v8.2 — **Address Page**: `src/address_index.rs` — `TxRecord`, `history_for_addr()`, `AddressIndex::build/history_of`, `output_owner_hex()` helper in utxo.rs; `/api/address/:addr` trả thêm `tx_history` + `tx_count`
 - [x] v8.3 — **Search Engine**: `src/search_index.rs` — `SearchIndex::build/search`, `BlockRef/TxRef/AddrRef`, prefix-match hash/txid, exact height + address lookup; `/api/search?q=&limit=` endpoint
-- [ ] v8.4 — **Mempool Explorer**: `/api/mempool` trả về pending txs, fee distribution, size; PKTScan mempool tab
+- [x] v8.4 — **Mempool Explorer**: `src/mempool_stats.rs` — `MempoolStats::compute`, `FeeBucket` (0-1/1-5/5-10/10-50/50+ sat/byte), `FeePercentiles` (p25/p50/p75/p90), suggested_fast/economy_fee; `/api/mempool` trả thêm fee_distribution + percentiles + sorted txs
 - [ ] v8.5 — **Mining Pool Dashboard**: `/api/pool/stats`, `/api/pool/miners`, tích hợp `mining_pool.rs` vào API
 - [ ] v8.6 — **Chain Analytics**: block time chart, hashrate history, fee market trend; `/api/analytics/:metric`
 - [ ] v8.7 — **Export / Pagination**: cursor-based pagination cho blocks/txs, CSV export, `/api/blocks?from=&limit=`
