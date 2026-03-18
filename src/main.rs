@@ -83,6 +83,7 @@ mod contract_deploy;
 mod defi;
 mod staking;
 mod economics;
+mod zt_middleware;
 
 // ── Entry point ───────────────────────────────────────────────
 //

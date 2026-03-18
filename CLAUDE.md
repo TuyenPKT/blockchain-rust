@@ -9,6 +9,7 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
 
 ## Quy tắc làm việc
 
+- dùng tiếng việt nếu không bắt buộc dùng English
 - Không viết lại code cũ — chỉ thêm file mới hoặc mở rộng file hiện có
 - Mỗi version thêm 1 file mới trong `src/` và thêm `mod <tên>;` vào `main.rs`
 - KHÔNG thêm demo functions — thay vào đó thêm `#[test]` vào `mod tests` trong `main.rs`
@@ -16,6 +17,24 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
 - Không có warnings khi build xong (`cargo build` và `cargo test` đều pass)
 - Khi được hỏi câu hỏi mà không có yêu cầu implement rõ ràng, 
   chỉ giải thích/thảo luận, KHÔNG tự động viết code.
+
+Security — AI-generated Code Guidelines
+
+Không tin code AI mặc định; luôn review thủ công các phần: auth, permission, crypto.
+
+validate input, không raw SQL, không hardcode secret, handle error đầy đủ.
+
+API mặc định read-only; tách node → indexer → DB → API; áp dụng rate limit + API key.
+
+Validate input chặt (format/length), giới hạn query (pagination, range), cache chống DoS.
+
+Dùng tool: cargo audit, clippy, dependency scan.
+
+Không expose internal logic; log không lộ thông tin nhạy cảm.
+
+Viết test cho case lỗi/boundary (invalid input, overflow, spam).
+
+Nguyên tắc: API = data mirror, không phải control layer.
 
 ## Stack
 

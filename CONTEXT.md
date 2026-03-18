@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v8.9 ✅ — 473 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v9.0 ✅ — 502 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -79,8 +79,49 @@
 - [x] v8.8 — **Response Cache**: `src/response_cache.rs` — `ResponseCache{ttl_secs, entries}`, TTL expiry, ETag (BLAKE3 first 16 hex, quoted), `get/set/invalidate/evict_expired/live_count`; `api_cache_middleware` in pktscan_api (GET /api/* only, 304 on ETag match, X-Cache: HIT/MISS header)
 - [x] v8.9 — **Static File Serving**: `GET /` → serve `index.html` từ working dir hoặc built-in fallback HTML với links; `serve()` updated với cache layer + full endpoint list in println; `CacheDb` type exported
 
-### Era 20 — Post-Singularity (v10.x) — hardware-dependent
-- [ ] v10.0–v10.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
+### Era 15 — Read-Only APIs + Zero-Trust Foundation (v9.x)
+_Mô hình: Zero-Trust + Read-Only-First. Mọi GET endpoint có rate limit + request ID + audit log từ v9.0._
+_Nguyên tắc: GET = public (rate-limited) | POST/PUT/DELETE = chỉ mở sau khi auth layer hoàn chỉnh (Era 16)._
+- [x] v9.0 — **ZT Middleware**: `src/zt_middleware.rs` — Zero-Trust layer áp dụng cho TẤT CẢ endpoints: Request-ID header, IP rate limiter, input validator (param length/chars), audit logger (append-only: timestamp/IP/method/path/status)
+- [ ] v9.1 — **Token API** _(GET only)_: `src/token_api.rs` — `GET /api/tokens`, `/api/token/:id`, `/api/token/:id/holders` — expose `TokenRegistry`; tích hợp ZT middleware
+- [ ] v9.2 — **Contract API** _(GET only)_: `src/contract_api.rs` — `GET /api/contracts`, `/api/contract/:addr`, `/api/contract/:addr/state` — expose `ContractStore` + `EvmLite`
+- [ ] v9.3 — **Staking API** _(GET only)_: `src/staking_api.rs` — `GET /api/validators`, `/api/validator/:addr`, `/api/staking/:addr` — expose `StakingPool`
+- [ ] v9.4 — **DeFi API** _(GET only)_: `src/defi_api.rs` — `GET /api/pools`, `/api/pool/:id`, `/api/pool/:id/price` — expose `LiquidityPool` / `DEX`
+- [ ] v9.5 — **Tx Status + Labels**: sửa `pktscan_api.rs` — thêm `status: confirmed/pending`, `confirmations: N` vào `/api/tx/:txid`; `src/address_labels.rs` — `GET /api/labels`, `/api/label/:addr`
+- [ ] v9.6 — **Tx Filter + CORS fix**: sửa `pktscan_api.rs` — filter `/api/txs?min_amount=&max_amount=&since=&until=`; CORS đổi từ `*` → allowlist origin (config-driven)
+- [ ] v9.7 — **WS Subscriptions**: sửa `pktscan_ws.rs` — per-address `/ws?watch=<addr>`; WS token validation (signed query param)
+- [ ] v9.8 — **OpenAPI Spec**: `src/openapi.rs` — `GET /api/openapi.json` — OpenAPI 3.0 spec tự động cho tất cả endpoints
+- [ ] v9.9 — **SDK Generation**: `src/sdk_gen.rs` — `GET /api/sdk/js`, `/api/sdk/ts` — generated client SDK từ OpenAPI spec
+
+### Era 16 — Auth Layer + Fix Core Logic (v10.x)
+_Auth và Audit Log được kéo lên ĐẦU era — write endpoint chỉ mở sau khi v10.0–v10.1 hoàn chỉnh._
+- [ ] v10.0 — **API Auth**: `src/api_auth.rs` — API key system: keygen (`cargo run -- apikey new`), hash lưu file `~/.pkt/api_keys.toml`, `X-API-Key` header validation, role: `read/write/admin`; tích hợp vào ZT middleware
+- [ ] v10.1 — **Audit Log**: `src/audit_log.rs` — append-only structured log mọi request: timestamp/IP/method/path/status/api_key_id/latency_ms; rotate daily; `GET /api/admin/logs` (admin role only)
+- [ ] v10.2 — **EVM Complete**: sửa `evm_lite.rs` — thêm đầy đủ opcodes: Add/Sub/Mul/Div/LT/GT/EQ/Jump/JumpI/CallValue/Caller/Return (hiện chỉ có Push/Stop)
+- [ ] v10.3 — **Contract Persistence**: sửa `contract_state.rs` + `storage.rs` — lưu contract state vào RocksDB, restart không mất
+- [ ] v10.4 — **Token ↔ Chain**: sửa `chain.rs` + `token_tx.rs` — validate token TX khi `add_block`, token balance thực sự thay đổi
+- [ ] v10.5 — **Staking Rewards**: sửa `staking.rs` + `miner.rs` — distribute staking rewards trong coinbase TX mỗi block
+- [ ] v10.6 — **Governance Persistence**: sửa `governance.rs` + `storage.rs` — persist proposals vào RocksDB, implement `execute()` thực sự
+- [ ] v10.7 — **Oracle Verification**: sửa `oracle.rs` — verify ECDSA signature trong `OracleReport`, enforce staleness check
+- [ ] v10.8 — **GraphQL** _(read-only)_: `src/graphql.rs` — endpoint `/graphql` — query linh hoạt; không có mutation cho đến Era 17
+- [ ] v10.9 — **Webhook**: `src/webhook.rs` — outbound HTTP webhook: `new_block/new_tx/address_activity`; yêu cầu `write` role API key
+
+### Era 17 — Write APIs + Production (v11.x)
+_Write endpoint chỉ được thêm sau khi api_auth (v10.0) + audit_log (v10.1) hoàn chỉnh._
+_Read path: `pktscan_api.rs` | Write path: `write_api.rs` — tách biệt kiến trúc._
+- [ ] v11.0 — **Write API** _(POST /tx)_: `src/write_api.rs` — migrate `POST /tx` từ `api.rs` sang authenticated write path: validate input + verify signature + rate limit per key + audit log; yêu cầu `write` role
+- [ ] v11.1 — **Token Write**: thêm vào `write_api.rs` — `POST /api/token/mint`, `POST /api/token/transfer`; yêu cầu `write` role + owner signature
+- [ ] v11.2 — **Contract Write**: thêm vào `write_api.rs` — `POST /api/contract/deploy`, `POST /api/contract/call`; yêu cầu `write` role + gas estimate
+- [ ] v11.3 — **Scam Registry**: `src/scam_registry.rs` — `GET /api/risk/:addr` (public read) + `POST /api/risk/:addr` (admin role only)
+- [ ] v11.4 — **Address Watch**: `src/address_watch.rs` — watch địa chỉ → trigger webhook khi có TX mới; yêu cầu `write` role API key
+- [ ] v11.5 — **Multi-chain**: `src/multi_chain.rs` — multi-chain read-only queries: PKT + ETH/BTC state qua IBC
+- [ ] v11.6 — **CLI Token**: `src/cli_token.rs` — `cargo run -- token create/mint/transfer/balance`; dùng local API key
+- [ ] v11.7 — **CLI Contract**: `src/cli_contract.rs` — `cargo run -- contract deploy/call/state`
+- [ ] v11.8 — **CLI Staking**: `src/cli_staking.rs` — `cargo run -- staking delegate/claim/validators`
+- [ ] v11.9 — **Deploy Config**: `src/deploy_config.rs` — Docker/systemd config generator + frontend embed (`include_bytes!`) + `cargo run -- deploy init`
+
+### Era 20 — Post-Singularity (v12.x) — hardware-dependent
+- [ ] v12.0–v12.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 
 ---
 

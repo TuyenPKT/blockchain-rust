@@ -46,6 +46,7 @@ impl PeerStore {
     /// Tạo PeerStore với đường dẫn mặc định `~/.pkt/peers.txt`
     pub fn default_path() -> Self {
         let path = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(".pkt")

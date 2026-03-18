@@ -643,13 +643,22 @@ pub async fn serve(state: ScanDb, port: u16) {
     ));
     let cache_clone = Arc::clone(&cache_db);
 
+    // v9.0 — Zero-Trust middleware (rate limit + input guard + audit log)
+    let zt = crate::zt_middleware::ZtState::new(
+        crate::zt_middleware::ZtConfig::default(),
+    );
+
     let app = router(Arc::clone(&state))
         .merge(pktscan_ws::ws_router(hub))
         .merge(pool_api::pool_router(pool_db))
         .layer(middleware::from_fn(move |req, next| {
             let c = Arc::clone(&cache_clone);
             api_cache_middleware(c, req, next)
-        }));
+        }))
+        .layer(middleware::from_fn_with_state(
+            zt,
+            crate::zt_middleware::zt_middleware,
+        ));
 
     let addr = format!("0.0.0.0:{}", port);
     println!();
@@ -670,6 +679,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/pool/miners");
     println!("  WS   /ws   (live feed)");
     println!("  Cache TTL: 5 s  (ETag / 304 support)");
+    println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

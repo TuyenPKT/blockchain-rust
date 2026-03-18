@@ -24,7 +24,9 @@ use crate::utxo::UtxoSet;
 // ─── DB path (cùng schema với storage.rs) ─────────────────────────────────────
 
 fn pkt_dir() -> PathBuf {
+    // Unix: $HOME  |  Windows: %USERPROFILE%  |  fallback: current dir
     std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(".pkt")
