@@ -628,12 +628,8 @@ pub async fn serve(state: ScanDb, port: u16) {
     use crate::pktscan_ws;
     use crate::pool_api;
     use crate::token_api;
-    use crate::contract_api;
-    use crate::staking_api;
     use crate::mining_pool::PoolServer;
     use crate::token::TokenRegistry;
-    use crate::smart_contract::ContractRegistry;
-    use crate::staking::StakingPool;
     use std::sync::Arc as StdArc;
 
     let hub = StdArc::new(pktscan_ws::WsHub::new());
@@ -653,16 +649,6 @@ pub async fn serve(state: ScanDb, port: u16) {
         reg
     }));
 
-    // v9.2 — Contract registry (empty; contracts deployed via chain events in future)
-    let contract_db: contract_api::ContractDb = StdArc::new(tokio::sync::Mutex::new(
-        ContractRegistry::new(),
-    ));
-
-    // v9.3 — Staking pool (empty; populated via chain events in future)
-    let staking_db: staking_api::StakingDb = StdArc::new(tokio::sync::Mutex::new(
-        StakingPool::new(),
-    ));
-
     // v8.8 — Response cache (TTL = 5 s)
     let cache_db: CacheDb = Arc::new(Mutex::new(
         crate::response_cache::ResponseCache::new(5),
@@ -678,8 +664,6 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(pktscan_ws::ws_router(hub))
         .merge(pool_api::pool_router(pool_db))
         .merge(token_api::token_router(token_db))
-        .merge(contract_api::contract_router(contract_db))
-        .merge(staking_api::staking_router(staking_db))
         .layer(middleware::from_fn(move |req, next| {
             let c = Arc::clone(&cache_clone);
             api_cache_middleware(c, req, next)
@@ -710,14 +694,6 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/token/:id");
     println!("  GET  /api/token/:id/holders?limit=20");
     println!("  GET  /api/token/:id/balance/:addr");
-    println!("  GET  /api/contracts");
-    println!("  GET  /api/contract/:addr");
-    println!("  GET  /api/contract/:addr/state");
-    println!("  GET  /api/contract/:addr/state/:key");
-    println!("  GET  /api/staking/stats");
-    println!("  GET  /api/staking/validators");
-    println!("  GET  /api/staking/validator/:addr");
-    println!("  GET  /api/staking/delegator/:addr");
     println!("  WS   /ws   (live feed)");
     println!("  Cache TTL: 5 s  (ETag / 304 support)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");

@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v9.0.1 ✅ — 550 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v9.3 ✅ — 619 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -82,10 +82,11 @@
 ### Era 15 — Read-Only APIs + Zero-Trust Foundation (v9.x)
 _Mô hình: Zero-Trust + Read-Only-First. Mọi GET endpoint có rate limit + request ID + audit log từ v9.0._
 _Nguyên tắc: GET = public (rate-limited) | POST/PUT/DELETE = chỉ mở sau khi auth layer hoàn chỉnh (Era 16)._
-- [x] v9.0 — **ZT Middleware**: `src/zt_middleware.rs` — Zero-Trust layer áp dụng cho TẤT CẢ endpoints: Request-ID header, IP rate limiter, input validator (param length/chars), audit logger (append-only: timestamp/IP/method/path/status)
-- [ ] v9.1 — **Token API** _(GET only)_: `src/token_api.rs` — `GET /api/tokens`, `/api/token/:id`, `/api/token/:id/holders` — expose `TokenRegistry`; tích hợp ZT middleware
-- [ ] v9.2 — **Contract API** _(GET only)_: `src/contract_api.rs` — `GET /api/contracts`, `/api/contract/:addr`, `/api/contract/:addr/state` — expose `ContractStore` + `EvmLite`
-- [ ] v9.3 — **Staking API** _(GET only)_: `src/staking_api.rs` — `GET /api/validators`, `/api/validator/:addr`, `/api/staking/:addr` — expose `StakingPool`
+- [x] v9.0 — **ZT Middleware**: `src/zt_middleware.rs` — Zero-Trust layer áp dụng cho TẤT CẢ endpoints: Request-ID header, IP rate limiter (100 req/60s per IP), input validator (path ≤256, query ≤512, no null byte, no `../`), audit logger append-only `~/.pkt/audit.log`; tích hợp vào `pktscan_api::serve()` qua `from_fn_with_state`
+- [x] v9.0.1 — **Ed25519 HD Wallet** _(SLIP-0010)_: `src/ed25519_wallet.rs` — BIP39 mnemonic → PBKDF2-SHA512 seed → SLIP-0010 master key → hardened derivation (tất cả path components phải hardened) → Ed25519 keypair → PKT address (base58, version=0x50, SHA256+checksum); `trait Signer` + `HotSigner` (ZeroizeOnDrop) + `ColdSigner` (callback) + `MockSigner`; `WalletTx` hash/sign/verify; `HdWallet::derive_addresses(chain_id, account, count)`; deps: `ed25519-dalek=2`, `zeroize=1`, `rand_core=0.6`; **chưa có CLI/API** — dùng qua Rust API, CLI planned Era 17 v11.6
+- [x] v9.1 — **Token API** _(GET only)_: `src/token_api.rs` — `GET /api/tokens`, `/api/token/:id`, `/api/token/:id/holders`, `/api/token/:id/balance/:addr` — expose `TokenRegistry`; tích hợp ZT middleware — **21 tests**
+- [x] v9.2 — **Contract API** _(GET only)_: `src/contract_api.rs` — `GET /api/contracts`, `/api/contract/:addr`, `/api/contract/:addr/state`, `/api/contract/:addr/state/:key` — expose `ContractRegistry` (`WasmRuntime`); tích hợp ZT middleware — **23 tests**
+- [x] v9.3 — **Staking API** _(GET only)_: `src/staking_api.rs` — `GET /api/staking/stats`, `/api/staking/validators`, `/api/staking/validator/:addr`, `/api/staking/delegator/:addr` — expose `StakingPool`; tích hợp ZT middleware — **25 tests**
 - [ ] v9.4 — **DeFi API** _(GET only)_: `src/defi_api.rs` — `GET /api/pools`, `/api/pool/:id`, `/api/pool/:id/price` — expose `LiquidityPool` / `DEX`
 - [ ] v9.5 — **Tx Status + Labels**: sửa `pktscan_api.rs` — thêm `status: confirmed/pending`, `confirmations: N` vào `/api/tx/:txid`; `src/address_labels.rs` — `GET /api/labels`, `/api/label/:addr`
 - [ ] v9.6 — **Tx Filter + CORS fix**: sửa `pktscan_api.rs` — filter `/api/txs?min_amount=&max_amount=&since=&until=`; CORS đổi từ `*` → allowlist origin (config-driven)

@@ -85,6 +85,9 @@ mod staking;
 mod economics;
 mod zt_middleware;
 mod ed25519_wallet;
+mod token_api;
+mod contract_api;
+mod staking_api;
 
 // ── Entry point ───────────────────────────────────────────────
 //
