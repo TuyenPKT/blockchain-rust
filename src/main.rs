@@ -84,6 +84,7 @@ mod defi;
 mod staking;
 mod economics;
 mod zt_middleware;
+mod ed25519_wallet;
 
 // ── Entry point ───────────────────────────────────────────────
 //

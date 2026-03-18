@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v9.0 ✅ — 502 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v9.0.1 ✅ — 550 tests pass, 0 errors, 0 warnings**
 
 ---
 
