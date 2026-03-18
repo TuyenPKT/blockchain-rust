@@ -71,8 +71,11 @@ impl MempoolStats {
             };
         }
 
-        let mut rates: Vec<f64> = mp.entries.values().map(|e| e.fee_rate).collect();
-        rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut rates: Vec<f64> = mp.entries.values()
+            .map(|e| e.fee_rate)
+            .filter(|r| r.is_finite() && *r >= 0.0)
+            .collect();
+        rates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let min_fee_rate = rates.first().copied().unwrap_or(0.0);
         let max_fee_rate = rates.last().copied().unwrap_or(0.0);
@@ -91,6 +94,7 @@ impl MempoolStats {
         }).collect();
 
         for entry in mp.entries.values() {
+            if !entry.fee_rate.is_finite() || entry.fee_rate < 0.0 { continue; }
             for bucket in &mut buckets {
                 if entry.fee_rate >= bucket.min_rate && entry.fee_rate < bucket.max_rate {
                     bucket.count      += 1;

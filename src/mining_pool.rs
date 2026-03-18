@@ -199,6 +199,9 @@ impl PoolServer {
         }
         self.total_shares_in_round += 1;
 
+        // Auto-retarget per-miner difficulty after each accepted share
+        self.retarget_miner(&share.miner_id.clone());
+
         // Block solution?
         if expected_hash.starts_with(&"0".repeat(self.block_difficulty)) {
             self.blocks_found += 1;
@@ -213,18 +216,34 @@ impl PoolServer {
 
     /// Tính payout tỷ lệ thuận với số shares trong round.
     /// Gọi sau khi BlockFound — reset counter sau đó.
+    /// Satoshi dư do float truncation được cộng vào miner có nhiều shares nhất.
     pub fn payout(&self, total_reward: u64) -> HashMap<String, u64> {
         if self.total_shares_in_round == 0 {
             return HashMap::new();
         }
-        self.miners.iter()
-            .filter(|(_, m)| m.shares > 0)
-            .map(|(id, m)| {
-                let share = m.shares as f64 / self.total_shares_in_round as f64;
-                let reward = (total_reward as f64 * share) as u64;
-                (id.clone(), reward)
-            })
-            .collect()
+        let mut result: HashMap<String, u64> = HashMap::new();
+        let mut distributed: u64 = 0;
+        let mut max_shares:  u64 = 0;
+        let mut max_miner         = String::new();
+
+        for (id, m) in self.miners.iter().filter(|(_, m)| m.shares > 0) {
+            let share  = m.shares as f64 / self.total_shares_in_round as f64;
+            let reward = (total_reward as f64 * share) as u64;
+            result.insert(id.clone(), reward);
+            distributed += reward;
+            if m.shares > max_shares {
+                max_shares = m.shares;
+                max_miner  = id.clone();
+            }
+        }
+
+        // Distribute leftover satoshis (float truncation) to highest-share miner
+        let leftover = total_reward.saturating_sub(distributed);
+        if leftover > 0 && !max_miner.is_empty() {
+            *result.entry(max_miner).or_insert(0) += leftover;
+        }
+
+        result
     }
 
     /// Reset shares sau khi tìm block và phát payout.

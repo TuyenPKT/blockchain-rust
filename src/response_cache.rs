@@ -51,7 +51,9 @@ impl ResponseCache {
     }
 
     /// Store or replace the entry for `key`.
+    /// Evicts all expired entries first to prevent unbounded memory growth.
     pub fn set(&mut self, key: String, body: String) {
+        self.evict_expired();
         let etag = Self::make_etag(&body);
         self.entries.insert(key, CacheEntry {
             etag,

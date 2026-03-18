@@ -159,7 +159,7 @@ pub async fn api_cache_middleware(
                 r.headers_mut().insert("X-Cache", HeaderValue::from_static("MISS"));
                 r
             }
-            Err(_) => Response::from_parts(parts, Body::empty()),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     } else {
         response

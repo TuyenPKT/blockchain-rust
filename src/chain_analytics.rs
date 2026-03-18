@@ -115,10 +115,11 @@ pub fn block_time_series(chain: &[Block], window: usize) -> AnalyticsSeries {
     }
 }
 
-/// Estimated network hashrate (H/s) computed at each block using a 5-block rolling window.
+/// Estimated network hashrate (H/s) computed at each block using a rolling window.
+/// Rolling smoothing uses up to 5 blocks, capped by `window` so small windows stay consistent.
 pub fn hashrate_series(chain: &[Block], difficulty: usize, window: usize) -> AnalyticsSeries {
     let tail = tail_blocks(chain, window);
-    let roll  = 5_usize;
+    let roll  = window.min(5).max(1);
 
     let points: Vec<DataPoint> = tail.iter().enumerate().map(|(i, block)| {
         let start = i.saturating_sub(roll - 1);
