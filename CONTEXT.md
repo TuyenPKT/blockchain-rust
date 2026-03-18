@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v8.4 ✅ — 405 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v8.5 ✅ — 420 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -73,7 +73,7 @@
 - [x] v8.2 — **Address Page**: `src/address_index.rs` — `TxRecord`, `history_for_addr()`, `AddressIndex::build/history_of`, `output_owner_hex()` helper in utxo.rs; `/api/address/:addr` trả thêm `tx_history` + `tx_count`
 - [x] v8.3 — **Search Engine**: `src/search_index.rs` — `SearchIndex::build/search`, `BlockRef/TxRef/AddrRef`, prefix-match hash/txid, exact height + address lookup; `/api/search?q=&limit=` endpoint
 - [x] v8.4 — **Mempool Explorer**: `src/mempool_stats.rs` — `MempoolStats::compute`, `FeeBucket` (0-1/1-5/5-10/10-50/50+ sat/byte), `FeePercentiles` (p25/p50/p75/p90), suggested_fast/economy_fee; `/api/mempool` trả thêm fee_distribution + percentiles + sorted txs
-- [ ] v8.5 — **Mining Pool Dashboard**: `/api/pool/stats`, `/api/pool/miners`, tích hợp `mining_pool.rs` vào API
+- [x] v8.5 — **Mining Pool Dashboard**: `src/pool_api.rs` — `PoolDb = Arc<Mutex<PoolServer>>`, `pool_router()`, `GET /api/pool/stats` (blocks_found, hashrate, shares, miners count), `GET /api/pool/miners` (per-miner shares/hashrate/payout_est sorted desc); merged vào serve()
 - [ ] v8.6 — **Chain Analytics**: block time chart, hashrate history, fee market trend; `/api/analytics/:metric`
 - [ ] v8.7 — **Export / Pagination**: cursor-based pagination cho blocks/txs, CSV export, `/api/blocks?from=&limit=`
 - [ ] v8.8 — **PKTScan Performance**: response cache (TTL 5s), connection pool RocksDB, ETag/304, gzip

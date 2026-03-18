@@ -413,13 +413,20 @@ pub fn avg_block_time_secs(chain: &[crate::block::Block]) -> f64 {
 
 pub async fn serve(state: ScanDb, port: u16) {
     use crate::pktscan_ws;
+    use crate::pool_api;
+    use crate::mining_pool::PoolServer;
     use std::sync::Arc as StdArc;
 
     let hub = StdArc::new(pktscan_ws::WsHub::new());
     pktscan_ws::spawn_poller(StdArc::clone(&hub), Arc::clone(&state), 5);
 
+    let pool_db = StdArc::new(tokio::sync::Mutex::new(
+        PoolServer::new(state.lock().await.difficulty),
+    ));
+
     let app  = router(Arc::clone(&state))
-        .merge(pktscan_ws::ws_router(hub));
+        .merge(pktscan_ws::ws_router(hub))
+        .merge(pool_api::pool_router(pool_db));
     let addr = format!("0.0.0.0:{}", port);
     println!();
     println!("  PKTScan API  →  http://localhost:{}", port);
@@ -430,6 +437,9 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/tx/:txid");
     println!("  GET  /api/address/:addr");
     println!("  GET  /api/mempool");
+    println!("  GET  /api/search?q=");
+    println!("  GET  /api/pool/stats");
+    println!("  GET  /api/pool/miners");
     println!("  WS   /ws   (live feed)");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
