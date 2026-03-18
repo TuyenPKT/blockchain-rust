@@ -62,6 +62,7 @@ mod gpu_miner;
 mod opencl_kernel;
 mod cuda_kernel;
 mod mining_pool;
+mod simd_hash;
 mod reward;
 mod fee_calculator;
 mod token;
