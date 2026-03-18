@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v9.3 ✅ — 619 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v9.6 ✅ — 678 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -87,9 +87,9 @@ _Nguyên tắc: GET = public (rate-limited) | POST/PUT/DELETE = chỉ mở sau k
 - [x] v9.1 — **Token API** _(GET only)_: `src/token_api.rs` — `GET /api/tokens`, `/api/token/:id`, `/api/token/:id/holders`, `/api/token/:id/balance/:addr` — expose `TokenRegistry`; tích hợp ZT middleware — **21 tests**
 - [x] v9.2 — **Contract API** _(GET only)_: `src/contract_api.rs` — `GET /api/contracts`, `/api/contract/:addr`, `/api/contract/:addr/state`, `/api/contract/:addr/state/:key` — expose `ContractRegistry` (`WasmRuntime`); tích hợp ZT middleware — **23 tests**
 - [x] v9.3 — **Staking API** _(GET only)_: `src/staking_api.rs` — `GET /api/staking/stats`, `/api/staking/validators`, `/api/staking/validator/:addr`, `/api/staking/delegator/:addr` — expose `StakingPool`; tích hợp ZT middleware — **25 tests**
-- [ ] v9.4 — **DeFi API** _(GET only)_: `src/defi_api.rs` — `GET /api/pools`, `/api/pool/:id`, `/api/pool/:id/price` — expose `LiquidityPool` / `DEX`
-- [ ] v9.5 — **Tx Status + Labels**: sửa `pktscan_api.rs` — thêm `status: confirmed/pending`, `confirmations: N` vào `/api/tx/:txid`; `src/address_labels.rs` — `GET /api/labels`, `/api/label/:addr`
-- [ ] v9.6 — **Tx Filter + CORS fix**: sửa `pktscan_api.rs` — filter `/api/txs?min_amount=&max_amount=&since=&until=`; CORS đổi từ `*` → allowlist origin (config-driven)
+- [x] v9.4 — **DeFi API** _(GET only)_: `src/defi_api.rs` — `GET /api/defi/feeds`, `/api/defi/feed/:id`, `/api/defi/feed/:id/history`, `/api/defi/loans`, `/api/defi/loans/liquidatable` — expose `OracleRegistry` + `LendingProtocol`; tích hợp ZT middleware — **27 tests**
+- [x] v9.5 — **Tx Status + Labels**: sửa `pktscan_api.rs` — thêm `status: confirmed/pending`, `confirmations: N` vào `/api/tx/:txid` + mempool lookup; `src/address_labels.rs` — `GET /api/labels`, `/api/label/:addr`, `/api/labels/category/:cat` — **22 tests**
+- [x] v9.6 — **Tx Filter + CORS Allowlist**: sửa `pktscan_api.rs` — `TxFilterParams` với `min_amount/max_amount/since/until`, `total_filtered` trong response; `CorsConfig` allowlist thay `*`, `is_allowed()` check per-request Origin header; CORS layer move từ `router()` vào `serve()` qua closure — **20 tests** (+10 mới)
 - [ ] v9.7 — **WS Subscriptions**: sửa `pktscan_ws.rs` — per-address `/ws?watch=<addr>`; WS token validation (signed query param)
 - [ ] v9.8 — **OpenAPI Spec**: `src/openapi.rs` — `GET /api/openapi.json` — OpenAPI 3.0 spec tự động cho tất cả endpoints
 - [ ] v9.9 — **SDK Generation**: `src/sdk_gen.rs` — `GET /api/sdk/js`, `/api/sdk/ts` — generated client SDK từ OpenAPI spec

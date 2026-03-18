@@ -88,6 +88,8 @@ mod ed25519_wallet;
 mod token_api;
 mod contract_api;
 mod staking_api;
+mod defi_api;
+mod address_labels;
 
 // ── Entry point ───────────────────────────────────────────────
 //
