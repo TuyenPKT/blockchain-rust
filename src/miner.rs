@@ -300,6 +300,10 @@ impl Miner {
         match node_rpc(&node, &Message::NewBlock { block: block.clone() }) {
             Some(Message::Height { height: tip }) => {
                 println!("  [miner] ✅ Block #{} accepted  node_height={}", block.index, tip);
+                // Persist earnings to local RocksDB
+                if let Err(e) = crate::storage::add_mined_earnings(&self.cfg.address, earned) {
+                    eprintln!("  [miner] ⚠️  Cannot save balance: {}", e);
+                }
             }
             _ => {
                 println!("  [miner] ⚠️  Không nhận được ack từ node (block vẫn có thể đã được nhận)");

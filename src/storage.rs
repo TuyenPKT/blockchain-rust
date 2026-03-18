@@ -243,6 +243,34 @@ pub fn save_blockchain(bc: &Blockchain) -> Result<(), String> {
     crate::wal::atomic_save(bc)
 }
 
+// ─── Balance tracker ──────────────────────────────────────────────────────────
+
+/// Key schema: balance:{address_hex}
+fn balance_key(address: &str) -> String { format!("balance:{}", address) }
+
+/// Cộng thêm số paklets đã earn vào balance của address (cumulative)
+pub fn add_mined_earnings(address: &str, earned: u64) -> Result<(), String> {
+    let db  = open_db()?;
+    let key = balance_key(address);
+    let current = db.get(key.as_bytes())
+        .map_err(|e| e.to_string())?
+        .and_then(|v| std::str::from_utf8(&v).ok().and_then(|s| s.parse::<u64>().ok()))
+        .unwrap_or(0);
+    let new_balance = current.saturating_add(earned);
+    db.put(key.as_bytes(), new_balance.to_string().as_bytes())
+        .map_err(|e| e.to_string())
+}
+
+/// Đọc balance tích luỹ từ DB (trả về 0 nếu chưa có)
+pub fn load_mined_balance(address: &str) -> u64 {
+    let Ok(db) = open_db() else { return 0; };
+    let key = balance_key(address);
+    db.get(key.as_bytes()).ok()
+        .flatten()
+        .and_then(|v| std::str::from_utf8(&v).ok().and_then(|s| s.parse::<u64>().ok()))
+        .unwrap_or(0)
+}
+
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 /// Xóa toàn bộ DB (dùng cho tests và hard reset)

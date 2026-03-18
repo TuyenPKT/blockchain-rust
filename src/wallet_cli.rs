@@ -124,6 +124,9 @@ pub fn cmd_wallet_show() {
             let pk       = PublicKey::from_secret_key(&secp, &sk);
             let hash_hex = pubkey_to_hash_hex(&pk);
 
+            let balance_paklets = crate::storage::load_mined_balance(&hash_hex);
+            let balance_pkt     = balance_paklets as f64 / 1_000_000_000.0;
+
             println!();
             println!("╔══════════════════════════════════════════════════════════════╗");
             println!("║                    PKT Wallet Info                          ║");
@@ -131,6 +134,7 @@ pub fn cmd_wallet_show() {
             println!();
             println!("  Address      : {}", address);
             println!("  Pubkey hash  : {}", hash_hex);
+            println!("  Balance      : {} paklets  ({:.9} PKT)", balance_paklets, balance_pkt);
             println!("  Wallet file  : {:?}", wallet_path());
             println!();
             println!("  ⛏  Mine đến ví này:");

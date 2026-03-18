@@ -61,6 +61,7 @@ mod validator;
 mod gpu_miner;
 mod opencl_kernel;
 mod cuda_kernel;
+mod mining_pool;
 mod reward;
 mod fee_calculator;
 mod token;
@@ -146,6 +147,9 @@ fn main() {
         Some("blake3") => {
             blake3_hash::cmd_blake3_bench();
         }
+        Some("reward") => {
+            reward::cmd_reward_info();
+        }
         Some("cpumine") => {
             let addr = args.get(2).map(|s| s.as_str()).unwrap_or("0000000000000000000000000000000000000000");
             let diff = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(2usize);
@@ -222,6 +226,7 @@ fn print_help() {
     println!("    cargo run -- blake3                  BLAKE3 vs SHA-256 benchmark");
     println!("    cargo run -- cpumine [addr] [d] [n]  CPU multi-thread miner (diff=d, n blocks)");
     println!("    cargo run -- gpumine [addr] [d] [n] [backend]  GPU miner (software|opencl|cuda)");
+    println!("    cargo run -- reward                  xem halving schedule + tổng cung PKT");
     println!("    cargo test                           chạy integration tests");
     println!();
 
@@ -478,7 +483,7 @@ mod tests {
         let tx = Transaction::coinbase("aabbccddee112233445566778899aabbccddee11", 5000);
         assert_eq!(tx.fee, 0);
         // Tổng output = subsidy + total_fee
-        assert_eq!(tx.total_output(), 50_000_000_00u64 + 5000);
+        assert_eq!(tx.total_output(), 50_000_000_000u64 + 5000); // 50 PKT subsidy at height=0
     }
 
     // ── Mempool ───────────────────────────────────────────────────────────────
@@ -892,7 +897,7 @@ mod tests {
 
     #[test]
     fn test_storage_save_and_load_chain() {
-        let _lock = STORAGE_LOCK.lock().unwrap();
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::storage;
         use crate::chain::Blockchain;
 
@@ -921,7 +926,7 @@ mod tests {
 
     #[test]
     fn test_storage_save_and_load_utxo() {
-        let _lock = STORAGE_LOCK.lock().unwrap();
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::storage;
         use crate::chain::Blockchain;
 
@@ -946,7 +951,7 @@ mod tests {
 
     #[test]
     fn test_storage_no_snapshot_returns_genesis() {
-        let _lock = STORAGE_LOCK.lock().unwrap();
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::storage;
 
         // Xóa snapshot trước
@@ -1560,10 +1565,10 @@ mod tests {
 
     #[test]
     fn test_wal_status_fresh_db() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::wal::{wal_status, RecoveryStatus};
         use crate::chain::Blockchain;
 
-        // Blockchain mới (không có DB) → Fresh (test không ghi DB, không cần lock)
         let bc = Blockchain::new();
         let mut bc_mut = bc;
         let status = crate::wal::check_and_recover(&mut bc_mut);
@@ -1573,7 +1578,7 @@ mod tests {
 
     #[test]
     fn test_wal_epoch_is_even_after_save() {
-        let _lock = STORAGE_LOCK.lock().unwrap(); // serialize với storage tests
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner()); // serialize với storage tests
         use crate::wal::{atomic_save, wal_status};
         use crate::chain::Blockchain;
 

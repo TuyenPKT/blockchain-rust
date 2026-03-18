@@ -14,8 +14,8 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
 - KHÔNG thêm demo functions — thay vào đó thêm `#[test]` vào `mod tests` trong `main.rs`
 - Cập nhật `CONTEXT.md` sau mỗi version: đánh dấu `[x]`, cập nhật version hiện tại, ghi quyết định thiết kế và lỗi gặp phải
 - Không có warnings khi build xong (`cargo build` và `cargo test` đều pass)
-- Cập nhật index.html 
-- Cập nhật TODO.MD
+- Khi được hỏi câu hỏi mà không có yêu cầu implement rõ ràng, 
+  chỉ giải thích/thảo luận, KHÔNG tự động viết code.
 
 ## Stack
 

@@ -124,8 +124,8 @@ mod tests {
     #[test]
     fn test_validate_coinbase_valid() {
         let coinbase = Transaction::coinbase_at("aabbccdd00112233445566778899aabb", 1000, 0);
-        // subsidy = 500_000_000_0, fees=1000
-        let ok = FeeCalculator::validate_coinbase(&coinbase, 5_000_000_000, 1000);
+        // subsidy at height=0 = 50 PKT = 50_000_000_000 paklets
+        let ok = FeeCalculator::validate_coinbase(&coinbase, 50_000_000_000, 1000);
         assert!(ok);
     }
 

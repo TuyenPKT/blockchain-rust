@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v7.9 ✅ — 306/307 tests pass (1 pre-existing cuda_kernel flake), 0 errors, 0 warnings**
+**Version hiện tại: v6.7 ✅ — 318 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -51,7 +51,7 @@
 - [x] v6.4 — **GPU Miner Abstraction**: `GpuBackend { Software, OpenCL, Cuda }`, 1/3 compute units, software fallback (`src/gpu_miner.rs`) 🟡
 - [x] v6.5 — **OpenCL BLAKE3 Kernel**: full 7-round BLAKE3 OCL C kernel, `opencl_mine()`, feature-gated `--features opencl`, CPU rayon fallback (`src/opencl_kernel.rs`) ✅
 - [x] v6.6 — **CUDA BLAKE3 Kernel**: `__global__ blake3_mine`, `atomicCAS`, `CudaConfig`, feature-gated `--features cuda`, CPU rayon fallback (`src/cuda_kernel.rs`) ✅
-- [ ] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, difficulty targeting (`src/mining_pool.rs`) 🟡
+- [x] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, per-miner difficulty retarget, proportional payout (`src/mining_pool.rs`) 🟡
 - [ ] v6.8 — **SIMD Hash**: BLAKE3 batch 4x AVX2 lanes, `cfg(target_feature = "avx2")`, scalar fallback (`src/simd_hash.rs`) 🟢
 - [ ] v6.9 — **Hardware Auto-config**: `HardwareProfile`, detect cores/GPU, `OptimalMinerConfig::from_hardware()`, `cargo run -- hw-info` (`src/hw_config.rs`) 🟢
 

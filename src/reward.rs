@@ -3,7 +3,6 @@
 
 pub const INITIAL_SUBSIDY: u64 = 50_000_000_000; // 50 PKT in satoshi
 pub const HALVING_INTERVAL: u64 = 210_000;
-pub const MAX_SUPPLY: u64 = 21_000_000 * 1_000_000_000; // 21M PKT
 
 #[derive(Debug, Clone)]
 pub struct BlockReward {
@@ -71,28 +70,59 @@ impl RewardEngine {
                 break;
             }
         }
-        supply.min(MAX_SUPPLY)
+        supply
     }
 }
 
 pub fn cmd_reward_info() {
-    println!("=== PKT Block Reward Schedule ===");
-    println!("{:<6} {:<15} {:<20} {:<20}", "Era", "Start Block", "Subsidy (sat)", "Subsidy (PKT)");
-    for era in 0..6u32 {
-        let start_block = era as u64 * HALVING_INTERVAL;
-        let subsidy = RewardEngine::subsidy_at(start_block);
-        let pkt = subsidy as f64 / 1_000_000_000.0;
-        println!("{:<6} {:<15} {:<20} {:<20.4}", era, start_block, subsidy, pkt);
+    const PKT: u64 = 1_000_000_000; // paklets per PKT
+
+    println!();
+    println!("╔══════════════════════════════════════════════════════════════════════╗");
+    println!("║                  PKT Block Reward — Halving Schedule                ║");
+    println!("╚══════════════════════════════════════════════════════════════════════╝");
+    println!();
+    println!("  Max supply    : TBD (chưa quyết định)");
+    println!("  Halving every : {:>14} blocks  (~{:.1} years at 10min/block)",
+        HALVING_INTERVAL,
+        HALVING_INTERVAL as f64 * 600.0 / 86400.0 / 365.25);
+    println!("  Genesis reward: {:>14} PKT / block", INITIAL_SUBSIDY / PKT);
+    println!();
+    println!("  {:<5} {:<12} {:<16} {:<14} {:<14}",
+        "Era", "Start block", "Subsidy (PKT)", "Era total PKT", "Cumul. PKT");
+    println!("  {}", "─".repeat(65));
+
+    let mut cumulative = 0u64;
+    for era in 0u64.. {
+        let start = era * HALVING_INTERVAL;
+        let subsidy = RewardEngine::subsidy_at(start);
+        if subsidy == 0 { break; }
+
+        let era_total = subsidy.saturating_mul(HALVING_INTERVAL);
+        cumulative = cumulative.saturating_add(era_total);
+        println!("  {:<5} {:<12} {:<16} {:<14} {:<14}",
+            era,
+            start,
+            format!("{:.9}", subsidy as f64 / PKT as f64),
+            format!("{:.3}", era_total as f64 / PKT as f64),
+            format!("{:.3}", cumulative as f64 / PKT as f64),
+        );
     }
-    let current_height = 840_000u64;
-    let reward = RewardEngine::calculate(current_height, 50_000);
-    println!("\n--- Current Block (height={}) ---", current_height);
-    println!("Subsidy:     {} sat", reward.subsidy);
-    println!("Fees:        {} sat", reward.fees);
-    println!("Total:       {} sat", reward.total);
-    println!("Halving Era: {}", reward.halving_era);
-    println!("Blocks until next halving: {}", RewardEngine::blocks_until_next_halving(current_height));
-    println!("Estimated supply: {} sat", RewardEngine::estimated_supply(current_height));
+
+    println!("  {}", "─".repeat(65));
+    println!("  Total mined   : {:.3} PKT  (nếu mine đến era cuối)",
+        cumulative as f64 / PKT as f64);
+    println!();
+
+    // Stats tại height hiện tại (ví dụ block đầu tiên)
+    for h in [0u64, 210_000, 420_000, 1_000_000, 5_000_000] {
+        let s = RewardEngine::subsidy_at(h);
+        if s > 0 {
+            println!("  Block #{:<10}: reward = {:.9} PKT  (era {})",
+                h, s as f64 / PKT as f64, RewardEngine::halving_era(h));
+        }
+    }
+    println!();
 }
 
 #[cfg(test)]
@@ -120,9 +150,10 @@ mod tests {
     }
 
     #[test]
-    fn test_total_supply_never_exceeds_max() {
-        let supply = RewardEngine::estimated_supply(21_000_000);
-        assert!(supply <= MAX_SUPPLY, "supply {} > MAX_SUPPLY {}", supply, MAX_SUPPLY);
+    fn test_estimated_supply_increases_with_height() {
+        let s1 = RewardEngine::estimated_supply(210_000);
+        let s2 = RewardEngine::estimated_supply(420_000);
+        assert!(s2 > s1, "supply at 420k should exceed supply at 210k");
     }
 
     #[test]
