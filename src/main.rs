@@ -63,6 +63,8 @@ mod opencl_kernel;
 mod cuda_kernel;
 mod mining_pool;
 mod simd_hash;
+mod hw_config;
+mod pktscan_api;
 mod reward;
 mod fee_calculator;
 mod token;
@@ -147,6 +149,16 @@ fn main() {
         }
         Some("blake3") => {
             blake3_hash::cmd_blake3_bench();
+        }
+        Some("hw-info") => {
+            hw_config::cmd_hw_info();
+        }
+        Some("pktscan") => {
+            let port: u16 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(8080);
+            let bc  = storage::load_or_new();
+            let db  = std::sync::Arc::new(tokio::sync::Mutex::new(bc));
+            let rt  = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(pktscan_api::serve(db, port));
         }
         Some("reward") => {
             reward::cmd_reward_info();

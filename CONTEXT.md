@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v6.8 ✅ — 329 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v8.0 ✅ — 352 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -53,7 +53,7 @@
 - [x] v6.6 — **CUDA BLAKE3 Kernel**: `__global__ blake3_mine`, `atomicCAS`, `CudaConfig`, feature-gated `--features cuda`, CPU rayon fallback (`src/cuda_kernel.rs`) ✅
 - [x] v6.7 — **Mining Pool**: Stratum-like, `PoolServer/Client`, `WorkTemplate`, `Share`, per-miner difficulty retarget, proportional payout (`src/mining_pool.rs`) 🟡
 - [x] v6.8 — **SIMD Hash**: BLAKE3 batch 4x AVX2 lanes, `cfg(target_feature = "avx2")`, scalar fallback, `mine_simd`, `benchmark_simd_vs_scalar` (`src/simd_hash.rs`) 🟢
-- [ ] v6.9 — **Hardware Auto-config**: `HardwareProfile`, detect cores/GPU, `OptimalMinerConfig::from_hardware()`, `cargo run -- hw-info` (`src/hw_config.rs`) 🟢
+- [x] v6.9 — **Hardware Auto-config**: `HardwareProfile`, detect cores/GPU, `CpuTier`, `MinerStrategy`, `OptimalMinerConfig::from_hardware()`, `cargo run -- hw-info` (`src/hw_config.rs`) 🟢
 
 ### Era 13 — Token Economy (v7.x) ✅ Hoàn thành
 - [x] v7.0 — **Block Reward Engine**: `INITIAL_SUBSIDY`, halving schedule, `subsidy_at()`, `estimated_supply()` (`src/reward.rs`) ✅
@@ -66,6 +66,18 @@
 - [x] v7.7 — **DeFi AMM**: `LiquidityPool` x\*y=k, fee, add/remove liquidity, swap, `DEX` (`src/defi.rs`) ✅
 - [x] v7.8 — **Staking & Delegation**: `Validator`, `Stake`, distribute_rewards, slash, APY (`src/staking.rs`) ✅
 - [x] v7.9 — **Economic Model**: `EraParams`, `TokenEconomics`, `Simulator`, project N blocks (`src/economics.rs`) ✅
+
+### Era 14 — PKTScan & API Integration (v8.x)
+- [x] v8.0 — **PKTScan REST Backend**: `src/pktscan_api.rs` — axum server, CORS middleware, `/api/stats`, `/api/blocks`, `/api/block/:height`, `/api/txs`, `/api/tx/:txid`, `/api/address/:addr`, `/api/mempool`, `cargo run -- pktscan [port]`
+- [ ] v8.1 — **Live Feed (WebSocket)**: `src/pktscan_ws.rs` — tokio-tungstenite, broadcast new block/tx events tới PKTScan realtime
+- [ ] v8.2 — **Address Page**: balance, UTXO list, tx history theo địa chỉ; PKTScan render từ `/api/address/:addr`
+- [ ] v8.3 — **Search Engine**: full-text index (height/hash/txid/address prefix), `src/search_index.rs`, `/api/search?q=`
+- [ ] v8.4 — **Mempool Explorer**: `/api/mempool` trả về pending txs, fee distribution, size; PKTScan mempool tab
+- [ ] v8.5 — **Mining Pool Dashboard**: `/api/pool/stats`, `/api/pool/miners`, tích hợp `mining_pool.rs` vào API
+- [ ] v8.6 — **Chain Analytics**: block time chart, hashrate history, fee market trend; `/api/analytics/:metric`
+- [ ] v8.7 — **Export / Pagination**: cursor-based pagination cho blocks/txs, CSV export, `/api/blocks?from=&limit=`
+- [ ] v8.8 — **PKTScan Performance**: response cache (TTL 5s), connection pool RocksDB, ETag/304, gzip
+- [ ] v8.9 — **PKTScan Deploy**: CORS config, static file serve `index.html` từ axum, `cargo run -- pktscan [port]`
 
 ### Era 20 — Post-Singularity (v10.x) — hardware-dependent
 - [ ] v10.0–v10.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
