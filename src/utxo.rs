@@ -105,5 +105,10 @@ impl UtxoSet {
     pub fn total_supply(&self) -> u64 {
         self.utxos.values().map(|o| o.amount).sum()
     }
+
+    /// Returns the owner identifier as hex (pubkey hash 20B or xonly 32B) for `output`, if decodable.
+    pub fn output_owner_hex(output: &TxOutput) -> Option<String> {
+        Self::owner_bytes_of(output).map(hex::encode)
+    }
 }
 

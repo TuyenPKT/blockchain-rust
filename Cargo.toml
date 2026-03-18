@@ -20,8 +20,8 @@ hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 # v4.2.1: RocksDB embedded key-value store
 rocksdb = "0.21"
-# v4.4: REST API
-axum = "0.7"
+# v4.4: REST API / v8.1: WebSocket live feed
+axum = { version = "0.7", features = ["ws"] }
 # v5.6: property-based testing
 proptest = { version = "1.4", optional = true }
 # v5.7: structured logging

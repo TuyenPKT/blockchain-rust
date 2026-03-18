@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v8.0 ✅ — 352 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v8.3 ✅ — 389 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -69,9 +69,9 @@
 
 ### Era 14 — PKTScan & API Integration (v8.x)
 - [x] v8.0 — **PKTScan REST Backend**: `src/pktscan_api.rs` — axum server, CORS middleware, `/api/stats`, `/api/blocks`, `/api/block/:height`, `/api/txs`, `/api/tx/:txid`, `/api/address/:addr`, `/api/mempool`, `cargo run -- pktscan [port]`
-- [ ] v8.1 — **Live Feed (WebSocket)**: `src/pktscan_ws.rs` — tokio-tungstenite, broadcast new block/tx events tới PKTScan realtime
-- [ ] v8.2 — **Address Page**: balance, UTXO list, tx history theo địa chỉ; PKTScan render từ `/api/address/:addr`
-- [ ] v8.3 — **Search Engine**: full-text index (height/hash/txid/address prefix), `src/search_index.rs`, `/api/search?q=`
+- [x] v8.1 — **Live Feed (WebSocket)**: `src/pktscan_ws.rs` — `WsHub` broadcast channel, `WsEvent` (new_block/new_tx/stats), `/ws` endpoint, `spawn_poller()` 5s interval, merged vào pktscan_api router
+- [x] v8.2 — **Address Page**: `src/address_index.rs` — `TxRecord`, `history_for_addr()`, `AddressIndex::build/history_of`, `output_owner_hex()` helper in utxo.rs; `/api/address/:addr` trả thêm `tx_history` + `tx_count`
+- [x] v8.3 — **Search Engine**: `src/search_index.rs` — `SearchIndex::build/search`, `BlockRef/TxRef/AddrRef`, prefix-match hash/txid, exact height + address lookup; `/api/search?q=&limit=` endpoint
 - [ ] v8.4 — **Mempool Explorer**: `/api/mempool` trả về pending txs, fee distribution, size; PKTScan mempool tab
 - [ ] v8.5 — **Mining Pool Dashboard**: `/api/pool/stats`, `/api/pool/miners`, tích hợp `mining_pool.rs` vào API
 - [ ] v8.6 — **Chain Analytics**: block time chart, hashrate history, fee market trend; `/api/analytics/:metric`

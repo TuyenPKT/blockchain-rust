@@ -65,6 +65,15 @@ pub struct PageParams {
 }
 fn default_limit() -> usize { 20 }
 
+#[derive(Debug, Deserialize)]
+pub struct SearchParams {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default = "default_search_limit")]
+    pub limit: usize,
+}
+fn default_search_limit() -> usize { 10 }
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router(state: ScanDb) -> Router {
@@ -76,6 +85,7 @@ pub fn router(state: ScanDb) -> Router {
         .route("/api/tx/:txid",        get(get_tx))
         .route("/api/address/:addr",   get(get_address))
         .route("/api/mempool",         get(get_mempool))
+        .route("/api/search",          get(get_search))
         .layer(middleware::from_fn(cors_layer))
         .with_state(state)
 }
@@ -231,7 +241,7 @@ async fn get_address(
     let bc = db.lock().await;
     let balance = bc.utxo_set.balance_of(&addr);
 
-    // UTXOs thuộc address — dùng utxos_of() public API
+    // Unspent UTXOs
     let utxos: Vec<Value> = bc.utxo_set.utxos_of(&addr).iter()
         .map(|u| json!({
             "tx_id":        u.tx_id,
@@ -240,11 +250,28 @@ async fn get_address(
         }))
         .collect();
 
+    // Full tx history (received outputs, spent + unspent), newest first
+    let tx_history: Vec<Value> = crate::address_index::history_for_addr(
+        &addr, &bc.chain, &bc.utxo_set,
+    )
+    .iter()
+    .map(|r| json!({
+        "tx_id":           r.tx_id,
+        "block_height":    r.block_height,
+        "block_timestamp": r.block_timestamp,
+        "output_index":    r.output_index,
+        "amount":          r.amount,
+        "spent":           r.spent,
+    }))
+    .collect();
+
     Json(json!({
         "address":    addr,
         "balance":    balance,
         "utxo_count": utxos.len(),
         "utxos":      utxos,
+        "tx_count":   tx_history.len(),
+        "tx_history": tx_history,
     }))
 }
 
@@ -266,6 +293,50 @@ async fn get_mempool(State(db): State<ScanDb>) -> Json<Value> {
         "count":       entries.len(),
         "total_fees":  bc.mempool.total_pending_fees(),
         "txs":         entries,
+    }))
+}
+
+// ─── /api/search ──────────────────────────────────────────────────────────────
+
+async fn get_search(
+    State(db):    State<ScanDb>,
+    Query(params): Query<SearchParams>,
+) -> Json<Value> {
+    let bc    = db.lock().await;
+    let limit = params.limit.min(50);
+    let idx   = crate::search_index::SearchIndex::build(&bc.chain);
+    let hits  = idx.search(&params.q, &bc.utxo_set, limit);
+
+    let results: Vec<Value> = hits.iter().map(|r| {
+        use crate::search_index::SearchResult;
+        match r {
+            SearchResult::Block(b) => json!({
+                "kind":      "block",
+                "height":    b.height,
+                "hash":      b.hash,
+                "tx_count":  b.tx_count,
+                "timestamp": b.timestamp,
+            }),
+            SearchResult::Tx(t) => json!({
+                "kind":         "tx",
+                "tx_id":        t.tx_id,
+                "block_height": t.block_height,
+                "is_coinbase":  t.is_coinbase,
+                "fee":          t.fee,
+            }),
+            SearchResult::Address(a) => json!({
+                "kind":       "address",
+                "addr":       a.addr,
+                "balance":    a.balance,
+                "utxo_count": a.utxo_count,
+            }),
+        }
+    }).collect();
+
+    Json(json!({
+        "query":   params.q,
+        "count":   results.len(),
+        "results": results,
     }))
 }
 
@@ -315,7 +386,14 @@ pub fn avg_block_time_secs(chain: &[crate::block::Block]) -> f64 {
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
 pub async fn serve(state: ScanDb, port: u16) {
-    let app  = router(state);
+    use crate::pktscan_ws;
+    use std::sync::Arc as StdArc;
+
+    let hub = StdArc::new(pktscan_ws::WsHub::new());
+    pktscan_ws::spawn_poller(StdArc::clone(&hub), Arc::clone(&state), 5);
+
+    let app  = router(Arc::clone(&state))
+        .merge(pktscan_ws::ws_router(hub));
     let addr = format!("0.0.0.0:{}", port);
     println!();
     println!("  PKTScan API  →  http://localhost:{}", port);
@@ -326,6 +404,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/tx/:txid");
     println!("  GET  /api/address/:addr");
     println!("  GET  /api/mempool");
+    println!("  WS   /ws   (live feed)");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
