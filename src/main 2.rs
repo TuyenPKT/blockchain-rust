@@ -71,8 +71,6 @@ mod search_index;
 mod mempool_stats;
 mod pool_api;
 mod chain_analytics;
-mod pagination;
-mod response_cache;
 mod reward;
 mod fee_calculator;
 mod token;

@@ -1,27 +1,36 @@
 #![allow(dead_code)]
-//! v8.0 — PKTScan REST Backend
+//! v8.9 — PKTScan REST Backend + Response Cache + Static Serving
 //!
 //! Axum server phục vụ `index.html` (PKTScan frontend) với đầy đủ
 //! dữ liệu blockchain qua JSON API.
 //!
 //! Endpoints:
+//!   GET /                         → serve index.html (or built-in fallback)
 //!   GET /api/stats                → network stats
-//!   GET /api/blocks               → latest blocks (limit/offset)
+//!   GET /api/blocks               → latest blocks (limit/offset/cursor)
 //!   GET /api/block/:height        → block detail
-//!   GET /api/txs                  → latest transactions (limit/offset)
+//!   GET /api/txs                  → latest transactions (limit/offset/cursor)
 //!   GET /api/tx/:txid             → transaction detail
-//!   GET /api/address/:addr        → balance + UTXOs
-//!   GET /api/mempool              → pending transactions
+//!   GET /api/address/:addr        → balance + UTXOs + tx history
+//!   GET /api/mempool              → pending transactions + fee stats
+//!   GET /api/search?q=            → search blocks/txs/addresses
+//!   GET /api/analytics/:metric    → chain analytics time series
+//!   GET /api/blocks.csv           → CSV export of blocks
+//!   GET /api/txs.csv              → CSV export of transactions
+//!   GET /api/pool/stats           → mining pool stats
+//!   GET /api/pool/miners          → per-miner breakdown
+//!   WS  /ws                       → live block/tx feed
 //!
+//! Caching: GET /api/* responses are cached for 5 s with ETag/304 support.
 //! CORS: `Access-Control-Allow-Origin: *` cho mọi response
 //! CLI: `cargo run -- pktscan [port]` (default 8080)
 
 use axum::{
     body::Body,
     extract::{Path, Query, Request, State},
-    http::{HeaderValue, StatusCode},
+    http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{Html, IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -32,7 +41,8 @@ use tokio::sync::Mutex;
 
 use crate::chain::Blockchain;
 
-pub type ScanDb = Arc<Mutex<Blockchain>>;
+pub type ScanDb  = Arc<Mutex<Blockchain>>;
+pub type CacheDb = Arc<Mutex<crate::response_cache::ResponseCache>>;
 
 // ─── CORS Middleware ──────────────────────────────────────────────────────────
 
@@ -62,6 +72,9 @@ pub struct PageParams {
     pub limit: usize,
     #[serde(default)]
     pub offset: usize,
+    /// Cursor: start from this block height (inclusive), going backwards.
+    /// Overrides `offset` when present.
+    pub from: Option<u64>,
 }
 fn default_limit() -> usize { 20 }
 
@@ -74,18 +87,120 @@ pub struct SearchParams {
 }
 fn default_search_limit() -> usize { 10 }
 
+#[derive(Debug, Deserialize)]
+pub struct AnalyticsParams {
+    #[serde(default = "default_analytics_window")]
+    pub window: usize,
+}
+fn default_analytics_window() -> usize { 100 }
+
+// ─── Cache Middleware (v8.8) ──────────────────────────────────────────────────
+
+/// Per-request middleware: cache GET /api/* responses for TTL seconds.
+/// Returns 304 Not Modified when the client sends a matching ETag.
+pub async fn api_cache_middleware(
+    cache:   CacheDb,
+    request: Request<Body>,
+    next:    Next,
+) -> Response {
+    // Only cache GET /api/* requests
+    let is_api_get = request.method() == Method::GET
+        && request.uri().path().starts_with("/api/");
+    if !is_api_get {
+        return next.run(request).await;
+    }
+
+    let key = request.uri().to_string();
+
+    // Extract If-None-Match from client
+    let client_etag: Option<String> = request
+        .headers()
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Cache hit?
+    {
+        let guard = cache.lock().await;
+        if let Some(entry) = guard.get(&key) {
+            if client_etag.as_deref() == Some(entry.etag.as_str()) {
+                let mut r = StatusCode::NOT_MODIFIED.into_response();
+                if let Ok(hv) = HeaderValue::from_str(&entry.etag) {
+                    r.headers_mut().insert("ETag", hv);
+                }
+                return r;
+            }
+            let etag  = entry.etag.clone();
+            let body  = entry.body.clone();
+            let mut r = (StatusCode::OK, body).into_response();
+            r.headers_mut().insert("Content-Type", HeaderValue::from_static("application/json"));
+            if let Ok(hv) = HeaderValue::from_str(&etag) {
+                r.headers_mut().insert("ETag", hv);
+            }
+            r.headers_mut().insert("X-Cache", HeaderValue::from_static("HIT"));
+            return r;
+        }
+    }
+
+    // Cache miss — run the real handler
+    let response = next.run(request).await;
+
+    if response.status() == StatusCode::OK {
+        let (parts, body_stream) = response.into_parts();
+        match axum::body::to_bytes(body_stream, 4 * 1024 * 1024).await {
+            Ok(bytes) => {
+                let body_str = String::from_utf8_lossy(&bytes).to_string();
+                let etag     = crate::response_cache::ResponseCache::make_etag(&body_str);
+                cache.lock().await.set(key, body_str);
+                let mut r = Response::from_parts(parts, Body::from(bytes));
+                if let Ok(hv) = HeaderValue::from_str(&etag) {
+                    r.headers_mut().insert("ETag", hv);
+                }
+                r.headers_mut().insert("X-Cache", HeaderValue::from_static("MISS"));
+                r
+            }
+            Err(_) => Response::from_parts(parts, Body::empty()),
+        }
+    } else {
+        response
+    }
+}
+
+// ─── / (static index) v8.9 ───────────────────────────────────────────────────
+
+/// Serve `index.html` from the working directory, or a built-in fallback page.
+async fn serve_index() -> impl IntoResponse {
+    match std::fs::read_to_string("index.html") {
+        Ok(html) => Html(html).into_response(),
+        Err(_) => Html(
+            "<!DOCTYPE html><html><head><title>PKTScan</title></head><body>\
+             <h1>PKTScan</h1>\
+             <p>Place <code>index.html</code> in the working directory to enable the frontend.</p>\
+             <ul>\
+             <li><a href=\"/api/stats\">/api/stats</a></li>\
+             <li><a href=\"/api/blocks\">/api/blocks</a></li>\
+             <li><a href=\"/api/mempool\">/api/mempool</a></li>\
+             </ul></body></html>",
+        ).into_response(),
+    }
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router(state: ScanDb) -> Router {
     Router::new()
-        .route("/api/stats",           get(get_stats))
-        .route("/api/blocks",          get(get_blocks))
-        .route("/api/block/:height",   get(get_block))
-        .route("/api/txs",             get(get_txs))
-        .route("/api/tx/:txid",        get(get_tx))
-        .route("/api/address/:addr",   get(get_address))
-        .route("/api/mempool",         get(get_mempool))
-        .route("/api/search",          get(get_search))
+        .route("/",                           get(serve_index))
+        .route("/api/stats",                  get(get_stats))
+        .route("/api/blocks",                 get(get_blocks))
+        .route("/api/block/:height",          get(get_block))
+        .route("/api/txs",                    get(get_txs))
+        .route("/api/tx/:txid",               get(get_tx))
+        .route("/api/address/:addr",          get(get_address))
+        .route("/api/mempool",                get(get_mempool))
+        .route("/api/search",                 get(get_search))
+        .route("/api/analytics/:metric",      get(get_analytics))
+        .route("/api/blocks.csv",             get(get_blocks_csv))
+        .route("/api/txs.csv",                get(get_txs_csv))
         .layer(middleware::from_fn(cors_layer))
         .with_state(state)
 }
@@ -119,23 +234,32 @@ async fn get_blocks(
     State(db): State<ScanDb>,
     Query(page): Query<PageParams>,
 ) -> Json<Value> {
-    let bc = db.lock().await;
-    let limit  = page.limit.min(100);
-    let offset = page.offset;
-    let total  = bc.chain.len();
+    let bc    = db.lock().await;
+    let limit = page.limit.min(100);
+    let total = bc.chain.len();
 
-    // Trả về blocks mới nhất trước (reverse order)
-    let blocks: Vec<Value> = bc.chain.iter().rev()
-        .skip(offset)
-        .take(limit)
-        .map(block_summary)
-        .collect();
+    let (blocks, next_cursor) = if let Some(from) = page.from {
+        // Cursor-based pagination
+        let slice = crate::pagination::paginate_blocks(&bc.chain, Some(from), limit);
+        let next  = crate::pagination::next_block_cursor(&bc.chain, Some(from), limit);
+        let blks: Vec<Value> = slice.iter().rev().map(block_summary).collect();
+        (blks, next)
+    } else {
+        // Offset-based (legacy)
+        let blks: Vec<Value> = bc.chain.iter().rev()
+            .skip(page.offset)
+            .take(limit)
+            .map(block_summary)
+            .collect();
+        (blks, None)
+    };
 
     Json(json!({
-        "blocks": blocks,
-        "total":  total,
-        "limit":  limit,
-        "offset": offset,
+        "blocks":      blocks,
+        "total":       total,
+        "limit":       limit,
+        "offset":      page.offset,
+        "next_cursor": next_cursor,
     }))
 }
 
@@ -174,29 +298,38 @@ async fn get_txs(
     State(db): State<ScanDb>,
     Query(page): Query<PageParams>,
 ) -> Json<Value> {
-    let bc = db.lock().await;
-    let limit  = page.limit.min(100);
-    let offset = page.offset;
-
-    // Collect all txs newest block first
-    let all_txs: Vec<Value> = bc.chain.iter().rev()
-        .flat_map(|b| b.transactions.iter().map(move |tx| {
-            let mut v = tx_summary(tx);
-            v["block_height"] = json!(b.index);
-            v["block_timestamp"] = json!(b.timestamp);
-            v
-        }))
-        .skip(offset)
-        .take(limit)
-        .collect();
-
+    let bc    = db.lock().await;
+    let limit = page.limit.min(100);
     let total: usize = bc.chain.iter().map(|b| b.transactions.len()).sum();
 
+    let txs: Vec<Value> = if let Some(from) = page.from {
+        crate::pagination::paginate_txs(&bc.chain, Some(from), limit)
+            .iter()
+            .map(|r| {
+                let mut v = tx_summary(r.tx);
+                v["block_height"]    = json!(r.block_height);
+                v["block_timestamp"] = json!(r.block_timestamp);
+                v
+            })
+            .collect()
+    } else {
+        bc.chain.iter().rev()
+            .flat_map(|b| b.transactions.iter().map(move |tx| {
+                let mut v = tx_summary(tx);
+                v["block_height"]    = json!(b.index);
+                v["block_timestamp"] = json!(b.timestamp);
+                v
+            }))
+            .skip(page.offset)
+            .take(limit)
+            .collect()
+    };
+
     Json(json!({
-        "txs":    all_txs,
+        "txs":    txs,
         "total":  total,
         "limit":  limit,
-        "offset": offset,
+        "offset": page.offset,
     }))
 }
 
@@ -366,6 +499,86 @@ async fn get_search(
     }))
 }
 
+// ─── /api/analytics/:metric ───────────────────────────────────────────────────
+
+async fn get_analytics(
+    State(db):       State<ScanDb>,
+    Path(metric):    Path<String>,
+    Query(params):   Query<AnalyticsParams>,
+) -> (StatusCode, Json<Value>) {
+    let bc     = db.lock().await;
+    let window = params.window;
+
+    match crate::chain_analytics::analytics(&metric, &bc.chain, bc.difficulty, window) {
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": format!("unknown metric '{}'. valid: block_time, hashrate, fee_market, difficulty, tx_throughput", metric)
+            })),
+        ),
+        Some(series) => {
+            let points: Vec<Value> = series.points.iter().map(|p| {
+                let mut v = json!({
+                    "height":    p.height,
+                    "timestamp": p.timestamp,
+                    "value":     p.value,
+                });
+                if let Some(v2) = p.value2 {
+                    v["value2"] = json!(v2);
+                }
+                v
+            }).collect();
+
+            (StatusCode::OK, Json(json!({
+                "metric":  series.metric,
+                "label":   series.label,
+                "unit":    series.unit,
+                "window":  series.window,
+                "count":   points.len(),
+                "points":  points,
+            })))
+        }
+    }
+}
+
+// ─── /api/blocks.csv ──────────────────────────────────────────────────────────
+
+async fn get_blocks_csv(
+    State(db):    State<ScanDb>,
+    Query(page):  Query<PageParams>,
+) -> impl IntoResponse {
+    let bc     = db.lock().await;
+    let limit  = page.limit.min(500);
+    let slice  = crate::pagination::paginate_blocks(&bc.chain, page.from, limit);
+    let csv    = crate::pagination::blocks_to_csv(slice);
+    (
+        [
+            ("Content-Type",        "text/csv; charset=utf-8"),
+            ("Content-Disposition", "attachment; filename=\"blocks.csv\""),
+        ],
+        csv,
+    )
+}
+
+// ─── /api/txs.csv ─────────────────────────────────────────────────────────────
+
+async fn get_txs_csv(
+    State(db):    State<ScanDb>,
+    Query(page):  Query<PageParams>,
+) -> impl IntoResponse {
+    let bc    = db.lock().await;
+    let limit = page.limit.min(500);
+    let rows  = crate::pagination::paginate_txs(&bc.chain, page.from, limit);
+    let csv   = crate::pagination::tx_rows_to_csv(&rows);
+    (
+        [
+            ("Content-Type",        "text/csv; charset=utf-8"),
+            ("Content-Disposition", "attachment; filename=\"txs.csv\""),
+        ],
+        csv,
+    )
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn block_summary(block: &crate::block::Block) -> Value {
@@ -424,23 +637,39 @@ pub async fn serve(state: ScanDb, port: u16) {
         PoolServer::new(state.lock().await.difficulty),
     ));
 
-    let app  = router(Arc::clone(&state))
+    // v8.8 — Response cache (TTL = 5 s)
+    let cache_db: CacheDb = Arc::new(Mutex::new(
+        crate::response_cache::ResponseCache::new(5),
+    ));
+    let cache_clone = Arc::clone(&cache_db);
+
+    let app = router(Arc::clone(&state))
         .merge(pktscan_ws::ws_router(hub))
-        .merge(pool_api::pool_router(pool_db));
+        .merge(pool_api::pool_router(pool_db))
+        .layer(middleware::from_fn(move |req, next| {
+            let c = Arc::clone(&cache_clone);
+            api_cache_middleware(c, req, next)
+        }));
+
     let addr = format!("0.0.0.0:{}", port);
     println!();
-    println!("  PKTScan API  →  http://localhost:{}", port);
+    println!("  PKTScan  →  http://localhost:{}", port);
+    println!("  GET  /                              (index.html / fallback)");
     println!("  GET  /api/stats");
-    println!("  GET  /api/blocks?limit=20&offset=0");
+    println!("  GET  /api/blocks?limit=20&from=<height>");
     println!("  GET  /api/block/:height");
-    println!("  GET  /api/txs?limit=20&offset=0");
+    println!("  GET  /api/txs?limit=20&from=<height>");
     println!("  GET  /api/tx/:txid");
     println!("  GET  /api/address/:addr");
     println!("  GET  /api/mempool");
     println!("  GET  /api/search?q=");
+    println!("  GET  /api/analytics/:metric?window=100");
+    println!("  GET  /api/blocks.csv");
+    println!("  GET  /api/txs.csv");
     println!("  GET  /api/pool/stats");
     println!("  GET  /api/pool/miners");
     println!("  WS   /ws   (live feed)");
+    println!("  Cache TTL: 5 s  (ETag / 304 support)");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
