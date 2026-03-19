@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v10.3 ✅ — 815 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v12.0 ✅ — 1055 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -100,29 +100,32 @@ _Auth và Audit Log được kéo lên ĐẦU era — write endpoint chỉ mở 
 - [x] v10.1 — **Audit Log**: `src/audit_log.rs` — append-only structured log mọi request: timestamp/IP/method/path/status/api_key_id/latency_ms; rotate daily (`~/.pkt/audit/audit-YYYY-MM-DD.log`); `GET /api/admin/logs?date=&limit=&offset=` (admin role only) — **19 tests**
 - [x] v10.2 — **EVM Complete**: sửa `evm_lite.rs` — thêm `CallValue`, `Caller`, `JumpDest`, `IsZero`, `GasLeft`; refactor `execute()` → PC-based loop (Jump/JumpIf thật sự hoạt động); `test_loop_with_jump` verify counter loop — **+13 tests** (22 total)
 - [x] v10.3 — **Contract Persistence**: sửa `storage.rs` — `save_contract_store()` + `load_contract_store()`; key schema `contract:{address}`; `ContractStateData` helper (Vec<hex_key,hex_val> tránh [u8;32] JSON key issue); dùng `STORAGE_LOCK` trong tests — **+5 tests**
-- [ ] v10.4 — **Token ↔ Chain**: sửa `chain.rs` + `token_tx.rs` — validate token TX khi `add_block`, token balance thực sự thay đổi
-- [ ] v10.5 — **Staking Rewards**: sửa `staking.rs` + `miner.rs` — distribute staking rewards trong coinbase TX mỗi block
-- [ ] v10.6 — **Governance Persistence**: sửa `governance.rs` + `storage.rs` — persist proposals vào RocksDB, implement `execute()` thực sự
-- [ ] v10.7 — **Oracle Verification**: sửa `oracle.rs` — verify ECDSA signature trong `OracleReport`, enforce staleness check
-- [ ] v10.8 — **GraphQL** _(read-only)_: `src/graphql.rs` — endpoint `/graphql` — query linh hoạt; không có mutation cho đến Era 17
-- [ ] v10.9 — **Webhook**: `src/webhook.rs` — outbound HTTP webhook: `new_block/new_tx/address_activity`; yêu cầu `write` role API key
+- [x] v10.4 — **Token ↔ Chain**: sửa `chain.rs` + `token_tx.rs` — `Blockchain.token_registry: TokenRegistry`; `apply_token_txs()` gọi trong `mine_block_to_hash()` + `add_block()`; `validate_token_tx()` trong token_tx.rs — **+9 tests**
+- [x] v10.5 — **Staking Rewards**: sửa `staking.rs` + `miner.rs` + `chain.rs` — `collect_block_rewards()` distribute + claim per block; staking outputs thêm vào coinbase TX; `Blockchain.staking_pool` field; `Miner.staking_pool` field — **+5 tests** (829 total)
+- [x] v10.6 — **Governance Persistence**: sửa `governance.rs` + `storage.rs` — thêm serde cho `ProposalState/Action/Vote/Proposal`; `GovernanceSnapshot` + `snapshot()`/`from_snapshot()`; `save_governor()`/`load_governor()` với key `governance:snapshot` — **+5 tests** (834 total)
+- [x] v10.7 — **Oracle Verification**: sửa `oracle.rs` — `OracleReport::signed()` dùng secp256k1 ECDSA thật; `verify()` unified (ECDSA nếu pubkey_hex set, blake3 legacy nếu không); `OracleNode::new(stake)` tự generate keypair; `submit(report, current_time)` enforce staleness; sửa `defi_api.rs` — **+7 tests** (841 total)
+- [x] v10.8 — **GraphQL** _(read-only)_: `src/graphql.rs` — endpoint `GET/POST /graphql`; `async-graphql = "7"` (không dùng axum-crate để tránh conflict); handler thủ công qua `axum::extract::Json`; schema: `chainInfo`, `block`, `blocks`, `balance`, `mempoolCount`, `mempoolTxs`; `EmptyMutation`; merge vào `pktscan_api::serve()` — **+13 tests** (854 total)
+- [x] v10.9 — **Webhook**: `src/webhook.rs` — `WebhookRegistry` register/remove/matching; `sign_payload()` HMAC-SHA256; `deliver()` async HTTP POST với `X-PKT-Signature`; `broadcast()` fire-and-forget; REST: `POST/GET /api/webhooks`, `DELETE /api/webhooks/:id` (write role); `reqwest = "0.12"` — **+18 tests** (872 total)
 
 ### Era 17 — Write APIs + Production (v11.x)
 _Write endpoint chỉ được thêm sau khi api_auth (v10.0) + audit_log (v10.1) hoàn chỉnh._
 _Read path: `pktscan_api.rs` | Write path: `write_api.rs` — tách biệt kiến trúc._
-- [ ] v11.0 — **Write API** _(POST /tx)_: `src/write_api.rs` — migrate `POST /tx` từ `api.rs` sang authenticated write path: validate input + verify signature + rate limit per key + audit log; yêu cầu `write` role
-- [ ] v11.1 — **Token Write**: thêm vào `write_api.rs` — `POST /api/token/mint`, `POST /api/token/transfer`; yêu cầu `write` role + owner signature
-- [ ] v11.2 — **Contract Write**: thêm vào `write_api.rs` — `POST /api/contract/deploy`, `POST /api/contract/call`; yêu cầu `write` role + gas estimate
-- [ ] v11.3 — **Scam Registry**: `src/scam_registry.rs` — `GET /api/risk/:addr` (public read) + `POST /api/risk/:addr` (admin role only)
-- [ ] v11.4 — **Address Watch**: `src/address_watch.rs` — watch địa chỉ → trigger webhook khi có TX mới; yêu cầu `write` role API key
-- [ ] v11.5 — **Multi-chain**: `src/multi_chain.rs` — multi-chain read-only queries: PKT + ETH/BTC state qua IBC
-- [ ] v11.6 — **CLI Token**: `src/cli_token.rs` — `cargo run -- token create/mint/transfer/balance`; dùng local API key
-- [ ] v11.7 — **CLI Contract**: `src/cli_contract.rs` — `cargo run -- contract deploy/call/state`
-- [ ] v11.8 — **CLI Staking**: `src/cli_staking.rs` — `cargo run -- staking delegate/claim/validators`
-- [ ] v11.9 — **Deploy Config**: `src/deploy_config.rs` — Docker/systemd config generator + frontend embed (`include_bytes!`) + `cargo run -- deploy init`
+- [x] v11.0 — **Write API** _(POST /tx)_: `src/write_api.rs` — `WriteRateLimiter` (per-key, 60 req/min); `validate_tx_basic()` (no coinbase, fee>0, non-empty I/O, valid tx_id); `verify_tx_scripts()` public wrapper trong chain.rs; `POST /api/write/tx` (write role required → rate check → validate → script verify → mempool); `WriteState{chain,rate}` — **+15 tests** (887 total)
+- [x] v11.1 — **Token Write**: sửa `write_api.rs` — `MintRequest`/`TransferRequest` + `mint_payload()`/`transfer_payload()` signing domains; `pubkey_hex_to_address()` = RIPEMD160(blake3(pk)); `verify_sig()` ECDSA blake3; `POST /api/write/token/mint` (write role + owner sig → `mint_as_owner()`); `POST /api/write/token/transfer` (write role + sender sig → `transfer()`); webhook.rs unused import fix — **+14 tests** (901 total)
+- [x] v11.2 — **Contract Write**: sửa `write_api.rs` — `DeployRequest`/`CallRequest` + `deploy_payload()`/`call_payload()` signing domains; `template_to_module()` map "counter"/"token"/"voting" → WasmModule; `estimate_gas_for()` tính tổng `WasmInstr::gas_cost()` (no execution); `POST /api/write/contract/deploy` (write role + ECDSA); `POST /api/write/contract/call` (dry_run → gas estimate; live → commit); `WriteState.contract: ContractDb`; pktscan_api.rs clone contract_db — **+14 tests** (915 total)
+- [x] v11.3 — **Scam Registry**: `src/scam_registry.rs` — `RiskLevel` (unknown/safe/low/medium/high/critical, score 0–100); `RiskCategory` (scam/phishing/mixer/exchange/sanctions/ransomware); `ScamRegistry` upsert/get/remove/by_min_level/by_category; `validate_address()` 32–66 hex; `GET /api/risk/:addr` (public → entry or {"level":"unknown"}); `POST /api/risk/:addr` (admin → upsert, 201 if new, 200 if update); `DELETE /api/risk/:addr` (admin); reported_at giữ nguyên khi update — **+22 tests** (937 total)
+- [x] v11.4 — **Address Watch**: `src/address_watch.rs` — `WatchEntry` (id=blake3[8], address, callback_url, api_key_id, last_seen_height); `WatchRegistry` add/remove(owner-only)/by_key/snapshot/update_height; giới hạn 20/key, 500 total, no duplicate; `check_new_activity()` filter height > last_seen; `build_callback_payload()` + `deliver_callback()` reqwest 10s; `spawn_watcher()` tick 30s; `POST /api/watch`, `GET /api/watch`, `DELETE /api/watch/:id` (write role) — **+16 tests** (953 total)
+- [x] v11.5 — **Multi-chain**: `src/multi_chain.rs` — `ChainType` (PKT/ETH/BTC/Custom) + `ChainMeta`; `MultiChainRegistry` register/get/open_connections/open_channels/pending_packets; `default_registry()` pre-seed PKT+ETH+BTC với IBC relayer handshake (connection+channel PKT↔ETH); `ibc.rs` thêm `Relayer::into_chains()`; GET `/api/chains`, `/api/chains/:id`, `/api/chains/:id/clients`, `/api/chains/:id/client/:cid`, `/api/chains/:id/connections`, `/api/chains/:id/channels`, `/api/chains/:id/packets/pending` — **+19 tests** (972 total)
+- [x] v11.6 — **CLI Token**: `src/cli_token.rs` — `cmd_token()` dispatch: create/list/info/mint/transfer/balance; `Token`+`TokenAccount`+`TokenRegistrySnapshot` thêm serde; `TokenRegistry::snapshot()`+`from_snapshot()` tránh tuple-key JSON; `storage::save_token_registry()`+`load_token_registry()` RocksDB key `token:registry`; curl hints REST API; `cargo run -- token ...` — **+15 tests** (987 total)
+- [x] v11.7 — **CLI Contract**: `src/cli_contract.rs` — `cmd_contract()` dispatch: deploy/list/info/call/state/estimate; `ContractInstanceSnapshot`+`ContractRegistrySnapshot` serde trong `smart_contract.rs`; `ContractRegistry::snapshot(tmap)`+`from_snapshot()` rebuild WasmModule từ template name; unknown template skipped khi load; `storage::save_contract_registry()`+`load_contract_registry()` RocksDB key `contract_registry:snapshot`; `call` hỗ trợ args + `--gas N` flag; curl hints REST API; `cargo run -- contract ...` — **+16 tests** (1003 total)
+- [x] v11.8 — **CLI Staking**: `src/cli_staking.rs` — `cmd_staking()` dispatch: validators/register/delegate/undelegate/rewards/claim/info/slash; `Validator`+`Stake`+`StakingPool` thêm serde; `storage::save_staking_pool()`+`load_staking_pool()` RocksDB key `staking:pool`; `delegate()` 5 args (lock_blocks+current_height), `undelegate()` 3 args returns `Result<u64>`; curl hints REST API; `cargo run -- staking ...` — **+18 tests** (1021 total)
+- [x] v11.9 — **Deploy Config**: `src/deploy_config.rs` — `DeployConfig` (app_name/network/ports/data_dir/log_level); `include_bytes!("../index.html")` frontend embed; generators: `dockerfile()`/`docker_compose()`/`systemd_service()`/`env_file()`/`nginx_conf()`; `DeployConfig::for_network()` tự chỉnh ports; JSON roundtrip serde; `cmd_deploy()` dispatch: init/dockerfile/compose/systemd/env/nginx/frontend/config; `deploy init [net]` viết 7 file vào current dir — **+21 tests** (1042 total)
+
+### Era 18 — HD Wallet & UX (v12.x)
+- [x] v12.0 — **HD Wallet CLI**: mở rộng `wallet_cli.rs` — `wallet new` dùng `HdWallet::new()` (BIP39/44) thay keypair thô; file format 3 dòng: `mnemonic\nsk_hex\naddress`; `wallet show` hiển thị 12 từ seed phrase có số thứ tự; `wallet restore <word1>...<word12>` khôi phục ví từ seed phrase; `load_wallet_full()` tự detect format v4.0 (2 dòng) vs v12.0 (3 dòng, dòng 1 chứa spaces); backward compat với wallet cũ — **+13 tests** (1055 total)
 
 ### Era 20 — Post-Singularity (v12.x) — hardware-dependent
-- [ ] v12.0–v12.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
+- [ ] v12.1–v12.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 
 ---
 

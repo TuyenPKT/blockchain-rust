@@ -26,9 +26,10 @@ use rayon::prelude::*;
 
 use crate::block::Block;
 use crate::message::Message;
-use crate::transaction::Transaction;
+use crate::transaction::{Transaction, TxOutput};
 use crate::cpu_miner::default_threads;
 use crate::reward::RewardEngine;
+use crate::staking::StakingPool;
 
 /// Paklets per PKT (1 PKT = 1_000_000_000 paklets)
 const PAKLETS_PER_PKT: u64 = 1_000_000_000;
@@ -228,13 +229,15 @@ fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult
 // ─── Miner ────────────────────────────────────────────────────────────────────
 
 pub struct Miner {
-    pub cfg:   MinerConfig,
-    pub stats: MinerStats,
+    pub cfg:          MinerConfig,
+    pub stats:        MinerStats,
+    /// v10.5 — local staking pool: reward delegators via coinbase outputs each block.
+    pub staking_pool: StakingPool,
 }
 
 impl Miner {
     pub fn new(cfg: MinerConfig) -> Self {
-        Miner { cfg, stats: MinerStats::new() }
+        Miner { cfg, stats: MinerStats::new(), staking_pool: StakingPool::new() }
     }
 
     pub fn run(&mut self) {
@@ -285,7 +288,16 @@ impl Miner {
         let coinbase_reward = RewardEngine::subsidy_at(height);
         let earned          = coinbase_reward + total_fee;
 
-        let coinbase    = Transaction::coinbase_at(&self.cfg.address, total_fee, height);
+        // v10.5 — distribute staking rewards in coinbase TX
+        let staking_payouts = self.staking_pool.collect_block_rewards(coinbase_reward);
+        let mut coinbase    = Transaction::coinbase_at(&self.cfg.address, total_fee, height);
+        for (addr, amount) in &staking_payouts {
+            coinbase.outputs.push(TxOutput::p2pkh(*amount, addr));
+        }
+        if !staking_payouts.is_empty() {
+            coinbase.tx_id  = coinbase.calculate_txid();
+            coinbase.wtx_id = coinbase.calculate_wtxid();
+        }
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
         let mut block   = Block::new(height, all_txs, prev_hash);

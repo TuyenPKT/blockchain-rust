@@ -7,17 +7,25 @@ use crate::script::{Script, ScriptInterpreter};
 use crate::taproot::{TaprootOutput, schnorr_sign, schnorr_verify};
 use crate::covenant::{CtvTemplate, ctv_template_hash};
 use crate::fee_market::FeeEstimator;
+use crate::token::TokenRegistry;
+use crate::token_tx::extract_token_txs;
+use crate::staking::StakingPool;
+use crate::reward::RewardEngine;
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
 const BLOCK_TIME_TARGET_SECS: i64 = 300; // 5 phút = 1/2 Bitcoin (10 phút)
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {
-    pub chain:          Vec<Block>,
-    pub difficulty:     usize,
-    pub utxo_set:       UtxoSet,
-    pub mempool:        Mempool,
-    pub fee_estimator:  FeeEstimator,
+    pub chain:           Vec<Block>,
+    pub difficulty:      usize,
+    pub utxo_set:        UtxoSet,
+    pub mempool:         Mempool,
+    pub fee_estimator:   FeeEstimator,
+    /// v10.4 — Token balances updated on every block via OP_RETURN token TXs.
+    pub token_registry:  TokenRegistry,
+    /// v10.5 — Staking pool: distribute rewards to delegators each block.
+    pub staking_pool:    StakingPool,
 }
 
 impl Blockchain {
@@ -31,6 +39,8 @@ impl Blockchain {
             chain: vec![genesis], difficulty: 3,
             utxo_set: UtxoSet::new(), mempool: Mempool::new(),
             fee_estimator: FeeEstimator::new(),
+            token_registry: TokenRegistry::new(),
+            staking_pool: StakingPool::new(),
         }
     }
 
@@ -470,7 +480,19 @@ impl Blockchain {
 
         let total_fee: u64 = valid_txs.iter().map(|t| t.fee).sum();
         let height   = self.chain.last().map(|b| b.index + 1).unwrap_or(0);
-        let coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
+
+        // v10.5 — staking: distribute block subsidy + add reward outputs to coinbase
+        let subsidy = RewardEngine::subsidy_at(height);
+        let staking_payouts = self.staking_pool.collect_block_rewards(subsidy);
+        let mut coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
+        for (addr, amount) in &staking_payouts {
+            coinbase.outputs.push(TxOutput::p2pkh(*amount, addr));
+        }
+        if !staking_payouts.is_empty() {
+            coinbase.tx_id  = coinbase.calculate_txid();
+            coinbase.wtx_id = coinbase.calculate_wtxid();
+        }
+
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
 
@@ -487,6 +509,7 @@ impl Blockchain {
 
         self.utxo_set.apply_block(&block.transactions);
         self.fee_estimator.record_block(&block.transactions);
+        self.apply_token_txs(&block.transactions);
         self.chain.push(block);
         self.mempool.remove_confirmed(&selected_ids);
     }
@@ -501,7 +524,19 @@ impl Blockchain {
         }
         let total_fee: u64 = valid_txs.iter().map(|t| t.fee).sum();
         let height   = self.chain.last().map(|b| b.index + 1).unwrap_or(0);
-        let coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
+
+        // v10.5 — staking: distribute block subsidy + add reward outputs to coinbase
+        let subsidy = RewardEngine::subsidy_at(height);
+        let staking_payouts = self.staking_pool.collect_block_rewards(subsidy);
+        let mut coinbase = Transaction::coinbase_at(miner_hash, total_fee, height);
+        for (addr, amount) in &staking_payouts {
+            coinbase.outputs.push(TxOutput::p2pkh(*amount, addr));
+        }
+        if !staking_payouts.is_empty() {
+            coinbase.tx_id  = coinbase.calculate_txid();
+            coinbase.wtx_id = coinbase.calculate_wtxid();
+        }
+
         let mut all_txs = vec![coinbase];
         all_txs.extend(valid_txs);
 
@@ -515,7 +550,32 @@ impl Blockchain {
             block.nonce, &block.hash[..12], start.elapsed().as_millis());
         self.utxo_set.apply_block(&block.transactions);
         self.fee_estimator.record_block(&block.transactions);
+        self.apply_token_txs(&block.transactions);
         self.chain.push(block);
+    }
+
+    // ── v10.4 — Token TX processing ───────────────────────────────────────────
+
+    /// Extract OP_RETURN token TXs từ block, validate, và apply vào token_registry.
+    /// Invalid TXs (unknown token, insufficient balance) bị skip — không fail block.
+    pub fn apply_token_txs(&mut self, txs: &[Transaction]) {
+        for ttx in extract_token_txs(txs) {
+            // Validate: token exists
+            if self.token_registry.tokens.get(&ttx.token_id).is_none() {
+                continue;
+            }
+            // Validate: sender has sufficient balance
+            if self.token_registry.balance_of(&ttx.token_id, &ttx.from) < ttx.amount {
+                continue;
+            }
+            // Apply transfer (ignore error — already validated above)
+            let _ = self.token_registry.transfer(&ttx.token_id, &ttx.from, &ttx.to, ttx.amount);
+        }
+    }
+
+    /// v11.0 — public alias for write_api to verify TX signatures before mempool admission
+    pub fn verify_tx_scripts(&self, tx: &Transaction) -> bool {
+        self.validate_tx_script(tx)
     }
 
     fn validate_tx_script(&self, tx: &Transaction) -> bool {

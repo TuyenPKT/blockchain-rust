@@ -22,6 +22,10 @@ pbkdf2 = { version = "0.12", features = ["hmac"] }
 rocksdb = "0.21"
 # v4.4: REST API / v8.1: WebSocket live feed
 axum = { version = "0.7", features = ["ws"] }
+# v10.8: GraphQL read-only API
+async-graphql = { version = "7", features = ["tracing"] }
+# v10.9: Outbound HTTP webhook delivery
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # v5.6: property-based testing
 proptest = { version = "1.4", optional = true }
 # v5.7: structured logging

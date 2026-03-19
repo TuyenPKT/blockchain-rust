@@ -224,8 +224,10 @@ fn try_load_blockchain() -> Result<Option<Blockchain>, String> {
         chain: blocks,
         difficulty,
         utxo_set,
-        mempool:       crate::mempool::Mempool::new(),
+        mempool:        crate::mempool::Mempool::new(),
         fee_estimator,
+        token_registry: crate::token::TokenRegistry::new(),
+        staking_pool:   crate::staking::StakingPool::new(),
     }))
 }
 
@@ -424,4 +426,117 @@ pub fn load_contract_store(
         return Ok(None);
     }
     Ok(Some(store))
+}
+
+// ─── Governance persistence (v10.6) ──────────────────────────────────────────
+
+const GOV_SNAPSHOT_KEY: &[u8] = b"governance:snapshot";
+
+/// Lưu toàn bộ Governor state vào RocksDB dưới một key duy nhất.
+pub fn save_governor(governor: &crate::governance::Governor) -> Result<(), String> {
+    let db  = open_db()?;
+    let snap = governor.snapshot();
+    let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
+    db.put(GOV_SNAPSHOT_KEY, json).map_err(|e| e.to_string())
+}
+
+/// Load Governor từ RocksDB. Trả về `None` nếu chưa có dữ liệu.
+pub fn load_governor() -> Result<Option<crate::governance::Governor>, String> {
+    if !db_path().exists() {
+        return Ok(None);
+    }
+    let db = open_db()?;
+    match db.get(GOV_SNAPSHOT_KEY).map_err(|e| e.to_string())? {
+        None => Ok(None),
+        Some(v) => {
+            let snap: crate::governance::GovernanceSnapshot =
+                serde_json::from_slice(&v).map_err(|e| e.to_string())?;
+            Ok(Some(crate::governance::Governor::from_snapshot(snap)))
+        }
+    }
+}
+
+// ─── ContractRegistry persistence (v11.7) ────────────────────────────────────
+
+const CONTRACT_REGISTRY_KEY: &[u8] = b"contract_registry:snapshot";
+/// Companion map: address → template name (stored alongside registry snapshot).
+const CONTRACT_TMAP_KEY:     &[u8] = b"contract_registry:tmap";
+
+/// Lưu ContractRegistry + template map vào RocksDB.
+pub fn save_contract_registry(
+    reg:  &crate::smart_contract::ContractRegistry,
+    tmap: &HashMap<String, String>,
+) -> Result<(), String> {
+    let db   = open_db()?;
+    let snap = reg.snapshot(tmap);
+    let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
+    db.put(CONTRACT_REGISTRY_KEY, json).map_err(|e| e.to_string())
+}
+
+/// Load ContractRegistry từ RocksDB. Trả về registry rỗng nếu chưa có dữ liệu.
+pub fn load_contract_registry(
+) -> (crate::smart_contract::ContractRegistry, HashMap<String, String>) {
+    let Ok(db) = open_db() else {
+        return (crate::smart_contract::ContractRegistry::new(), HashMap::new());
+    };
+    match db.get(CONTRACT_REGISTRY_KEY) {
+        Ok(Some(v)) => {
+            match serde_json::from_slice::<crate::smart_contract::ContractRegistrySnapshot>(&v) {
+                Ok(snap) => crate::smart_contract::ContractRegistry::from_snapshot(snap),
+                Err(_)   => (crate::smart_contract::ContractRegistry::new(), HashMap::new()),
+            }
+        }
+        _ => (crate::smart_contract::ContractRegistry::new(), HashMap::new()),
+    }
+}
+
+// ─── StakingPool persistence (v11.8) ─────────────────────────────────────────
+
+const STAKING_POOL_KEY: &[u8] = b"staking:pool";
+
+/// Lưu StakingPool vào RocksDB.
+pub fn save_staking_pool(pool: &crate::staking::StakingPool) -> Result<(), String> {
+    let db   = open_db()?;
+    let json = serde_json::to_vec(pool).map_err(|e| e.to_string())?;
+    db.put(STAKING_POOL_KEY, json).map_err(|e| e.to_string())
+}
+
+/// Load StakingPool từ RocksDB. Trả về pool rỗng nếu chưa có dữ liệu.
+pub fn load_staking_pool() -> crate::staking::StakingPool {
+    let Ok(db) = open_db() else {
+        return crate::staking::StakingPool::new();
+    };
+    match db.get(STAKING_POOL_KEY) {
+        Ok(Some(v)) => serde_json::from_slice(&v)
+            .unwrap_or_else(|_| crate::staking::StakingPool::new()),
+        _ => crate::staking::StakingPool::new(),
+    }
+}
+
+// ─── Token Registry persistence (v11.6) ──────────────────────────────────────
+
+const TOKEN_REGISTRY_KEY: &[u8] = b"token:registry";
+
+/// Lưu TokenRegistry vào RocksDB.
+pub fn save_token_registry(reg: &crate::token::TokenRegistry) -> Result<(), String> {
+    let db   = open_db()?;
+    let snap = reg.snapshot();
+    let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
+    db.put(TOKEN_REGISTRY_KEY, json).map_err(|e| e.to_string())
+}
+
+/// Load TokenRegistry từ RocksDB. Trả về registry rỗng nếu chưa có dữ liệu.
+pub fn load_token_registry() -> crate::token::TokenRegistry {
+    let Ok(db) = open_db() else {
+        return crate::token::TokenRegistry::new();
+    };
+    match db.get(TOKEN_REGISTRY_KEY) {
+        Ok(Some(v)) => {
+            match serde_json::from_slice::<crate::token::TokenRegistrySnapshot>(&v) {
+                Ok(snap) => crate::token::TokenRegistry::from_snapshot(snap),
+                Err(_)   => crate::token::TokenRegistry::new(),
+            }
+        }
+        _ => crate::token::TokenRegistry::new(),
+    }
 }

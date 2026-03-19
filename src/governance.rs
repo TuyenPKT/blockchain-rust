@@ -23,6 +23,7 @@
 /// Tham khảo: Compound Governor Bravo, OpenZeppelin Governor, Uniswap governance
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ pub const THRESHOLD_BPS:   u64 = 6000;    // 60% For votes để thắng
 
 // ─── ProposalState ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProposalState {
     Pending,    // chưa đến voting_start
     Active,     // đang vote
@@ -49,7 +50,7 @@ pub enum ProposalState {
 // ─── ProposalAction ───────────────────────────────────────────────────────────
 
 /// Hành động sẽ được thực thi nếu proposal pass
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProposalAction {
     /// Thay đổi 1 parameter của protocol
     SetParameter { key: String, value: u64 },
@@ -82,10 +83,10 @@ impl ProposalAction {
 
 // ─── Vote ─────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum VoteChoice { For, Against, Abstain }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vote {
     pub voter:  String,
     pub choice: VoteChoice,
@@ -95,7 +96,7 @@ pub struct Vote {
 
 // ─── Proposal ─────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
     pub id:           u64,
     pub proposer:     String,
@@ -522,4 +523,83 @@ impl Governor {
         p.state = Self::compute_state(p, block, supply);
         Some(p.state.clone())
     }
+
+    // ── v10.6 — Persistence helpers ──────────────────────────────────────────
+
+    /// Capture mutable state into a serializable snapshot.
+    pub fn snapshot(&self) -> GovernanceSnapshot {
+        GovernanceSnapshot {
+            proposals:          self.proposals.clone(),
+            token_balances:     self.token.balances.clone(),
+            token_delegations:  self.token.delegations.clone(),
+            token_total_supply: self.token.total_supply,
+            timelock_queue:     self.timelock.queue
+                .iter().map(|(k, v)| (k.to_string(), *v)).collect(),
+            timelock_grace_period: self.timelock.grace_period,
+            protocol_params:    self.protocol.parameters.clone(),
+            protocol_treasury:  self.protocol.treasury.clone(),
+            protocol_guardians: self.protocol.guardians.clone(),
+            protocol_contracts: self.protocol.contracts.clone(),
+            protocol_change_log: self.protocol.change_log.clone(),
+            next_id:            self.next_id,
+            current_block:      self.current_block,
+            proposal_threshold: self.proposal_threshold,
+        }
+    }
+
+    /// Restore a `Governor` from a persisted snapshot.
+    pub fn from_snapshot(s: GovernanceSnapshot) -> Self {
+        let timelock_queue: HashMap<u64, u64> = s.timelock_queue
+            .into_iter()
+            .filter_map(|(k, v)| k.parse::<u64>().ok().map(|id| (id, v)))
+            .collect();
+
+        let mut token = TokenLedger::new();
+        token.balances     = s.token_balances;
+        token.delegations  = s.token_delegations;
+        token.total_supply = s.token_total_supply;
+
+        let mut timelock = TimelockQueue::new();
+        timelock.queue        = timelock_queue;
+        timelock.grace_period = s.timelock_grace_period;
+
+        let mut protocol = ProtocolState::new();
+        protocol.parameters = s.protocol_params;
+        protocol.treasury   = s.protocol_treasury;
+        protocol.guardians  = s.protocol_guardians;
+        protocol.contracts  = s.protocol_contracts;
+        protocol.change_log = s.protocol_change_log;
+
+        Governor {
+            proposals:          s.proposals,
+            token,
+            timelock,
+            protocol,
+            next_id:            s.next_id,
+            current_block:      s.current_block,
+            proposal_threshold: s.proposal_threshold,
+        }
+    }
+}
+
+// ─── GovernanceSnapshot ───────────────────────────────────────────────────────
+
+/// v10.6 — Serializable snapshot of all mutable Governor state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceSnapshot {
+    pub proposals:           HashMap<u64, Proposal>,
+    pub token_balances:      HashMap<String, u64>,
+    pub token_delegations:   HashMap<String, String>,
+    pub token_total_supply:  u64,
+    /// Timelock queue as String keys (JSON requires string keys for maps).
+    pub timelock_queue:      HashMap<String, u64>,
+    pub timelock_grace_period: u64,
+    pub protocol_params:     HashMap<String, u64>,
+    pub protocol_treasury:   HashMap<String, u64>,
+    pub protocol_guardians:  Vec<String>,
+    pub protocol_contracts:  HashMap<String, String>,
+    pub protocol_change_log: Vec<String>,
+    pub next_id:             u64,
+    pub current_block:       u64,
+    pub proposal_threshold:  u64,
 }

@@ -535,6 +535,76 @@ impl ContractRegistry {
     }
 }
 
+// ─── ContractRegistrySnapshot (v11.7) ────────────────────────────────────────
+
+use serde::{Serialize, Deserialize};
+
+/// Snapshot của ContractRegistry — dùng để persist/restore qua RocksDB.
+/// Lưu template name để rebuild WasmModule khi load lại.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContractInstanceSnapshot {
+    pub address:      String,
+    pub template:     String,   // "counter" | "token" | "voting"
+    pub creator:      String,
+    pub deploy_block: u64,
+    pub call_count:   u64,
+    pub total_gas:    u64,
+    /// KV storage state: key → i64 value
+    pub storage:      HashMap<String, i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContractRegistrySnapshot {
+    pub contracts:    Vec<ContractInstanceSnapshot>,
+    pub block_height: u64,
+}
+
+impl ContractRegistry {
+    pub fn snapshot(&self, template_map: &HashMap<String, String>) -> ContractRegistrySnapshot {
+        let contracts = self.contracts.values().map(|inst| {
+            let template = template_map.get(&inst.address)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            ContractInstanceSnapshot {
+                address:      inst.address.clone(),
+                template,
+                creator:      inst.creator.clone(),
+                deploy_block: inst.deploy_block,
+                call_count:   inst.call_count,
+                total_gas:    inst.total_gas,
+                storage:      inst.storage.data.clone(),
+            }
+        }).collect();
+        ContractRegistrySnapshot { contracts, block_height: self.block_height }
+    }
+
+    pub fn from_snapshot(snap: ContractRegistrySnapshot) -> (Self, HashMap<String, String>) {
+        let mut reg        = ContractRegistry::new();
+        reg.block_height   = snap.block_height;
+        let mut tmap: HashMap<String, String> = HashMap::new();
+
+        for s in snap.contracts {
+            let module = match s.template.as_str() {
+                "counter" => counter_contract(),
+                "token"   => token_contract(0, 0),
+                "voting"  => voting_contract(),
+                _         => continue,  // unknown template — skip
+            };
+            let mut inst        = ContractInstance::new(module, &s.creator, s.deploy_block);
+            inst.call_count     = s.call_count;
+            inst.total_gas      = s.total_gas;
+            inst.storage.data   = s.storage;
+            // address recalculation may differ — override with saved address
+            tmap.insert(s.address.clone(), s.template.clone());
+            reg.contracts.insert(s.address.clone(), ContractInstance {
+                address: s.address,
+                ..inst
+            });
+        }
+        (reg, tmap)
+    }
+}
+
 // ─── Contract builders ───────────────────────────────────────────────────────
 // Helpers to build common contract patterns
 

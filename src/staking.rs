@@ -2,8 +2,9 @@
 //! v7.8 — Staking & Delegation
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Validator {
     pub address: String,
     pub commission_bps: u32,
@@ -11,7 +12,7 @@ pub struct Validator {
     pub active: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stake {
     pub delegator: String,
     pub validator: String,
@@ -20,7 +21,7 @@ pub struct Stake {
     pub reward_debt: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StakingPool {
     pub validators: HashMap<String, Validator>,
     pub stakes: Vec<Stake>,
@@ -170,6 +171,26 @@ impl StakingPool {
             return 0.0;
         }
         annual_reward as f64 / total as f64 * 100.0
+    }
+
+    /// v10.5 — Distribute `block_reward` and immediately collect claimable amounts.
+    /// Returns `(delegator_address, amount)` pairs with amount > 0.
+    /// Called once per block to auto-pay stakers in the coinbase TX.
+    pub fn collect_block_rewards(&mut self, block_reward: u64) -> Vec<(String, u64)> {
+        self.distribute_rewards(block_reward);
+        // Collect unique delegators
+        let mut delegators: Vec<String> = self.stakes.iter()
+            .map(|s| s.delegator.clone())
+            .collect();
+        delegators.sort();
+        delegators.dedup();
+        // Claim and return non-zero rewards
+        delegators.into_iter()
+            .filter_map(|addr| {
+                let amount = self.claim_rewards(&addr);
+                if amount > 0 { Some((addr, amount)) } else { None }
+            })
+            .collect()
     }
 }
 

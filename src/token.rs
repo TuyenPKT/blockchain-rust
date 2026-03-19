@@ -2,10 +2,11 @@
 //! v7.2 — Token Standard (ERC-20-like)
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 pub type TokenId = String;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     pub id: TokenId,
     pub name: String,
@@ -15,7 +16,7 @@ pub struct Token {
     pub owner: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TokenAccount {
     pub balance: u128,
     pub allowances: HashMap<String, u128>,
@@ -27,12 +28,36 @@ pub struct TokenRegistry {
     pub accounts: HashMap<(TokenId, String), TokenAccount>,
 }
 
+/// Snapshot cho serialization — tránh tuple key không hợp lệ trong JSON.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenRegistrySnapshot {
+    pub tokens:   HashMap<String, Token>,
+    /// (token_id, address, account)
+    pub accounts: Vec<(String, String, TokenAccount)>,
+}
+
 impl TokenRegistry {
     pub fn new() -> Self {
         TokenRegistry {
             tokens: HashMap::new(),
             accounts: HashMap::new(),
         }
+    }
+
+    pub fn snapshot(&self) -> TokenRegistrySnapshot {
+        TokenRegistrySnapshot {
+            tokens:   self.tokens.clone(),
+            accounts: self.accounts.iter()
+                .map(|((tid, addr), acct)| (tid.clone(), addr.clone(), acct.clone()))
+                .collect(),
+        }
+    }
+
+    pub fn from_snapshot(s: TokenRegistrySnapshot) -> Self {
+        let accounts = s.accounts.into_iter()
+            .map(|(tid, addr, acct)| ((tid, addr), acct))
+            .collect();
+        TokenRegistry { tokens: s.tokens, accounts }
     }
 
     pub fn create_token(

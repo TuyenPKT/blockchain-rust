@@ -225,7 +225,7 @@ mod tests {
         let mut btc_feed = OracleFeed::new("BTC/USD", "Bitcoin / US Dollar", 1, 10.0, 3600);
         btc_feed.authorize("node1");
         let report = OracleReport::new("BTC/USD", price_from_f64(50_000.0), 1_000_000, "node1", 1);
-        btc_feed.submit(report).unwrap();
+        btc_feed.submit(report, 1_000_000).unwrap();
         oracle.add_feed(btc_feed);
 
         // Feed 2: ETH/USD (no history yet)
@@ -468,7 +468,7 @@ mod tests {
         let mut feed = OracleFeed::new("BTC/USD", "BTC", 1, 10.0, 3600);
         // Don't authorize "node1"
         let report = OracleReport::new("BTC/USD", price_from_f64(50_000.0), 1_000_000, "node1", 1);
-        let result = feed.submit(report);
+        let result = feed.submit(report, 1_000_000);
         assert!(result.is_err());
     }
 

@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-//! v9.6 — PKTScan REST Backend + Tx Filter + CORS Allowlist
+//! v8.9 — PKTScan REST Backend + Response Cache + Static Serving
 //!
 //! Axum server phục vụ `index.html` (PKTScan frontend) với đầy đủ
 //! dữ liệu blockchain qua JSON API.
@@ -9,8 +9,8 @@
 //!   GET /api/stats                → network stats
 //!   GET /api/blocks               → latest blocks (limit/offset/cursor)
 //!   GET /api/block/:height        → block detail
-//!   GET /api/txs                  → transactions với filter: min_amount/max_amount/since/until
-//!   GET /api/tx/:txid             → transaction detail + status/confirmations
+//!   GET /api/txs                  → latest transactions (limit/offset/cursor)
+//!   GET /api/tx/:txid             → transaction detail
 //!   GET /api/address/:addr        → balance + UTXOs + tx history
 //!   GET /api/mempool              → pending transactions + fee stats
 //!   GET /api/search?q=            → search blocks/txs/addresses
@@ -22,7 +22,7 @@
 //!   WS  /ws                       → live block/tx feed
 //!
 //! Caching: GET /api/* responses are cached for 5 s with ETag/304 support.
-//! CORS: allowlist-based (configurable via CorsConfig), default: localhost:3000/8080 + pktscan.io
+//! CORS: `Access-Control-Allow-Origin: *` cho mọi response
 //! CLI: `cargo run -- pktscan [port]` (default 8080)
 
 use axum::{
@@ -44,61 +44,15 @@ use crate::chain::Blockchain;
 pub type ScanDb  = Arc<Mutex<Blockchain>>;
 pub type CacheDb = Arc<Mutex<crate::response_cache::ResponseCache>>;
 
-// ─── CORS Config + Middleware (v9.6) ─────────────────────────────────────────
+// ─── CORS Middleware ──────────────────────────────────────────────────────────
 
-/// Allowlist-based CORS config.  Default origins: localhost + pktscan.io.
-/// Pass `"*"` as a single entry to allow all origins (wildcard).
-#[derive(Debug, Clone)]
-pub struct CorsConfig {
-    pub allowed_origins: Vec<String>,
-}
-
-impl CorsConfig {
-    pub fn new(origins: Vec<impl Into<String>>) -> Self {
-        CorsConfig { allowed_origins: origins.into_iter().map(|s| s.into()).collect() }
-    }
-
-    /// Allow a specific origin?
-    pub fn is_allowed(&self, origin: &str) -> bool {
-        self.allowed_origins.iter().any(|o| o == "*" || o == origin)
-    }
-}
-
-impl Default for CorsConfig {
-    fn default() -> Self {
-        CorsConfig {
-            allowed_origins: vec![
-                "http://localhost:3000".to_string(),
-                "http://localhost:8080".to_string(),
-                "https://pktscan.io".to_string(),
-            ],
-        }
-    }
-}
-
-pub type CorsState = Arc<CorsConfig>;
-
-/// CORS middleware: reflect allowed origin, reject others (no header set).
-async fn cors_layer(cors: Arc<CorsConfig>, request: Request<Body>, next: Next) -> Response {
-    let origin = request
-        .headers()
-        .get("origin")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-
+async fn cors_layer(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-
-    if origin.is_empty() || cors.is_allowed(&origin) {
-        let allow_val = if origin.is_empty() { "*".to_string() } else { origin };
-        if let Ok(hv) = HeaderValue::from_str(&allow_val) {
-            headers.insert("Access-Control-Allow-Origin", hv);
-        }
-        if !allow_val.eq("*") {
-            headers.insert("Vary", HeaderValue::from_static("Origin"));
-        }
-    }
+    headers.insert(
+        "Access-Control-Allow-Origin",
+        HeaderValue::from_static("*"),
+    );
     headers.insert(
         "Access-Control-Allow-Methods",
         HeaderValue::from_static("GET, OPTIONS"),
@@ -123,25 +77,6 @@ pub struct PageParams {
     pub from: Option<u64>,
 }
 fn default_limit() -> usize { 20 }
-
-/// Query params cho GET /api/txs với bộ lọc bổ sung (v9.6).
-#[derive(Debug, Deserialize)]
-pub struct TxFilterParams {
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default)]
-    pub offset: usize,
-    /// Cursor: bắt đầu từ block height này (giảm dần).
-    pub from: Option<u64>,
-    /// Chỉ trả về txs có output_total >= min_amount (satoshi).
-    pub min_amount: Option<u64>,
-    /// Chỉ trả về txs có output_total <= max_amount (satoshi).
-    pub max_amount: Option<u64>,
-    /// Chỉ trả về txs có block_timestamp >= since (unix seconds).
-    pub since: Option<i64>,
-    /// Chỉ trả về txs có block_timestamp <= until (unix seconds).
-    pub until: Option<i64>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct SearchParams {
@@ -266,6 +201,7 @@ pub fn router(state: ScanDb) -> Router {
         .route("/api/analytics/:metric",      get(get_analytics))
         .route("/api/blocks.csv",             get(get_blocks_csv))
         .route("/api/txs.csv",                get(get_txs_csv))
+        .layer(middleware::from_fn(cors_layer))
         .with_state(state)
 }
 
@@ -360,15 +296,14 @@ async fn get_block(
 
 async fn get_txs(
     State(db): State<ScanDb>,
-    Query(f): Query<TxFilterParams>,
+    Query(page): Query<PageParams>,
 ) -> Json<Value> {
     let bc    = db.lock().await;
-    let limit = f.limit.min(100);
-    let total_unfiltered: usize = bc.chain.iter().map(|b| b.transactions.len()).sum();
+    let limit = page.limit.min(100);
+    let total: usize = bc.chain.iter().map(|b| b.transactions.len()).sum();
 
-    // Collect all candidates (cursor or offset)
-    let candidates: Vec<Value> = if let Some(from) = f.from {
-        crate::pagination::paginate_txs(&bc.chain, Some(from), usize::MAX)
+    let txs: Vec<Value> = if let Some(from) = page.from {
+        crate::pagination::paginate_txs(&bc.chain, Some(from), limit)
             .iter()
             .map(|r| {
                 let mut v = tx_summary(r.tx);
@@ -385,40 +320,16 @@ async fn get_txs(
                 v["block_timestamp"] = json!(b.timestamp);
                 v
             }))
+            .skip(page.offset)
+            .take(limit)
             .collect()
     };
 
-    // Apply filters
-    let filtered: Vec<Value> = candidates.into_iter()
-        .filter(|v| {
-            let amount = v["output_total"].as_u64().unwrap_or(0);
-            let ts     = v["block_timestamp"].as_i64().unwrap_or(0);
-            if let Some(min) = f.min_amount { if amount < min { return false; } }
-            if let Some(max) = f.max_amount { if amount > max { return false; } }
-            if let Some(since) = f.since    { if ts < since   { return false; } }
-            if let Some(until) = f.until    { if ts > until   { return false; } }
-            true
-        })
-        .collect();
-
-    let total_filtered = filtered.len();
-    let txs: Vec<Value> = filtered.into_iter()
-        .skip(f.offset)
-        .take(limit)
-        .collect();
-
     Json(json!({
-        "txs":            txs,
-        "total":          total_unfiltered,
-        "total_filtered": total_filtered,
-        "limit":          limit,
-        "offset":         f.offset,
-        "filter": {
-            "min_amount": f.min_amount,
-            "max_amount": f.max_amount,
-            "since":      f.since,
-            "until":      f.until,
-        },
+        "txs":    txs,
+        "total":  total,
+        "limit":  limit,
+        "offset": page.offset,
     }))
 }
 
@@ -429,49 +340,25 @@ async fn get_tx(
     Path(txid): Path<String>,
 ) -> (StatusCode, Json<Value>) {
     let bc = db.lock().await;
-    let tip_height = bc.chain.len().saturating_sub(1) as u64;
-
-    // Search confirmed blocks (newest first for speed)
     for block in bc.chain.iter().rev() {
         if let Some(tx) = block.transactions.iter().find(|t| t.tx_id == txid) {
-            let output_total: u64 = tx.outputs.iter().map(|o| o.amount).sum();
-            let confirmations = tip_height.saturating_sub(block.index) + 1;
+            let output_total: u64 = tx.outputs.iter()
+                .map(|o| o.amount)
+                .sum();
             return (StatusCode::OK, Json(json!({
-                "tx_id":          tx.tx_id,
-                "wtx_id":         tx.wtx_id,
-                "is_coinbase":    tx.is_coinbase,
-                "fee":            tx.fee,
-                "output_total":   output_total,
-                "inputs":         tx.inputs,
-                "outputs":        tx.outputs,
-                "block_height":   block.index,
-                "block_hash":     block.hash,
-                "timestamp":      block.timestamp,
-                "status":         "confirmed",
-                "confirmations":  confirmations,
+                "tx_id":        tx.tx_id,
+                "wtx_id":       tx.wtx_id,
+                "is_coinbase":  tx.is_coinbase,
+                "fee":          tx.fee,
+                "output_total": output_total,
+                "inputs":       tx.inputs,
+                "outputs":      tx.outputs,
+                "block_height": block.index,
+                "block_hash":   block.hash,
+                "timestamp":    block.timestamp,
             })));
         }
     }
-
-    // Search mempool (pending)
-    if let Some(entry) = bc.mempool.entries.get(&txid) {
-        let output_total: u64 = entry.tx.outputs.iter().map(|o| o.amount).sum();
-        return (StatusCode::OK, Json(json!({
-            "tx_id":         entry.tx.tx_id,
-            "wtx_id":        entry.tx.wtx_id,
-            "is_coinbase":   entry.tx.is_coinbase,
-            "fee":           entry.fee,
-            "output_total":  output_total,
-            "inputs":        entry.tx.inputs,
-            "outputs":       entry.tx.outputs,
-            "block_height":  null,
-            "block_hash":    null,
-            "timestamp":     null,
-            "status":        "pending",
-            "confirmations": 0,
-        })));
-    }
-
     (
         StatusCode::NOT_FOUND,
         Json(json!({ "error": format!("tx {} not found", txid) })),
@@ -741,22 +628,11 @@ pub async fn serve(state: ScanDb, port: u16) {
     use crate::pktscan_ws;
     use crate::pool_api;
     use crate::token_api;
-    use crate::contract_api;
-    use crate::staking_api;
-    use crate::defi_api;
-    use crate::address_labels;
     use crate::mining_pool::PoolServer;
     use crate::token::TokenRegistry;
-    use crate::smart_contract::ContractRegistry;
-    use crate::staking::StakingPool;
-    use crate::oracle::{OracleRegistry, LendingProtocol};
     use std::sync::Arc as StdArc;
 
-    let hub      = StdArc::new(pktscan_ws::WsHub::new());
-    let ws_state = pktscan_ws::WsState {
-        hub:    StdArc::clone(&hub),
-        config: StdArc::new(pktscan_ws::WsConfig::default()),
-    };
+    let hub = StdArc::new(pktscan_ws::WsHub::new());
     pktscan_ws::spawn_poller(StdArc::clone(&hub), Arc::clone(&state), 5);
 
     let pool_db = StdArc::new(tokio::sync::Mutex::new(
@@ -773,87 +649,25 @@ pub async fn serve(state: ScanDb, port: u16) {
         reg
     }));
 
-    // v9.2 — Contract registry (empty; contracts deployed via chain events in future)
-    let contract_db: contract_api::ContractDb = StdArc::new(tokio::sync::Mutex::new(
-        ContractRegistry::new(),
-    ));
-
-    // v9.3 — Staking pool (empty; populated via chain events in future)
-    let staking_db: staking_api::StakingDb = StdArc::new(tokio::sync::Mutex::new(
-        StakingPool::new(),
-    ));
-
-    // v9.5 — Address labels (pre-seeded với known addresses)
-    let label_db: address_labels::LabelDb = StdArc::new(tokio::sync::Mutex::new({
-        let mut reg = address_labels::LabelRegistry::new();
-        reg.insert(address_labels::AddressLabel::new(
-            "genesis", "PKT Genesis", "foundation", "Genesis block creator",
-        ));
-        reg
-    }));
-
-    // v9.4 — DeFi: oracle registry + lending protocol
-    let defi_db: defi_api::DefiDb = StdArc::new(tokio::sync::Mutex::new(
-        defi_api::DefiState {
-            oracle:  OracleRegistry::new(),
-            lending: LendingProtocol::new("BTC/USD", 1.5),
-        },
-    ));
-
     // v8.8 — Response cache (TTL = 5 s)
     let cache_db: CacheDb = Arc::new(Mutex::new(
         crate::response_cache::ResponseCache::new(5),
     ));
     let cache_clone = Arc::clone(&cache_db);
 
-    // v10.0 — API auth store
-    let auth_db = crate::api_auth::ApiKeyStore::load_default();
-
-    // v10.1 — Audit log (daily rotation)
-    let audit_db = crate::audit_log::AuditLogger::open_default();
-
     // v9.0 — Zero-Trust middleware (rate limit + input guard + audit log)
     let zt = crate::zt_middleware::ZtState::new(
         crate::zt_middleware::ZtConfig::default(),
     );
 
-    // v9.6 — CORS allowlist (không dùng wildcard *)
-    let cors_cfg: CorsState = Arc::new(CorsConfig::default());
-
     let app = router(Arc::clone(&state))
-        .merge(pktscan_ws::ws_router(ws_state))
+        .merge(pktscan_ws::ws_router(hub))
         .merge(pool_api::pool_router(pool_db))
         .merge(token_api::token_router(token_db))
-        .merge(contract_api::contract_router(Arc::clone(&contract_db)))
-        .merge(staking_api::staking_router(staking_db))
-        .merge(defi_api::defi_router(defi_db))
-        .merge(address_labels::label_router(label_db))
-        .merge(crate::openapi::openapi_router())
-        .merge(crate::sdk_gen::sdk_router())
-        .merge(crate::graphql::graphql_router(Arc::clone(&state)))
-        .merge(crate::webhook::webhook_router(crate::webhook::open_default()))
-        .merge(crate::write_api::write_router(Arc::clone(&state), Arc::clone(&contract_db)))
-        .merge(crate::scam_registry::risk_router(crate::scam_registry::open_default()))
-        .merge(crate::address_watch::watch_router(
-            crate::address_watch::open_default(), Arc::clone(&state)))
-        .merge(crate::multi_chain::multi_chain_router(crate::multi_chain::open_default()))
-        .merge(crate::audit_log::admin_router(Arc::clone(&audit_db)))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&audit_db),
-            crate::audit_log::audit_middleware,
-        ))
-        .layer(middleware::from_fn(move |req, next| {
-            let cors = Arc::clone(&cors_cfg);
-            cors_layer(cors, req, next)
-        }))
         .layer(middleware::from_fn(move |req, next| {
             let c = Arc::clone(&cache_clone);
             api_cache_middleware(c, req, next)
         }))
-        .layer(middleware::from_fn_with_state(
-            auth_db,
-            crate::api_auth::auth_middleware,
-        ))
         .layer(middleware::from_fn_with_state(
             zt,
             crate::zt_middleware::zt_middleware,
@@ -866,7 +680,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/stats");
     println!("  GET  /api/blocks?limit=20&from=<height>");
     println!("  GET  /api/block/:height");
-    println!("  GET  /api/txs?limit=20&from=<height>&min_amount=&max_amount=&since=&until=");
+    println!("  GET  /api/txs?limit=20&from=<height>");
     println!("  GET  /api/tx/:txid");
     println!("  GET  /api/address/:addr");
     println!("  GET  /api/mempool");
@@ -880,30 +694,8 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/token/:id");
     println!("  GET  /api/token/:id/holders?limit=20");
     println!("  GET  /api/token/:id/balance/:addr");
-    println!("  GET  /api/contracts");
-    println!("  GET  /api/contract/:addr");
-    println!("  GET  /api/contract/:addr/state");
-    println!("  GET  /api/contract/:addr/state/:key");
-    println!("  GET  /api/staking/stats");
-    println!("  GET  /api/staking/validators");
-    println!("  GET  /api/staking/validator/:addr");
-    println!("  GET  /api/staking/delegator/:addr");
-    println!("  GET  /api/defi/feeds");
-    println!("  GET  /api/defi/feed/:id");
-    println!("  GET  /api/defi/feed/:id/history");
-    println!("  GET  /api/defi/loans");
-    println!("  GET  /api/defi/loans/liquidatable");
-    println!("  GET  /api/labels");
-    println!("  GET  /api/label/:addr");
-    println!("  GET  /api/labels/category/:cat");
     println!("  WS   /ws   (live feed)");
     println!("  Cache TTL: 5 s  (ETag / 304 support)");
-    println!("  GET  /api/openapi.json");
-    println!("  GET  /api/sdk/js");
-    println!("  GET  /api/sdk/ts");
-    println!("  CORS: allowlist [localhost:3000/8080, pktscan.io]  (v9.6)");
-    println!("  Auth: X-API-Key header  (optional for GET, required for write — v10.0)");
-    println!("  GET  /api/admin/logs?date=YYYY-MM-DD&limit=100  (admin role only — v10.1)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
@@ -1009,85 +801,5 @@ mod tests {
         let h2 = estimate_hashrate(4, 30.0);
         // difficulty=4 với block time ngắn hơn → hashrate cao hơn
         assert!(h2 > h1);
-    }
-
-    // ── v9.6 — TxFilterParams ─────────────────────────────────────────────
-
-    #[test]
-    fn test_tx_filter_defaults() {
-        let f: TxFilterParams = serde_json::from_str("{}").unwrap();
-        assert_eq!(f.limit, 20);
-        assert_eq!(f.offset, 0);
-        assert!(f.min_amount.is_none());
-        assert!(f.max_amount.is_none());
-        assert!(f.since.is_none());
-        assert!(f.until.is_none());
-    }
-
-    #[test]
-    fn test_tx_filter_all_fields() {
-        let json = r#"{"limit":10,"offset":5,"min_amount":100,"max_amount":999,"since":1000,"until":2000}"#;
-        let f: TxFilterParams = serde_json::from_str(json).unwrap();
-        assert_eq!(f.limit, 10);
-        assert_eq!(f.offset, 5);
-        assert_eq!(f.min_amount, Some(100));
-        assert_eq!(f.max_amount, Some(999));
-        assert_eq!(f.since, Some(1000));
-        assert_eq!(f.until, Some(2000));
-    }
-
-    #[test]
-    fn test_tx_filter_limit_cap() {
-        // limit được cap ở 100 trong get_txs logic
-        let f: TxFilterParams = serde_json::from_str(r#"{"limit":999}"#).unwrap();
-        let capped = f.limit.min(100);
-        assert_eq!(capped, 100);
-    }
-
-    // ── v9.6 — CorsConfig ────────────────────────────────────────────────
-
-    #[test]
-    fn test_cors_default_allows_localhost_3000() {
-        let cfg = CorsConfig::default();
-        assert!(cfg.is_allowed("http://localhost:3000"));
-    }
-
-    #[test]
-    fn test_cors_default_allows_localhost_8080() {
-        let cfg = CorsConfig::default();
-        assert!(cfg.is_allowed("http://localhost:8080"));
-    }
-
-    #[test]
-    fn test_cors_default_allows_pktscan() {
-        let cfg = CorsConfig::default();
-        assert!(cfg.is_allowed("https://pktscan.io"));
-    }
-
-    #[test]
-    fn test_cors_default_rejects_unknown() {
-        let cfg = CorsConfig::default();
-        assert!(!cfg.is_allowed("https://evil.example.com"));
-    }
-
-    #[test]
-    fn test_cors_wildcard_allows_any() {
-        let cfg = CorsConfig::new(vec!["*"]);
-        assert!(cfg.is_allowed("https://random.site"));
-        assert!(cfg.is_allowed("http://localhost:9999"));
-    }
-
-    #[test]
-    fn test_cors_custom_allowlist() {
-        let cfg = CorsConfig::new(vec!["https://myapp.com", "http://staging.myapp.com"]);
-        assert!(cfg.is_allowed("https://myapp.com"));
-        assert!(cfg.is_allowed("http://staging.myapp.com"));
-        assert!(!cfg.is_allowed("https://other.com"));
-    }
-
-    #[test]
-    fn test_cors_empty_list_rejects_all() {
-        let cfg = CorsConfig::new(Vec::<String>::new());
-        assert!(!cfg.is_allowed("http://localhost:3000"));
     }
 }

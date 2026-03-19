@@ -566,6 +566,11 @@ impl Relayer {
         self.relayed_acks += 1;
         Ok(())
     }
+
+    /// Consume relayer, trả về (chain_a, chain_b) sau khi handshake.
+    pub fn into_chains(self) -> (IbcChain, IbcChain) {
+        (self.chain_a, self.chain_b)
+    }
 }
 
 // ─── Transfer App (ICS-20 simplified) ────────────────────────────────────────
