@@ -90,6 +90,9 @@ mod contract_api;
 mod staking_api;
 mod defi_api;
 mod address_labels;
+mod openapi;
+mod sdk_gen;
+mod api_auth;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -191,6 +194,9 @@ fn main() {
             let backend = args.get(5).map(|s| s.as_str()).unwrap_or("software");
             gpu_miner::cmd_gpu_mine(addr, diff, blocks, backend);
         }
+        Some("apikey") => {
+            api_auth::cmd_apikey(&args);
+        }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
             match genesis::by_name(net) {
@@ -255,6 +261,9 @@ fn print_help() {
     println!("    cargo run -- cpumine [addr] [d] [n]  CPU multi-thread miner (diff=d, n blocks)");
     println!("    cargo run -- gpumine [addr] [d] [n] [backend]  GPU miner (software|opencl|cuda)");
     println!("    cargo run -- reward                  xem halving schedule + tổng cung PKT");
+    println!("    cargo run -- apikey new [label] [role]  tạo API key (role: read/write/admin)");
+    println!("    cargo run -- apikey list             liệt kê tất cả API keys");
+    println!("    cargo run -- apikey revoke <id>      thu hồi API key");
     println!("    cargo test                           chạy integration tests");
     println!();
 

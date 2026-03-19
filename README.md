@@ -313,4 +313,4 @@ curl http://seed.testnet.oceif.com:3001/health
 
 ## License
 
-MIT
+GPL-3.0 license

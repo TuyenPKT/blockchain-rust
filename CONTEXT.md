@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v9.6 ✅ — 678 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v10.0 ✅ — 779 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -90,13 +90,13 @@ _Nguyên tắc: GET = public (rate-limited) | POST/PUT/DELETE = chỉ mở sau k
 - [x] v9.4 — **DeFi API** _(GET only)_: `src/defi_api.rs` — `GET /api/defi/feeds`, `/api/defi/feed/:id`, `/api/defi/feed/:id/history`, `/api/defi/loans`, `/api/defi/loans/liquidatable` — expose `OracleRegistry` + `LendingProtocol`; tích hợp ZT middleware — **27 tests**
 - [x] v9.5 — **Tx Status + Labels**: sửa `pktscan_api.rs` — thêm `status: confirmed/pending`, `confirmations: N` vào `/api/tx/:txid` + mempool lookup; `src/address_labels.rs` — `GET /api/labels`, `/api/label/:addr`, `/api/labels/category/:cat` — **22 tests**
 - [x] v9.6 — **Tx Filter + CORS Allowlist**: sửa `pktscan_api.rs` — `TxFilterParams` với `min_amount/max_amount/since/until`, `total_filtered` trong response; `CorsConfig` allowlist thay `*`, `is_allowed()` check per-request Origin header; CORS layer move từ `router()` vào `serve()` qua closure — **20 tests** (+10 mới)
-- [ ] v9.7 — **WS Subscriptions**: sửa `pktscan_ws.rs` — per-address `/ws?watch=<addr>`; WS token validation (signed query param)
-- [ ] v9.8 — **OpenAPI Spec**: `src/openapi.rs` — `GET /api/openapi.json` — OpenAPI 3.0 spec tự động cho tất cả endpoints
-- [ ] v9.9 — **SDK Generation**: `src/sdk_gen.rs` — `GET /api/sdk/js`, `/api/sdk/ts` — generated client SDK từ OpenAPI spec
+- [x] v9.7 — **WS Subscriptions**: sửa `pktscan_ws.rs` — `WsConfig` (secret + `validate_token`), `WsQuery` (watch/token), `WsState` (hub+config); `WsEvent::NewTx` thêm `addresses: Vec<String>`; `event_touches_addr()` filter; `/ws?watch=<addr>&token=<tok>` → 401 nếu auth fail; `spawn_poller` extract output addresses qua `output_owner_hex` — **25 tests** (+14 mới)
+- [x] v9.8 — **OpenAPI Spec**: `src/openapi.rs` — `GET /api/openapi.json` — OpenAPI 3.0.3 JSON, `build_spec()` + `build_paths()` (Map insertion tránh recursion limit), `build_schemas()`, helpers `qparam/pparam/ok_json/err_resp`; 35 paths documented; tích hợp `openapi_router()` vào `serve()` — **29 tests**
+- [x] v9.9 — **SDK Generation**: `src/sdk_gen.rs` — `GET /api/sdk/js`, `/api/sdk/ts` — generated client SDK từ OpenAPI spec — **30 tests**
 
 ### Era 16 — Auth Layer + Fix Core Logic (v10.x)
 _Auth và Audit Log được kéo lên ĐẦU era — write endpoint chỉ mở sau khi v10.0–v10.1 hoàn chỉnh._
-- [ ] v10.0 — **API Auth**: `src/api_auth.rs` — API key system: keygen (`cargo run -- apikey new`), hash lưu file `~/.pkt/api_keys.toml`, `X-API-Key` header validation, role: `read/write/admin`; tích hợp vào ZT middleware
+- [x] v10.0 — **API Auth**: `src/api_auth.rs` — API key system: keygen (`cargo run -- apikey new`), hash lưu file `~/.pkt/api_keys.json`, `X-API-Key` header validation, role: `read/write/admin`; `auth_middleware` tích hợp vào pktscan_api::serve() — **28 tests**
 - [ ] v10.1 — **Audit Log**: `src/audit_log.rs` — append-only structured log mọi request: timestamp/IP/method/path/status/api_key_id/latency_ms; rotate daily; `GET /api/admin/logs` (admin role only)
 - [ ] v10.2 — **EVM Complete**: sửa `evm_lite.rs` — thêm đầy đủ opcodes: Add/Sub/Mul/Div/LT/GT/EQ/Jump/JumpI/CallValue/Caller/Return (hiện chỉ có Push/Stop)
 - [ ] v10.3 — **Contract Persistence**: sửa `contract_state.rs` + `storage.rs` — lưu contract state vào RocksDB, restart không mất

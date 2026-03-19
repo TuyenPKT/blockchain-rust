@@ -5,7 +5,7 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v4.0 ✅**
+**Version hiện tại: v10.0 ✅**
 
 ## Quy tắc làm việc
 
@@ -107,6 +107,7 @@ src/
 ├── did.rs               ← DID, VerifiableCredential, AuthChallenge
 ├── fhe_contract.rs      ← FHE keygen, EncryptedVoteContract
 ├── sovereign_rollup.rs  ← DaLayer, SovereignRollup, DAS
+├── sdk_gen.rs           ← SdkRouter, generate_js_sdk, generate_ts_sdk (v9.9)
 ├── full_stack.rs        ← VERSIONS, ERAS, STATS, SECURITY_STACK (v3.9)
 ├── miner.rs             ← MinerConfig, MinerStats, mine_live(), live hashrate
 └── wallet_cli.rs        ← cmd_wallet_new/show/address, load_miner_address() (v4.0)

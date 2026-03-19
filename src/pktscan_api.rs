@@ -752,7 +752,11 @@ pub async fn serve(state: ScanDb, port: u16) {
     use crate::oracle::{OracleRegistry, LendingProtocol};
     use std::sync::Arc as StdArc;
 
-    let hub = StdArc::new(pktscan_ws::WsHub::new());
+    let hub      = StdArc::new(pktscan_ws::WsHub::new());
+    let ws_state = pktscan_ws::WsState {
+        hub:    StdArc::clone(&hub),
+        config: StdArc::new(pktscan_ws::WsConfig::default()),
+    };
     pktscan_ws::spawn_poller(StdArc::clone(&hub), Arc::clone(&state), 5);
 
     let pool_db = StdArc::new(tokio::sync::Mutex::new(
@@ -802,6 +806,9 @@ pub async fn serve(state: ScanDb, port: u16) {
     ));
     let cache_clone = Arc::clone(&cache_db);
 
+    // v10.0 — API auth store
+    let auth_db = crate::api_auth::ApiKeyStore::load_default();
+
     // v9.0 — Zero-Trust middleware (rate limit + input guard + audit log)
     let zt = crate::zt_middleware::ZtState::new(
         crate::zt_middleware::ZtConfig::default(),
@@ -811,13 +818,15 @@ pub async fn serve(state: ScanDb, port: u16) {
     let cors_cfg: CorsState = Arc::new(CorsConfig::default());
 
     let app = router(Arc::clone(&state))
-        .merge(pktscan_ws::ws_router(hub))
+        .merge(pktscan_ws::ws_router(ws_state))
         .merge(pool_api::pool_router(pool_db))
         .merge(token_api::token_router(token_db))
         .merge(contract_api::contract_router(contract_db))
         .merge(staking_api::staking_router(staking_db))
         .merge(defi_api::defi_router(defi_db))
         .merge(address_labels::label_router(label_db))
+        .merge(crate::openapi::openapi_router())
+        .merge(crate::sdk_gen::sdk_router())
         .layer(middleware::from_fn(move |req, next| {
             let cors = Arc::clone(&cors_cfg);
             cors_layer(cors, req, next)
@@ -826,6 +835,10 @@ pub async fn serve(state: ScanDb, port: u16) {
             let c = Arc::clone(&cache_clone);
             api_cache_middleware(c, req, next)
         }))
+        .layer(middleware::from_fn_with_state(
+            auth_db,
+            crate::api_auth::auth_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             zt,
             crate::zt_middleware::zt_middleware,
@@ -870,7 +883,11 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/labels/category/:cat");
     println!("  WS   /ws   (live feed)");
     println!("  Cache TTL: 5 s  (ETag / 304 support)");
+    println!("  GET  /api/openapi.json");
+    println!("  GET  /api/sdk/js");
+    println!("  GET  /api/sdk/ts");
     println!("  CORS: allowlist [localhost:3000/8080, pktscan.io]  (v9.6)");
+    println!("  Auth: X-API-Key header  (optional for GET, required for write — v10.0)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
