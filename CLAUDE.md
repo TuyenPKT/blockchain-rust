@@ -5,45 +5,137 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v14.3 ✅**
+**Version hiện tại: v14.5 ✅**
 
 ## Quy tắc làm việc
 
-Yêu cầu:
-- Có core logic
-- Có interface (CLI hoặc API cụ thể)
-- Có integration vào system hiện tại
-- trả lời bằng 100% tiếng việt nếu không bắt buộc dùng English
-- Không viết lại code cũ — chỉ thêm file mới hoặc mở rộng file hiện có
-- Mỗi version thêm 1 file mới trong `src/` và thêm `mod <tên>;` vào `main.rs`
-- KHÔNG thêm demo functions — thay vào đó thêm `#[test]` vào `mod tests` trong `main.rs`
-- Cập nhật `CONTEXT.md` sau mỗi version: đánh dấu `[x]`, cập nhật version hiện tại, ghi quyết định thiết kế và lỗi gặp phải
-- Không có warnings khi build xong (`cargo build` và `cargo test` đều pass)
-- Khi được hỏi câu hỏi mà không có yêu cầu implement rõ ràng,
-  chỉ giải thích/thảo luận, KHÔNG tự động viết code.
-- Nếu user không dùng được → feature chưa xong
+### Core rules
 
-Không chấp nhận:
-- chỉ function
-- code demo
+* Có core logic + interface (CLI/API) + integration
+* Không sửa code cũ, chỉ extend
+* Mỗi version = 1 file mới + update `main.rs`
+* Test trong `main.rs`
+* Update `CONTEXT.md`
+* Build sạch: `cargo build/test` không warnings
 
-Security — AI-generated Code Guidelines
+---
 
-Không tin code AI mặc định; luôn review thủ công các phần: auth, permission, crypto.
+### Architecture
 
-validate input, không raw SQL, không hardcode secret, handle error đầy đủ.
+* Tách: `node → indexer → DB → API`
+* API = read-only (data mirror)
+* Không expose internal logic
 
-API mặc định read-only; tách node → indexer → DB → API; áp dụng rate limit + API key.
+---
 
-Validate input chặt (format/length), giới hạn query (pagination, range), cache chống DoS.
+### Versioning
 
-Dùng tool: cargo audit, clippy, dependency scan.
+* Schema version + migration (up/down)
+* Không breaking change ngầm
 
-Không expose internal logic; log không lộ thông tin nhạy cảm.
+---
 
-Viết test cho case lỗi/boundary (invalid input, overflow, spam).
+### Config
 
-Nguyên tắc: API = data mirror, không phải control layer.
+* Không hardcode
+* `.env` / config file
+* Validate khi start (fail fast)
+
+---
+
+### Error handling
+
+* Không `unwrap()` / `panic`
+* Internal error ≠ external error
+* API: `{code, message, trace_id}`
+
+---
+
+### Validation
+
+* Validate tại API boundary
+* Check: format / length / range
+* Limit query: pagination, range
+
+---
+
+### Security
+
+* Không raw SQL
+* Không hardcode secret
+* Rate limit + API key
+* Limit payload size
+* Replay protection (nonce/timestamp)
+* Không log sensitive data
+
+---
+
+### Performance
+
+* Timeout (DB / external)
+* Cache chống DoS
+* Giới hạn resource (thread/queue)
+
+---
+
+### Concurrency
+
+* Không block trong async
+* Safe shared state (`Arc`, `RwLock`…)
+
+---
+
+### Logging & Observability
+
+* Level: error/warn/info/debug
+* Có trace_id
+* Metrics: latency, error rate
+
+---
+
+### Dependency
+
+* Pin version
+* `cargo audit`
+* Tránh lib không maintain
+
+---
+
+### Testing
+
+* Unit (logic)
+* Integration (flow/API)
+* Boundary:
+
+  * invalid input
+  * max size
+  * spam
+* Regression khi fix bug
+
+---
+
+### CI
+
+* `cargo fmt`
+* `cargo clippy -- -D warnings`
+* `cargo test`
+
+---
+
+### Docs
+
+* `CONTEXT.md` (version, decision, bug)
+* (optional) `ARCHITECTURE.md`, `API.md`
+
+---
+
+### Nguyên tắc cứng
+
+* Không panic prod
+* Không leak secret
+* API không control logic
+* Nếu user chưa dùng được → feature chưa xong
+
 
 ## Stack
 
@@ -53,6 +145,7 @@ Nguyên tắc: API = data mirror, không phải control layer.
 - `cargo run -- mine [addr] [n]` → PoW miner
 - `cargo run -- node <port> [peer]` → P2P node
 - `cargo run -- qr <address> [amount] [label]` → QR code trong terminal
+- `cargo run -- completions <bash|zsh|fish>` → sinh shell completion script
 - `cargo test` → chạy toàn bộ unit + integration tests
 - `cargo build` → kiểm tra compile
 
@@ -146,7 +239,8 @@ src/
 ├── tui_dashboard.rs     ← Terminal UI dashboard (ratatui): hashrate/peers/mempool (v14.0)
 ├── tui_wallet.rs        ← Wallet TUI: balance/send/receive/history tabs (v14.1)
 ├── web_frontend.rs      ← Embedded static assets (index.html/app.js/style.css) (v14.2)
-└── qr_code.rs           ← QR code render: terminal half-block/full-block, BIP21 URI (v14.3)
+├── qr_code.rs           ← QR code render: terminal half-block/full-block, BIP21 URI (v14.3)
+└── shell_completions.rs ← Bash/Zsh/Fish completion scripts, install hints (v14.4)
 
 frontend/
 ├── app.js               ← Vanilla JS SPA: fetch API, auto-refresh, theme toggle
@@ -172,7 +266,7 @@ index.html               ← Entry point (embedded via include_bytes!)
 
 ## Thứ tự version tiếp theo (Era 21 còn lại — UI)
 
-v14.4 — Shell Completions [CX]: bash/zsh/fish, `cargo run -- completions <shell>`
+~~v14.4 — Shell Completions [CX]~~ ✅
 v14.5 — Web Charts [UI]: sparkline TUI + Chart.js web (hashrate/block time/tx volume)
 v14.6 — Block Detail Page [UI]: /block/:height + /tx/:txid, hash-router trong app.js
 v14.7 — Address Detail Page [UI]: balance + UTXO list + tx history

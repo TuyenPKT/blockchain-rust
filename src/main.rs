@@ -113,6 +113,8 @@ mod tui_dashboard;
 mod tui_wallet;
 mod web_frontend;
 mod qr_code;
+mod shell_completions;
+mod web_charts;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -229,6 +231,12 @@ fn main() {
         Some("qr") => {
             qr_code::cmd_qr(&args[2..].to_vec());
         }
+        Some("completions") => {
+            shell_completions::cmd_completions(&args[2..].to_vec());
+        }
+        Some("charts") => {
+            web_charts::cmd_charts(&args[2..].to_vec());
+        }
         Some("apikey") => {
             api_auth::cmd_apikey(&args);
         }
@@ -307,6 +315,12 @@ fn print_help() {
     println!("    cargo run -- apikey new [label] [role]  tạo API key (role: read/write/admin)");
     println!("    cargo run -- apikey list             liệt kê tất cả API keys");
     println!("    cargo run -- apikey revoke <id>      thu hồi API key");
+    println!("    cargo run -- charts                  ASCII sparkline tất cả metrics");
+    println!("    cargo run -- charts hashrate         sparkline hashrate");
+    println!("    cargo run -- charts block_time|tx_volume|mempool");
+    println!("    cargo run -- completions bash        sinh bash completion script");
+    println!("    cargo run -- completions zsh         sinh zsh completion script");
+    println!("    cargo run -- completions fish        sinh fish completion script");
     println!("    cargo test                           chạy integration tests");
     println!();
 
