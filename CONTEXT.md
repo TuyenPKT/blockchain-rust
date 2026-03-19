@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v14.5 ✅ — 1421 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v14.6 ✅ — 1468 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -138,7 +138,7 @@ _Read path: `pktscan_api.rs` | Write path: `write_api.rs` — tách biệt kiế
 - [x] v14.3 — **QR Code**: `src/qr_code.rs` — `qrcode = "0.14"` (pure Rust); `QrLevel` (Low/Medium/High → EcLevel); `render_compact()` half-block Unicode (Dense1x2); `render_full()` `██`/`  ` full-block (tương thích mọi terminal); `payment_uri(addr, amount, label)` → BIP21 `pkt:ADDR?amount=X&label=Y`; `percent_encode` (space/&/=/?)'; `address_qr()`/`payment_qr()` → `QrResult{data,qr_str,width,uri}`; `cmd_qr(args)` CLI; QR width = 17+4×N verified — **+29 tests** (1324 total)
 - [x] v14.4 — **Shell Completions**: `src/shell_completions.rs` — `Shell` enum (Bash/Zsh/Fish); `generate_bash()` (compgen/COMP_WORDS), `generate_zsh()` (#compdef + _arguments), `generate_fish()` (complete -c pkt -f); `TOP_COMMANDS` 22 lệnh, sub-completions cho wallet/explorer/genesis/bench/gpu/token/contract/staking/deploy/apikey; `install_hint()` per-shell; `cmd_completions(args)` CLI; `cargo run -- completions bash|zsh|fish` — **+53 tests** (1377 total)
 - [x] v14.5 — **Web Charts**: `src/web_charts.rs` — sparkline engine (▁▂▃▄▅▆▇█, resample, detect_trend); `Trend` (Up/Down/Flat + symbol/label); `MetricChart::build()` + `print()`; `ChartDashboard`; `mock_data(n, base, amp, phase)`; `format_hashrate`; `charts_router()` → `GET /static/charts.js`; nhúng `frontend/charts.js` compile-time; `cmd_charts(args)` CLI; merge vào `pktscan_api::serve()`; `frontend/charts.js`: fetch `/api/analytics/:metric`, render ASCII sparkline + Chart.js CDN line charts, auto-refresh 30s — **+44 tests** (1421 total)
-- [ ] v14.6 — **Block Detail Page [UI]**: `/block/:height` — full block info, danh sách TXs, merkle path; `/tx/:txid` — inputs/outputs/fee/confirmations; `app.js` hash-router (`#block/N`, `#tx/id`)
+- [x] v14.6 — **Block Detail Page**: `src/block_detail.rs` — `BlockDetailView` + `TxDetailView`; `short_hash()`, `format_timestamp()` (Gregorian algorithm, không dùng chrono), `format_paklets()`; `detail_router()` → `GET /static/detail.js`; nhúng `frontend/detail.js` compile-time; merge vào `pktscan_api::serve()`; `frontend/detail.js`: hash-router `#block/N`→`/api/chain/N`, `#tx/ID`→`/api/tx/ID`, render block fields + TX list, TX inputs/outputs table, inject CSS — **+47 tests** (1468 total)
 - [ ] v14.7 — **Address Detail Page [UI]**: `/address/:addr` — balance + UTXO list + tx history; phân biệt incoming/outgoing; link đến block/tx
 - [ ] v14.8 — **WebSocket Live Feed [UI]**: `app.js` kết nối `/ws` — nhận `NewBlock`/`NewTx` events real-time; cập nhật stats không cần refresh; toast notification khi block mới
 

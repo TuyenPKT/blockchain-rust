@@ -115,6 +115,7 @@ mod web_frontend;
 mod qr_code;
 mod shell_completions;
 mod web_charts;
+mod block_detail;
 
 // ── Entry point ───────────────────────────────────────────────
 //

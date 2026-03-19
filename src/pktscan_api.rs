@@ -829,6 +829,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::audit_log::admin_router(Arc::clone(&audit_db)))
         .merge(crate::web_frontend::static_router())   // v14.2: embedded /static/app.js + /static/style.css
         .merge(crate::web_charts::charts_router())    // v14.5: embedded /static/charts.js
+        .merge(crate::block_detail::detail_router())  // v14.6: embedded /static/detail.js
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),
             crate::audit_log::audit_middleware,
