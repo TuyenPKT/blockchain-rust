@@ -300,3 +300,128 @@ fn dir_size(path: &std::path::Path) -> u64 {
         }
     }).sum()
 }
+
+// ─── Contract Persistence (v10.3) ────────────────────────────────────────────
+//
+// Key schema: `contract:{address}` → serde_json of ContractStateData
+//
+// ContractState.storage は HashMap<[u8;32],[u8;32]> — không dùng trực tiếp làm
+// JSON key (array không phải string).  Dùng ContractStateData với storage là
+// Vec<(hex_key, hex_val)> để serialize/deserialize an toàn.
+
+fn contract_key(address: &str) -> String {
+    format!("contract:{}", address)
+}
+
+/// JSON-friendly representation của ContractState.
+/// storage map được encode thành Vec<(hex_str, hex_str)> để tránh [u8;32] key issue.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ContractStateData {
+    address:   String,
+    code_hash: String,
+    storage:   Vec<(String, String)>,
+    balance:   u64,
+    nonce:     u64,
+}
+
+impl ContractStateData {
+    fn from_state(s: &crate::contract_state::ContractState) -> Self {
+        let mut storage: Vec<(String, String)> = s.storage
+            .iter()
+            .map(|(k, v)| (hex::encode(k), hex::encode(v)))
+            .collect();
+        storage.sort_by_key(|(k, _)| k.clone()); // deterministic order
+        ContractStateData {
+            address:   s.address.clone(),
+            code_hash: s.code_hash.clone(),
+            storage,
+            balance:   s.balance,
+            nonce:     s.nonce,
+        }
+    }
+
+    fn into_state(self) -> crate::contract_state::ContractState {
+        let mut storage = HashMap::new();
+        for (k_hex, v_hex) in self.storage {
+            let kb = hex::decode(&k_hex).unwrap_or_default();
+            let vb = hex::decode(&v_hex).unwrap_or_default();
+            let mut k = [0u8; 32];
+            let mut v = [0u8; 32];
+            let klen = kb.len().min(32);
+            let vlen = vb.len().min(32);
+            k[32 - klen..].copy_from_slice(&kb[..klen]);
+            v[32 - vlen..].copy_from_slice(&vb[..vlen]);
+            storage.insert(k, v);
+        }
+        crate::contract_state::ContractState {
+            address:   self.address,
+            code_hash: self.code_hash,
+            storage,
+            balance:   self.balance,
+            nonce:     self.nonce,
+        }
+    }
+}
+
+/// Lưu toàn bộ ContractStore vào RocksDB.
+/// Xóa các entry cũ trước khi ghi để đảm bảo clean write.
+pub fn save_contract_store(
+    store: &crate::contract_state::ContractStore,
+) -> Result<(), String> {
+    let db = open_db()?;
+
+    // Xóa entries cũ
+    let old_keys: Vec<Vec<u8>> = db
+        .iterator(IteratorMode::Start)
+        .filter_map(|item| {
+            item.ok().and_then(|(k, _)| {
+                if std::str::from_utf8(&k).unwrap_or("").starts_with("contract:") {
+                    Some(k.to_vec())
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+    for k in old_keys {
+        db.delete(&k).map_err(|e| e.to_string())?;
+    }
+
+    // Ghi contract mới
+    for (addr, state) in &store.contracts {
+        let key  = contract_key(addr);
+        let data = ContractStateData::from_state(state);
+        let val  = serde_json::to_vec(&data)
+            .map_err(|e| format!("serialize contract {addr}: {e}"))?;
+        db.put(key.as_bytes(), &val).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Load ContractStore từ RocksDB.  Trả về `None` nếu không có entry nào.
+pub fn load_contract_store(
+) -> Result<Option<crate::contract_state::ContractStore>, String> {
+    if !db_path().exists() {
+        return Ok(None);
+    }
+    let db = open_db()?;
+    let mut store = crate::contract_state::ContractStore::new();
+    let mut found = false;
+
+    for item in db.iterator(IteratorMode::Start) {
+        let (key, val) = item.map_err(|e| e.to_string())?;
+        let key_str = std::str::from_utf8(&key).unwrap_or("");
+        if key_str.starts_with("contract:") {
+            let data: ContractStateData = serde_json::from_slice(&val)
+                .map_err(|e| format!("deserialize contract: {e}"))?;
+            let state = data.into_state();
+            store.contracts.insert(state.address.clone(), state);
+            found = true;
+        }
+    }
+
+    if !found {
+        return Ok(None);
+    }
+    Ok(Some(store))
+}

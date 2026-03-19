@@ -28,7 +28,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},

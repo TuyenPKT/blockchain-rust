@@ -1001,6 +1001,112 @@ mod tests {
         assert_eq!(bc.chain[0].index, 0);
     }
 
+    // ── Contract Persistence (v10.3) ─────────────────────────────────────────
+
+    #[test]
+    fn test_contract_store_save_and_load() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::storage;
+        use crate::contract_state::ContractStore;
+
+        storage::reset_storage().ok();
+
+        let mut store = ContractStore::new();
+        store.deploy("0xaabbcc", "codehash_abc", 1000).unwrap();
+        storage::save_contract_store(&store).unwrap();
+
+        let loaded = storage::load_contract_store().unwrap().unwrap();
+        let state  = loaded.get("0xaabbcc").expect("contract should exist");
+        assert_eq!(state.balance,   1000);
+        assert_eq!(state.code_hash, "codehash_abc");
+
+        storage::reset_storage().ok();
+    }
+
+    #[test]
+    fn test_contract_store_storage_slot_persisted() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::storage;
+        use crate::contract_state::ContractStore;
+
+        storage::reset_storage().ok();
+
+        let mut store = ContractStore::new();
+        store.deploy("0xdeadbeef", "h1", 0).unwrap();
+        let mut key = [0u8; 32]; key[31] = 7;
+        let mut val = [0u8; 32]; val[31] = 42;
+        store.get_mut("0xdeadbeef").unwrap().set_storage(key, val);
+        storage::save_contract_store(&store).unwrap();
+
+        let loaded = storage::load_contract_store().unwrap().unwrap();
+        let state  = loaded.get("0xdeadbeef").unwrap();
+        assert_eq!(state.get_storage(&key), val);
+
+        storage::reset_storage().ok();
+    }
+
+    #[test]
+    fn test_contract_store_multiple_contracts() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::storage;
+        use crate::contract_state::ContractStore;
+
+        storage::reset_storage().ok();
+
+        let mut store = ContractStore::new();
+        store.deploy("0x111", "h1", 100).unwrap();
+        store.deploy("0x222", "h2", 200).unwrap();
+        store.deploy("0x333", "h3", 300).unwrap();
+        storage::save_contract_store(&store).unwrap();
+
+        let loaded = storage::load_contract_store().unwrap().unwrap();
+        assert_eq!(loaded.contracts.len(), 3);
+        assert_eq!(loaded.get("0x111").unwrap().balance, 100);
+        assert_eq!(loaded.get("0x222").unwrap().balance, 200);
+        assert_eq!(loaded.get("0x333").unwrap().balance, 300);
+
+        storage::reset_storage().ok();
+    }
+
+    #[test]
+    fn test_contract_store_overwrite_on_save() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::storage;
+        use crate::contract_state::ContractStore;
+
+        storage::reset_storage().ok();
+
+        // Save first version
+        let mut store1 = ContractStore::new();
+        store1.deploy("0xaaa", "h1", 500).unwrap();
+        storage::save_contract_store(&store1).unwrap();
+
+        // Save second version — 0xaaa removed, 0xbbb added
+        let mut store2 = ContractStore::new();
+        store2.deploy("0xbbb", "h2", 999).unwrap();
+        storage::save_contract_store(&store2).unwrap();
+
+        let loaded = storage::load_contract_store().unwrap().unwrap();
+        assert_eq!(loaded.contracts.len(), 1);
+        assert!(loaded.get("0xaaa").is_none());
+        assert!(loaded.get("0xbbb").is_some());
+
+        storage::reset_storage().ok();
+    }
+
+    #[test]
+    fn test_contract_store_load_empty_db() {
+        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::storage;
+
+        storage::reset_storage().ok();
+
+        // No contracts saved → load returns None
+        // (DB doesn't exist after reset)
+        let result = storage::load_contract_store().unwrap();
+        assert!(result.is_none());
+    }
+
     // ── Metrics (v4.8) ───────────────────────────────────────────────────────
 
     #[test]

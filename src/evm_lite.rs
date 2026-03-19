@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 //! v7.5 — EVM-lite Executor
+//! v10.2 — EVM Complete: CallValue, Caller, JumpDest, IsZero; PC-based Jump/JumpIf
 
 use std::collections::HashMap;
 
@@ -54,7 +55,17 @@ pub enum EvmLiteOp {
     SStore,
     Jump,
     JumpIf,
+    /// Valid jump target (no-op but marks a safe landing pad).
+    JumpDest,
     Call,
+    /// Push msg.value (context.value) onto stack.
+    CallValue,
+    /// Push caller address bytes onto stack.
+    Caller,
+    /// Push 1 if top == 0, else 0.
+    IsZero,
+    /// Push remaining gas onto stack.
+    GasLeft,
     Return,
     Revert,
     Log(u8),
@@ -85,8 +96,10 @@ impl EvmLiteVm {
 
     pub fn execute(&mut self, ops: &[EvmLiteOp]) -> EvmLiteResult {
         let gas_limit = self.context.gas_limit;
+        let mut pc = 0usize;
 
-        for op in ops {
+        while pc < ops.len() {
+            let op = &ops[pc];
             let cost = self.gas_cost(op);
             if self.gas_used + cost > gas_limit {
                 return EvmLiteResult {
@@ -99,6 +112,7 @@ impl EvmLiteVm {
                 };
             }
             self.gas_used += cost;
+            pc += 1;
 
             match op {
                 EvmLiteOp::Push(data) => {
@@ -236,12 +250,57 @@ impl EvmLiteVm {
                     self.storage.insert(key, val);
                 }
                 EvmLiteOp::Jump => {
-                    // Simplified: just pop the destination (no actual jump in linear execution)
-                    self.pop_bytes();
+                    let dest = self.pop_u64() as usize;
+                    if dest >= ops.len() || !matches!(ops[dest], EvmLiteOp::JumpDest) {
+                        return EvmLiteResult {
+                            success: false,
+                            return_data: vec![],
+                            gas_used: self.gas_used,
+                            gas_refund: 0,
+                            logs: self.logs.clone(),
+                            revert_reason: Some("invalid jump destination".to_string()),
+                        };
+                    }
+                    pc = dest;
                 }
                 EvmLiteOp::JumpIf => {
-                    self.pop_bytes(); // dest
-                    self.pop_bytes(); // condition
+                    let dest = self.pop_u64() as usize;
+                    let cond = self.pop_u64();
+                    if cond != 0 {
+                        if dest >= ops.len() || !matches!(ops[dest], EvmLiteOp::JumpDest) {
+                            return EvmLiteResult {
+                                success: false,
+                                return_data: vec![],
+                                gas_used: self.gas_used,
+                                gas_refund: 0,
+                                logs: self.logs.clone(),
+                                revert_reason: Some("invalid jump destination".to_string()),
+                            };
+                        }
+                        pc = dest;
+                    }
+                }
+                EvmLiteOp::JumpDest => {
+                    // No-op: valid landing pad marker
+                }
+                EvmLiteOp::CallValue => {
+                    self.push_u64(self.context.value);
+                }
+                EvmLiteOp::Caller => {
+                    // Push caller address as right-aligned 32-byte word
+                    let caller_bytes = self.context.caller.as_bytes().to_vec();
+                    let mut word = vec![0u8; 32];
+                    let len = caller_bytes.len().min(32);
+                    word[32 - len..].copy_from_slice(&caller_bytes[..len]);
+                    self.push_bytes(word);
+                }
+                EvmLiteOp::IsZero => {
+                    let a = self.pop_u64();
+                    self.push_u64(if a == 0 { 1 } else { 0 });
+                }
+                EvmLiteOp::GasLeft => {
+                    let left = gas_limit.saturating_sub(self.gas_used);
+                    self.push_u64(left);
                 }
                 EvmLiteOp::Call => {
                     // Simplified: pop gas+addr+value, push success=1
@@ -360,6 +419,10 @@ impl EvmLiteVm {
             EvmLiteOp::SStore => 200,
             EvmLiteOp::Log(n) => 375 + (*n as u64) * 125,
             EvmLiteOp::Call => 700,
+            EvmLiteOp::Jump | EvmLiteOp::JumpIf => 8,
+            EvmLiteOp::JumpDest => 1,
+            EvmLiteOp::CallValue | EvmLiteOp::Caller => 2,
+            EvmLiteOp::IsZero | EvmLiteOp::GasLeft => 3,
             _ => 2,
         }
     }
@@ -548,6 +611,200 @@ mod tests {
         assert!(r.success);
         // Push=2, Push=2, Add=3, Stop=2 = 9
         assert_eq!(r.gas_used, 9);
+    }
+
+    fn make_ctx_with_value(gas: u64, caller: &str, value: u64) -> EvmLiteContext {
+        EvmLiteContext {
+            caller: caller.to_string(),
+            callee: "callee".to_string(),
+            value,
+            gas_limit: gas,
+            block_height: 1,
+            input: vec![],
+        }
+    }
+
+    // ── v10.2 — New opcodes ───────────────────────────────────────────────
+
+    #[test]
+    fn test_callvalue_pushes_value() {
+        let ctx = make_ctx_with_value(10_000, "alice", 777);
+        let mut vm = EvmLiteVm::new(ctx, HashMap::new());
+        let ops = vec![EvmLiteOp::CallValue, EvmLiteOp::Stop];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.len(), 1);
+        let top = &vm.stack[0];
+        // value 777 in last 8 bytes of 32-byte word
+        let mut arr = [0u8; 8];
+        arr.copy_from_slice(&top[24..32]);
+        assert_eq!(u64::from_be_bytes(arr), 777);
+    }
+
+    #[test]
+    fn test_callvalue_zero() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        let ops = vec![EvmLiteOp::CallValue, EvmLiteOp::Stop];
+        vm.execute(&ops);
+        let top = &vm.stack[0];
+        assert!(top.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_caller_pushes_bytes() {
+        let ctx = make_ctx_with_value(10_000, "alice", 0);
+        let mut vm = EvmLiteVm::new(ctx, HashMap::new());
+        let ops = vec![EvmLiteOp::Caller, EvmLiteOp::Stop];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.len(), 1);
+        // "alice" bytes appear right-aligned in the 32-byte word
+        let top = &vm.stack[0];
+        assert_eq!(top.len(), 32);
+        let alice = b"alice";
+        assert_eq!(&top[27..32], alice);
+    }
+
+    #[test]
+    fn test_is_zero_true() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        let ops = vec![
+            EvmLiteOp::Push(vec![0]),
+            EvmLiteOp::IsZero,
+            EvmLiteOp::Stop,
+        ];
+        vm.execute(&ops);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_is_zero_false() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        let ops = vec![
+            EvmLiteOp::Push(vec![5]),
+            EvmLiteOp::IsZero,
+            EvmLiteOp::Stop,
+        ];
+        vm.execute(&ops);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_gas_left_decreases() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        let ops = vec![EvmLiteOp::GasLeft, EvmLiteOp::Stop];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        // GasLeft costs 3, Stop costs 2 → pushed gas_left = 10000 - 3 = 9997
+        let top = vm.pop_u64();
+        assert_eq!(top, 9997);
+    }
+
+    // ── v10.2 — PC-based Jump/JumpIf ─────────────────────────────────────
+
+    #[test]
+    fn test_jump_to_jumpdest() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        // ops: [0] Push(2), [1] Jump, [2] JumpDest, [3] Push(99), [4] Stop
+        let ops = vec![
+            EvmLiteOp::Push(vec![2]),  // destination = index 2
+            EvmLiteOp::Jump,
+            EvmLiteOp::JumpDest,
+            EvmLiteOp::Push(vec![99]),
+            EvmLiteOp::Stop,
+        ];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 99);
+    }
+
+    #[test]
+    fn test_jump_invalid_dest_fails() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        // Jump to index 2 which is NOT a JumpDest
+        let ops = vec![
+            EvmLiteOp::Push(vec![2]),
+            EvmLiteOp::Jump,
+            EvmLiteOp::Stop, // not a JumpDest
+        ];
+        let r = vm.execute(&ops);
+        assert!(!r.success);
+        assert!(r.revert_reason.as_deref().unwrap_or("").contains("invalid jump"));
+    }
+
+    #[test]
+    fn test_jumpif_taken() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        // JumpIf: dest=3, cond=1 (nonzero) → jump to index 3
+        // ops: [0]Push(1/cond), [1]Push(3/dest), [2]JumpIf, [3]JumpDest, [4]Push(42), [5]Stop
+        let ops = vec![
+            EvmLiteOp::Push(vec![1]),  // condition (pushed first → below dest)
+            EvmLiteOp::Push(vec![3]),  // destination (top of stack)
+            EvmLiteOp::JumpIf,
+            EvmLiteOp::JumpDest,
+            EvmLiteOp::Push(vec![42]),
+            EvmLiteOp::Stop,
+        ];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 42);
+    }
+
+    #[test]
+    fn test_jumpif_not_taken() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        // JumpIf: cond=0 → fall through, hit Push(7) then Stop
+        // ops: [0]Push(0/cond), [1]Push(10/dest_far), [2]JumpIf, [3]Push(7), [4]Stop
+        let ops = vec![
+            EvmLiteOp::Push(vec![0]),   // condition = 0 (false)
+            EvmLiteOp::Push(vec![10]),  // destination (won't be taken)
+            EvmLiteOp::JumpIf,
+            EvmLiteOp::Push(vec![7]),
+            EvmLiteOp::Stop,
+        ];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 7);
+    }
+
+    #[test]
+    fn test_jumpdest_is_noop() {
+        let mut vm = EvmLiteVm::new(make_ctx(10_000), HashMap::new());
+        let ops = vec![
+            EvmLiteOp::Push(vec![5]),
+            EvmLiteOp::JumpDest,
+            EvmLiteOp::Stop,
+        ];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 5);
+    }
+
+    #[test]
+    fn test_loop_with_jump() {
+        // Simulate a simple counter loop: count from 3 down to 0
+        // Pseudocode: n=3; while n != 0: n -= 1
+        // ops: [0]Push(3), [1]JumpDest(loop_start), [2]IsZero, [3]Push(exit), [4]JumpIf,
+        //       [5]Push(1), [6]Sub, [7]Push(1/loop), [8]Jump, [9]JumpDest(exit), [10]Stop
+        let mut vm = EvmLiteVm::new(make_ctx(100_000), HashMap::new());
+        let ops = vec![
+            EvmLiteOp::Push(vec![3]),  // 0: n=3
+            EvmLiteOp::JumpDest,       // 1: loop_start
+            EvmLiteOp::Dup,            // 2: duplicate n
+            EvmLiteOp::IsZero,         // 3: n==0?
+            EvmLiteOp::Push(vec![10]), // 4: exit dest
+            EvmLiteOp::JumpIf,         // 5: if zero, jump to exit
+            EvmLiteOp::Push(vec![1]),  // 6: push 1
+            EvmLiteOp::Sub,            // 7: n -= 1
+            EvmLiteOp::Push(vec![1]),  // 8: loop_start dest
+            EvmLiteOp::Jump,           // 9: jump back
+            EvmLiteOp::JumpDest,       // 10: exit
+            EvmLiteOp::Stop,           // 11
+        ];
+        let r = vm.execute(&ops);
+        assert!(r.success);
+        // After loop: n=0 on stack
+        assert_eq!(vm.stack.last().unwrap().last().copied().unwrap(), 0);
     }
 
     #[test]
