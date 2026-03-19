@@ -30,7 +30,7 @@ use axum::{
     extract::{Path, Query, Request, State},
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -235,19 +235,8 @@ pub async fn api_cache_middleware(
 
 /// Serve `index.html` from the working directory, or a built-in fallback page.
 async fn serve_index() -> impl IntoResponse {
-    match std::fs::read_to_string("index.html") {
-        Ok(html) => Html(html).into_response(),
-        Err(_) => Html(
-            "<!DOCTYPE html><html><head><title>PKTScan</title></head><body>\
-             <h1>PKTScan</h1>\
-             <p>Place <code>index.html</code> in the working directory to enable the frontend.</p>\
-             <ul>\
-             <li><a href=\"/api/stats\">/api/stats</a></li>\
-             <li><a href=\"/api/blocks\">/api/blocks</a></li>\
-             <li><a href=\"/api/mempool\">/api/mempool</a></li>\
-             </ul></body></html>",
-        ).into_response(),
-    }
+    // Dùng embedded bytes từ web_frontend (compile-time) — không cần filesystem
+    crate::web_frontend::embedded_index_handler().await
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -838,6 +827,7 @@ pub async fn serve(state: ScanDb, port: u16) {
             crate::address_watch::open_default(), Arc::clone(&state)))
         .merge(crate::multi_chain::multi_chain_router(crate::multi_chain::open_default()))
         .merge(crate::audit_log::admin_router(Arc::clone(&audit_db)))
+        .merge(crate::web_frontend::static_router())   // v14.2: embedded /static/app.js + /static/style.css
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),
             crate::audit_log::audit_middleware,
@@ -862,7 +852,9 @@ pub async fn serve(state: ScanDb, port: u16) {
     let addr = format!("0.0.0.0:{}", port);
     println!();
     println!("  PKTScan  →  http://localhost:{}", port);
-    println!("  GET  /                              (index.html / fallback)");
+    println!("  GET  /                              (index.html — embedded binary)");
+    println!("  GET  /static/app.js                (embedded binary)");
+    println!("  GET  /static/style.css             (embedded binary)");
     println!("  GET  /api/stats");
     println!("  GET  /api/blocks?limit=20&from=<height>");
     println!("  GET  /api/block/:height");

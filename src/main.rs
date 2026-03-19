@@ -112,6 +112,7 @@ mod pkt_genesis;
 mod tui_dashboard;
 mod tui_wallet;
 mod web_frontend;
+mod qr_code;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -225,6 +226,9 @@ fn main() {
         Some("deploy") => {
             deploy_config::cmd_deploy(&args);
         }
+        Some("qr") => {
+            qr_code::cmd_qr(&args[2..].to_vec());
+        }
         Some("apikey") => {
             api_auth::cmd_apikey(&args);
         }
@@ -292,6 +296,9 @@ fn print_help() {
     println!("    cargo run -- cpumine [addr] [d] [n]  CPU multi-thread miner (diff=d, n blocks)");
     println!("    cargo run -- gpumine [addr] [d] [n] [backend]  GPU miner (software|opencl|cuda)");
     println!("    cargo run -- reward                  xem halving schedule + tổng cung PKT");
+    println!("    cargo run -- qr <addr>               QR code địa chỉ ví trong terminal");
+    println!("    cargo run -- qr <addr> <amount>      QR payment URI (pkt:addr?amount=X)");
+    println!("    cargo run -- qr <addr> <amount> <label>  QR payment URI + label");
     println!("    cargo run -- token    create/list/info/mint/transfer/balance");
     println!("    cargo run -- contract deploy/list/info/call/state/estimate");
     println!("    cargo run -- staking  validators/register/delegate/claim/info");

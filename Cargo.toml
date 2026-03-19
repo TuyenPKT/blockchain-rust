@@ -47,6 +47,8 @@ rand_core = { version = "0.6", features = ["std"] }
 # v14.0: Terminal UI dashboard
 ratatui = "0.26"
 crossterm = "0.27"
+# v14.3: QR Code (pure Rust, không cần libpng)
+qrcode = "0.14"
 
 [features]
 default = []

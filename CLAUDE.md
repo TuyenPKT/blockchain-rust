@@ -5,18 +5,27 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v14.2 ✅**
+**Version hiện tại: v14.3 ✅**
 
 ## Quy tắc làm việc
 
-- dùng tiếng việt nếu không bắt buộc dùng English
+Yêu cầu:
+- Có core logic
+- Có interface (CLI hoặc API cụ thể)
+- Có integration vào system hiện tại
+- trả lời bằng 100% tiếng việt nếu không bắt buộc dùng English
 - Không viết lại code cũ — chỉ thêm file mới hoặc mở rộng file hiện có
 - Mỗi version thêm 1 file mới trong `src/` và thêm `mod <tên>;` vào `main.rs`
 - KHÔNG thêm demo functions — thay vào đó thêm `#[test]` vào `mod tests` trong `main.rs`
 - Cập nhật `CONTEXT.md` sau mỗi version: đánh dấu `[x]`, cập nhật version hiện tại, ghi quyết định thiết kế và lỗi gặp phải
 - Không có warnings khi build xong (`cargo build` và `cargo test` đều pass)
-- Khi được hỏi câu hỏi mà không có yêu cầu implement rõ ràng, 
+- Khi được hỏi câu hỏi mà không có yêu cầu implement rõ ràng,
   chỉ giải thích/thảo luận, KHÔNG tự động viết code.
+- Nếu user không dùng được → feature chưa xong
+
+Không chấp nhận:
+- chỉ function
+- code demo
 
 Security — AI-generated Code Guidelines
 
@@ -43,7 +52,8 @@ Nguyên tắc: API = data mirror, không phải control layer.
 - `cargo run -- wallet new/show` → PKT wallet CLI
 - `cargo run -- mine [addr] [n]` → PoW miner
 - `cargo run -- node <port> [peer]` → P2P node
-- `cargo test` → chạy 27 integration tests
+- `cargo run -- qr <address> [amount] [label]` → QR code trong terminal
+- `cargo test` → chạy toàn bộ unit + integration tests
 - `cargo build` → kiểm tra compile
 
 ## Dependencies hiện tại (Cargo.toml)
@@ -61,6 +71,24 @@ tokio = { version = "1", features = ["full"] }
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 rocksdb = "0.21"                         # v4.2.1: persistent storage backend
+axum = { version = "0.7", features = ["ws"] }  # v4.4: REST API + v8.1: WebSocket
+async-graphql = { version = "7", features = ["tracing"] }  # v10.8: GraphQL API
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }  # v10.9: webhook
+tracing = "0.1"                          # v5.7: structured logging
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+blake3 = "1.5"                           # v6.0: BLAKE3 hash engine
+rayon = "1.10"                           # v6.1: multi-thread miner
+num_cpus = "1.16"
+ed25519-dalek = { version = "2", features = ["rand_core"] }  # v9.0.1: Ed25519 HD Wallet
+zeroize = { version = "1", features = ["derive"] }
+rand_core = { version = "0.6", features = ["std"] }
+ratatui = "0.26"                         # v14.0: Terminal UI dashboard
+crossterm = "0.27"                       # v14.0: Terminal input/output
+qrcode = "0.14"                          # v14.3: QR code render (pure Rust)
+proptest = { version = "1.4", optional = true }  # v5.6: fuzz/property tests
+# Optional features:
+# ocl = "0.19"   (--features opencl) v6.5: OpenCL GPU mining
+# cust = "0.3"   (--features cuda)   v6.6: CUDA GPU mining
 ```
 
 Khi thêm dependency mới: ghi chú version và lý do vào `CONTEXT.md`.
@@ -110,7 +138,21 @@ src/
 ├── sdk_gen.rs           ← SdkRouter, generate_js_sdk, generate_ts_sdk (v9.9)
 ├── full_stack.rs        ← VERSIONS, ERAS, STATS, SECURITY_STACK (v3.9)
 ├── miner.rs             ← MinerConfig, MinerStats, mine_live(), live hashrate
-└── wallet_cli.rs        ← cmd_wallet_new/show/address, load_miner_address() (v4.0)
+├── wallet_cli.rs        ← cmd_wallet_new/show/address, load_miner_address() (v4.0)
+├── pktscan_api.rs       ← REST API + Block Explorer (axum): /chain /balance /tx /status
+├── pkt_bandwidth.rs     ← PacketCrypt bandwidth scoring, announcements (v13.2)
+├── pkt_address.rs       ← PKT bech32/bech32m address encode/decode (v13.3)
+├── pkt_genesis.rs       ← PKT coin params, genesis block, halving schedule (v13.4)
+├── tui_dashboard.rs     ← Terminal UI dashboard (ratatui): hashrate/peers/mempool (v14.0)
+├── tui_wallet.rs        ← Wallet TUI: balance/send/receive/history tabs (v14.1)
+├── web_frontend.rs      ← Embedded static assets (index.html/app.js/style.css) (v14.2)
+└── qr_code.rs           ← QR code render: terminal half-block/full-block, BIP21 URI (v14.3)
+
+frontend/
+├── app.js               ← Vanilla JS SPA: fetch API, auto-refresh, theme toggle
+└── style.css            ← Dark theme CSS, stat cards, data tables
+
+index.html               ← Entry point (embedded via include_bytes!)
 ```
 
 ## Lưu ý kỹ thuật quan trọng
@@ -124,36 +166,33 @@ src/
 - UTXO lookup: `owner_bytes_of()` hỗ trợ cả 20-byte (P2PKH) và 32-byte (P2TR)
 - Tránh `try_into()` trên `&[u8;64]` — dùng `copy_from_slice` thay thế
 - `#![allow(dead_code)]` ở đầu file khi có nhiều public API chưa dùng
+- ratatui: dùng `TestBackend` cho unit tests, không cần real terminal
+- `web_frontend`: `static_router()` chỉ mount `/static/*`, merge vào `pktscan_api::serve()`
+- QR width = `17 + 4×N` (QR spec) — test: `(w - 17) % 4 == 0`
 
-## Thứ tự version tiếp theo (Era 19 — PKT Core)
+## Thứ tự version tiếp theo (Era 21 còn lại — UI)
 
-v13.3 — PKT Address Format: `src/pkt_address.rs` — bech32 PKT address encoding (hrp="pkt")
-v13.4 — PKT Testnet Genesis: `src/pkt_genesis.rs` — genesis block PKT testnet, coin params (paklets, halving), bootstrap peers
+v14.4 — Shell Completions [CX]: bash/zsh/fish, `cargo run -- completions <shell>`
+v14.5 — Web Charts [UI]: sparkline TUI + Chart.js web (hashrate/block time/tx volume)
+v14.6 — Block Detail Page [UI]: /block/:height + /tx/:txid, hash-router trong app.js
+v14.7 — Address Detail Page [UI]: balance + UTXO list + tx history
+v14.8 — WebSocket Live Feed [UI]: /ws real-time NewBlock/NewTx, toast notification
 
-## Thứ tự version tiếp theo (Era 10 — đã hoàn thành)
+## Era 22 — PKT Testnet Integration (v15.x)
 
-v4.1 — PacketCrypt PoW: `src/packetcrypt.rs` — announcement mining + block mining (PKT-native PoW)
-v4.2 — Persistent Storage: `src/storage.rs` — lưu chain + UTXO vào file, load khi restart
-v4.3 — P2P Sync: longest-chain rule + mempool broadcast + block validation khi nhận từ peer
-v4.4 — REST API: `src/api.rs` — GET /chain, GET /balance/:addr, POST /tx (axum/hyper)
-v4.5 — Miner ↔ Node: miner submit block qua P2P, lấy pending TX từ mempool node
-v4.6 — Block Explorer CLI: `src/explorer.rs` — query chain, TX, UTXO, balance
-v4.7 — Testnet Config: `src/genesis.rs` — genesis block file, network magic bytes, coin params
-v4.8 — Metrics: hashrate, peer count, mempool depth, block time, sync status
-v4.9 — PKT Mainnet: _(beta — chưa lên kế hoạch)_
+v15.0 — PKT Wire Protocol: `src/pkt_wire.rs` — pktd P2P message format, handshake testnet
+v15.1 — Testnet Peer Connect: `src/pkt_peer.rs` — kết nối bootstrap peers, ping/pong keepalive
+v15.2 — Block Download: `src/pkt_sync.rs` — GetHeaders → GetData → validate → RocksDB
+v15.3 — UTXO Sync: apply blocks vào UtxoSet, resume từ last height
+v15.4 — Explorer Live Data: pktscan_api dùng testnet chain thật
+v15.5 — Sync Status UI: progress bar trong TUI + web frontend
 
-## Era 11 — Optimization & Security (v5.x)
+## Era 23 — Developer Experience (v16.x)
 
-v5.0 — Performance: UTXO set indexing, block cache, faster Merkle tree
-v5.1 — Security hardening: input validation, DoS protection, rate limiting P2P
-v5.2 — P2P improvements: peer scoring, ban list, message deduplication
-v5.3 — Coinbase maturity (100 blocks), replay protection, nonce validation
-v5.4 — Fee market: dynamic fee estimation, RBF (Replace-By-Fee)
-v5.5 — Persistent storage v2: WAL (Write-Ahead Log), atomic writes, crash recovery
-v5.6 — Fuzz testing + property-based tests (cargo-fuzz, proptest)
-v5.7 — Monitoring: metrics endpoint, health check, structured logging (tracing)
-v5.8 — Code audit: fix tất cả Known Gaps còn lại từ CONTEXT.md
-v5.9 — Benchmark suite: tps, latency, memory — perf regression baseline
+v16.0 — Devnet One-Command [DX]: `cargo run -- devnet` → node+miner+API một process
+v16.1 — Dev Docs Generator [DX]: `cargo run -- docs` → api.md + cli.md + architecture.md
+v16.2 — Integration Test Harness [DX]: E2E tests --features integration
+v16.3 — Hot Reload Dev Mode [DX]: watch src/, rebuild + restart tự động
 
 ## Era 20 — Post-Singularity (v10.x) — hardware-dependent, future
 

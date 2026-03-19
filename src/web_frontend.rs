@@ -117,8 +117,8 @@ fn asset_response(bytes: &'static [u8], content_type: &'static str) -> Response 
 
 // ── Router ───────────────────────────────────────────────────────────────────
 
-/// Axum router cho tất cả frontend routes
-/// Merge vào app router: `app.merge(frontend_router())`
+/// Router đầy đủ: / + /index.html + /static/* + fallback 404
+/// Dùng khi chạy frontend standalone (không có pktscan_api).
 pub fn frontend_router() -> Router {
     Router::new()
         .route("/",                 get(serve_index))
@@ -126,6 +126,20 @@ pub fn frontend_router() -> Router {
         .route("/static/app.js",    get(serve_app_js))
         .route("/static/style.css", get(serve_style_css))
         .fallback(serve_not_found)
+}
+
+/// Router chỉ có static assets (/static/app.js, /static/style.css).
+/// Merge vào pktscan_api::serve() — không conflict với route "/" đã có sẵn.
+pub fn static_router() -> Router {
+    Router::new()
+        .route("/static/app.js",    get(serve_app_js))
+        .route("/static/style.css", get(serve_style_css))
+}
+
+/// Handler trả về embedded index.html (compile-time bytes).
+/// pktscan_api::serve_index có thể gọi hàm này thay vì đọc filesystem.
+pub async fn embedded_index_handler() -> impl IntoResponse {
+    asset_response(INDEX_HTML, "text/html; charset=utf-8")
 }
 
 // ── Frontend manifest ─────────────────────────────────────────────────────────
