@@ -5,7 +5,7 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v13.0 ✅**
+**Version hiện tại: v14.2 ✅**
 
 ## Quy tắc làm việc
 
@@ -125,7 +125,12 @@ src/
 - Tránh `try_into()` trên `&[u8;64]` — dùng `copy_from_slice` thay thế
 - `#![allow(dead_code)]` ở đầu file khi có nhiều public API chưa dùng
 
-## Thứ tự version tiếp theo (Era 10)
+## Thứ tự version tiếp theo (Era 19 — PKT Core)
+
+v13.3 — PKT Address Format: `src/pkt_address.rs` — bech32 PKT address encoding (hrp="pkt")
+v13.4 — PKT Testnet Genesis: `src/pkt_genesis.rs` — genesis block PKT testnet, coin params (paklets, halving), bootstrap peers
+
+## Thứ tự version tiếp theo (Era 10 — đã hoàn thành)
 
 v4.1 — PacketCrypt PoW: `src/packetcrypt.rs` — announcement mining + block mining (PKT-native PoW)
 v4.2 — Persistent Storage: `src/storage.rs` — lưu chain + UTXO vào file, load khi restart

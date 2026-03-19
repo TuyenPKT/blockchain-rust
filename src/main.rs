@@ -105,6 +105,13 @@ mod cli_contract;
 mod cli_staking;
 mod deploy_config;
 mod pkt_core;
+mod pkt_steward;
+mod pkt_bandwidth;
+mod pkt_address;
+mod pkt_genesis;
+mod tui_dashboard;
+mod tui_wallet;
+mod web_frontend;
 
 // ── Entry point ───────────────────────────────────────────────
 //

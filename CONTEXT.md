@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v13.0 ✅ — 1080 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v14.2 ✅ — 1295 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -126,15 +126,15 @@ _Read path: `pktscan_api.rs` | Write path: `write_api.rs` — tách biệt kiế
 
 ### Era 19 — PKT Core (v13.x)
 - [x] v13.0 — **PacketCrypt PoW chuẩn**: `src/pkt_core.rs` — `CompactTarget` (nBits như Bitcoin, exponent+mantissa, `meets_target`, `with_ann_count`); `PKT_ANN_EXPIRY=3`/`PKT_SEED_DEPTH=3`/`PKT_ANN_ITEM_COUNT=4096`; `PktAnn` (version+content_hash+parent_block_height+seed_hash+nonce+ann_target, `header_hash` đúng layout, `is_valid_for_block` expiry check); `compute_content_hash` memory-hard items; `PktAnnMiner::mine`; `PktBlockHeader` (`ann_merkle`/`ann_count`/`ann_target`/`effective_target`); `PktBlockMiner::add_ann` (verify+expiry+target), `mine`; `PktChain` với `seed_hash_for(height)` — **+25 tests** (1080 total)
-- [ ] v13.1 — **Network Steward**: PKT-specific governance — steward address, burn vote, network treasury allocation
-- [ ] v13.2 — **Bandwidth Incentive Layer**: bandwidth proof submission, announcer reward pool, per-packet accounting
-- [ ] v13.3 — **PKT Address Format**: bech32 PKT address encoding (hrp="pkt"), địa chỉ tương thích PKT mainnet
-- [ ] v13.4 — **PKT Testnet Genesis Params**: genesis block PKT testnet, coin params (paklets, halving), bootstrap peers testnet
+- [x] v13.1 — **Network Steward**: `src/pkt_steward.rs` — `STEWARD_REWARD_PCT=20%`/`VOTE_WINDOW=2048`/`BURN_ADDRESS`; `StewardVote` (for_candidate/abstain); `StewardState` (current/elected_at/balance/burn); `VoteRegistry` sliding window, `tally()`/`winner()`(>50% threshold)/`vote_fraction()`; `StewardEngine::process_block()` → (steward_amt, miner_amt, Option<new_steward>); `burn()` validates balance; `voting_stats()` snapshot — **+21 tests** (1101 total)
+- [x] v13.2 — **Bandwidth Incentive Layer**: `src/pkt_bandwidth.rs` — `ANNOUNCER_REWARD_PCT=50%`/`EPOCH_BLOCKS=256`/`MIN_PROOF_BYTES=512`/`MAX_ROUTES_PER_NODE=32`; `BandwidthProof` (BLAKE3 hash, verify); `RouteAnnouncement` (expiry window 128 blocks); `NodeStats` (apply_proof, throughput_mbps); `AnnouncerPool` (fund, proportional epoch distribute); `BandwidthLedger` (process_block → fund pool + collect proofs; distribute at epoch boundary); `LedgerSummary` — **+22 tests** (1123 total)
+- [x] v13.3 — **PKT Address Format**: `src/pkt_address.rs` — bech32/bech32m tự implement (không cần crate ngoài); HRP: "pkt"(mainnet)/"tpkt"(testnet)/"rpkt"(regtest); `encode_p2wpkh`/`encode_p2wsh`/`encode_p2tr`; `decode_address` → `PktAddress{network,addr_type,witness_program}`; `pubkey_to_pkt_address` (RIPEMD160(SHA256(pk))); `hash160()`/`taproot_key()` accessors; `convertbits` 8↔5; polymod checksum BIP-173/BIP-350 — **+23 tests** (1146 total)
+- [x] v13.4 — **PKT Testnet Genesis Params**: `src/pkt_genesis.rs` — `PAKLETS_PER_PKT=2^30`/`INITIAL_BLOCK_REWARD=4096 PKT`/`HALVING_INTERVAL=2^20`/`MAX_SUPPLY=6B PKT`; magic bytes + ports (mainnet/testnet/regtest); bootstrap peers; `PktNetworkParams` (mainnet/testnet/regtest với halving_interval=150 + block_time=1s cho regtest); `block_reward_at(height)`/`total_issued_to(height)`/`next_halving_height()`; `PktGenesisBlock::build(params)`/`validate()` — **+35 tests** (1181 total)
 
 ### Era 21 — UX & Frontend (v14.x)
-- [ ] v14.0 — **Terminal UI (TUI)**: `ratatui` — dashboard node real-time: block height, hashrate, peers, mempool depth
-- [ ] v14.1 — **Wallet TUI**: interactive balance, send, receive trong terminal; xác nhận trước khi ký
-- [ ] v14.2 — **Web Frontend**: nâng cấp PKTScan — serve React/HTMX trực tiếp từ binary (`include_dir!`)
+- [x] v14.0 — **Terminal UI (TUI)**: `src/tui_dashboard.rs` — `ratatui = "0.26"` + `crossterm = "0.27"`; `DashboardState` (block_height/hashrate/peers/mempool/uptime/logs); `SyncStatus` (Syncing{current,target}/Synced/NoPeers + progress()/color()/label()); `hashrate_display` (kH/s→MH/s→GH/s), `mempool_bytes_display`, `uptime_display`; `build_layout/build_body_columns/build_left_rows`; render: header/block_info/mining/mempool/sync_bar(Gauge)/peers(List)/log(Paragraph); `parse_event` → `DashboardEvent`; `cmd_dashboard()` live loop; TestBackend cho tests không cần terminal — **+32 tests** (1213 total)
+- [x] v14.1 — **Wallet TUI**: `src/tui_wallet.rs` — `WalletTab` (Balance/Send/Receive/History + next/prev wrap); `SendStep` state machine (Input→Confirm→Done/Cancelled); `SendError` (EmptyRecipient/InvalidRecipient/EmptyAmount/InvalidAmount/ZeroAmount/InsufficientFunds); `WalletTuiState` (balance/address/send form/history/scroll); `send_proceed()` validate → Confirm; `send_confirm()` deduct + history; render: tabs bar/balance/send form/confirm popup(Clear overlay)/receive/history list; `handle_wallet_event` dispatch; TestBackend smoke tests — **+46 tests** (1259 total)
+- [x] v14.2 — **Web Frontend**: `src/web_frontend.rs` + `frontend/app.js` + `frontend/style.css` — nhúng compile-time bằng `include_bytes!` (không cần crate thêm); `EmbeddedAsset{path,content_type,bytes}`; `ASSETS` registry 3 files (index.html/app.js/style.css); `find_asset(path)`/`total_size()`; `mime_for_ext(ext)`/`file_ext(name)`; `FrontendManifest::build()`; `frontend_router()` axum Router (GET / /index.html /static/app.js /static/style.css + fallback 404); `app.js`: fetch /api/status + /api/chain, balance lookup, search, theme toggle, 30s auto-refresh — **+36 tests** (1295 total)
 - [ ] v14.3 — **QR Code**: địa chỉ ví + payment URI hiển thị trong terminal (Unicode block chars)
 - [ ] v14.4 — **Shell Completions**: auto-complete bash/zsh/fish cho tất cả CLI commands
 
