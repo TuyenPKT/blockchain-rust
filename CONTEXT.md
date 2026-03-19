@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v10.0 ✅ — 779 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v10.1 ✅ — 798 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -97,7 +97,7 @@ _Nguyên tắc: GET = public (rate-limited) | POST/PUT/DELETE = chỉ mở sau k
 ### Era 16 — Auth Layer + Fix Core Logic (v10.x)
 _Auth và Audit Log được kéo lên ĐẦU era — write endpoint chỉ mở sau khi v10.0–v10.1 hoàn chỉnh._
 - [x] v10.0 — **API Auth**: `src/api_auth.rs` — API key system: keygen (`cargo run -- apikey new`), hash lưu file `~/.pkt/api_keys.json`, `X-API-Key` header validation, role: `read/write/admin`; `auth_middleware` tích hợp vào pktscan_api::serve() — **28 tests**
-- [ ] v10.1 — **Audit Log**: `src/audit_log.rs` — append-only structured log mọi request: timestamp/IP/method/path/status/api_key_id/latency_ms; rotate daily; `GET /api/admin/logs` (admin role only)
+- [x] v10.1 — **Audit Log**: `src/audit_log.rs` — append-only structured log mọi request: timestamp/IP/method/path/status/api_key_id/latency_ms; rotate daily (`~/.pkt/audit/audit-YYYY-MM-DD.log`); `GET /api/admin/logs?date=&limit=&offset=` (admin role only) — **19 tests**
 - [ ] v10.2 — **EVM Complete**: sửa `evm_lite.rs` — thêm đầy đủ opcodes: Add/Sub/Mul/Div/LT/GT/EQ/Jump/JumpI/CallValue/Caller/Return (hiện chỉ có Push/Stop)
 - [ ] v10.3 — **Contract Persistence**: sửa `contract_state.rs` + `storage.rs` — lưu contract state vào RocksDB, restart không mất
 - [ ] v10.4 — **Token ↔ Chain**: sửa `chain.rs` + `token_tx.rs` — validate token TX khi `add_block`, token balance thực sự thay đổi

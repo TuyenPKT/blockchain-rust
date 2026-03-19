@@ -93,6 +93,7 @@ mod address_labels;
 mod openapi;
 mod sdk_gen;
 mod api_auth;
+mod audit_log;
 
 // ── Entry point ───────────────────────────────────────────────
 //

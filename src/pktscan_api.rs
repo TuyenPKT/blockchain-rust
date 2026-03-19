@@ -809,6 +809,9 @@ pub async fn serve(state: ScanDb, port: u16) {
     // v10.0 — API auth store
     let auth_db = crate::api_auth::ApiKeyStore::load_default();
 
+    // v10.1 — Audit log (daily rotation)
+    let audit_db = crate::audit_log::AuditLogger::open_default();
+
     // v9.0 — Zero-Trust middleware (rate limit + input guard + audit log)
     let zt = crate::zt_middleware::ZtState::new(
         crate::zt_middleware::ZtConfig::default(),
@@ -827,6 +830,11 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(address_labels::label_router(label_db))
         .merge(crate::openapi::openapi_router())
         .merge(crate::sdk_gen::sdk_router())
+        .merge(crate::audit_log::admin_router(Arc::clone(&audit_db)))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&audit_db),
+            crate::audit_log::audit_middleware,
+        ))
         .layer(middleware::from_fn(move |req, next| {
             let cors = Arc::clone(&cors_cfg);
             cors_layer(cors, req, next)
@@ -888,6 +896,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/sdk/ts");
     println!("  CORS: allowlist [localhost:3000/8080, pktscan.io]  (v9.6)");
     println!("  Auth: X-API-Key header  (optional for GET, required for write — v10.0)");
+    println!("  GET  /api/admin/logs?date=YYYY-MM-DD&limit=100  (admin role only — v10.1)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
     println!();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
