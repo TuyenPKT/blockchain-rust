@@ -104,6 +104,7 @@ mod cli_token;
 mod cli_contract;
 mod cli_staking;
 mod deploy_config;
+mod pkt_core;
 
 // ── Entry point ───────────────────────────────────────────────
 //

@@ -1,6 +1,6 @@
 # 🦀 Blockchain Rust — CONTEXT
 
-**Version hiện tại: v12.0 ✅ — 1055 tests pass, 0 errors, 0 warnings**
+**Version hiện tại: v13.0 ✅ — 1080 tests pass, 0 errors, 0 warnings**
 
 ---
 
@@ -124,8 +124,22 @@ _Read path: `pktscan_api.rs` | Write path: `write_api.rs` — tách biệt kiế
 ### Era 18 — HD Wallet & UX (v12.x)
 - [x] v12.0 — **HD Wallet CLI**: mở rộng `wallet_cli.rs` — `wallet new` dùng `HdWallet::new()` (BIP39/44) thay keypair thô; file format 3 dòng: `mnemonic\nsk_hex\naddress`; `wallet show` hiển thị 12 từ seed phrase có số thứ tự; `wallet restore <word1>...<word12>` khôi phục ví từ seed phrase; `load_wallet_full()` tự detect format v4.0 (2 dòng) vs v12.0 (3 dòng, dòng 1 chứa spaces); backward compat với wallet cũ — **+13 tests** (1055 total)
 
-### Era 20 — Post-Singularity (v12.x) — hardware-dependent
-- [ ] v12.1–v12.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
+### Era 19 — PKT Core (v13.x)
+- [x] v13.0 — **PacketCrypt PoW chuẩn**: `src/pkt_core.rs` — `CompactTarget` (nBits như Bitcoin, exponent+mantissa, `meets_target`, `with_ann_count`); `PKT_ANN_EXPIRY=3`/`PKT_SEED_DEPTH=3`/`PKT_ANN_ITEM_COUNT=4096`; `PktAnn` (version+content_hash+parent_block_height+seed_hash+nonce+ann_target, `header_hash` đúng layout, `is_valid_for_block` expiry check); `compute_content_hash` memory-hard items; `PktAnnMiner::mine`; `PktBlockHeader` (`ann_merkle`/`ann_count`/`ann_target`/`effective_target`); `PktBlockMiner::add_ann` (verify+expiry+target), `mine`; `PktChain` với `seed_hash_for(height)` — **+25 tests** (1080 total)
+- [ ] v13.1 — **Network Steward**: PKT-specific governance — steward address, burn vote, network treasury allocation
+- [ ] v13.2 — **Bandwidth Incentive Layer**: bandwidth proof submission, announcer reward pool, per-packet accounting
+- [ ] v13.3 — **PKT Address Format**: bech32 PKT address encoding (hrp="pkt"), địa chỉ tương thích PKT mainnet
+- [ ] v13.4 — **PKT Testnet Genesis Params**: genesis block PKT testnet, coin params (paklets, halving), bootstrap peers testnet
+
+### Era 21 — UX & Frontend (v14.x)
+- [ ] v14.0 — **Terminal UI (TUI)**: `ratatui` — dashboard node real-time: block height, hashrate, peers, mempool depth
+- [ ] v14.1 — **Wallet TUI**: interactive balance, send, receive trong terminal; xác nhận trước khi ký
+- [ ] v14.2 — **Web Frontend**: nâng cấp PKTScan — serve React/HTMX trực tiếp từ binary (`include_dir!`)
+- [ ] v14.3 — **QR Code**: địa chỉ ví + payment URI hiển thị trong terminal (Unicode block chars)
+- [ ] v14.4 — **Shell Completions**: auto-complete bash/zsh/fish cho tất cả CLI commands
+
+### Era 20 — Post-Singularity (v99.x) — hardware-dependent
+- [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 
 ---
 

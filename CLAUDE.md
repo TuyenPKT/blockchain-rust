@@ -5,7 +5,7 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v12.0 ✅**
+**Version hiện tại: v13.0 ✅**
 
 ## Quy tắc làm việc
 
