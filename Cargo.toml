@@ -49,10 +49,13 @@ ratatui = "0.26"
 crossterm = "0.27"
 # v14.3: QR Code (pure Rust, không cần libpng)
 qrcode = "0.14"
+# v16.3: Hot Reload Dev Mode — filesystem watcher
+notify = "6"
 
 [features]
 default = []
 fuzz = ["proptest"]
+integration = []          # v16.2: E2E integration tests (cargo test --features integration)
 opencl = ["dep:ocl"]
 cuda = ["dep:cust"]
 

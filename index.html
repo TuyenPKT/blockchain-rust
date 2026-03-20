@@ -592,6 +592,7 @@
     <a class="nav-link" href="#" onclick="showBlocks(); return false;">Blocks</a>
     <a class="nav-link" href="#" onclick="showTxs(); return false;">Transactions</a>
     <a class="nav-link" href="#" onclick="showStats(); return false;">Stats</a>
+    <a class="nav-link" href="#" onclick="showTestnet(); return false;">Testnet</a>
     <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme" id="themeBtn">☀️</button>
   </div>
 </nav>
@@ -778,6 +779,79 @@
   </div>
 </div>
 
+<!-- ═══ TESTNET PAGE ══════════════════════════════════════════════ -->
+<div id="testnet-page" class="page">
+  <div class="main-wrap">
+
+    <!-- Sync Status Panel -->
+    <div class="panel" style="margin-bottom:24px">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon" style="background:rgba(247,161,51,.15);color:var(--pkt);border:1px solid rgba(247,161,51,.25);">🔗</div>
+          PKT Testnet Sync
+        </div>
+        <span id="tn-stat-synced"></span>
+      </div>
+      <div style="padding:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px">
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Phase</div>
+          <div id="tn-sync-phase" style="font-weight:700">—</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Progress</div>
+          <div id="tn-sync-bar" class="mono" style="font-size:.85rem">—</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Headers</div>
+          <div id="tn-headers-count" class="mono" style="font-weight:700">—</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">UTXO Height</div>
+          <div id="tn-utxo-height" class="mono" style="font-weight:700">—</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Speed</div>
+          <div id="tn-speed" class="mono">—</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">ETA</div>
+          <div id="tn-eta" class="mono">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid-stats" style="margin-bottom:24px">
+      <div class="stat-card">
+        <div class="label">Header Height</div>
+        <div class="value" id="tn-stat-height" style="color:var(--pkt)">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">UTXO Count</div>
+        <div class="value" id="tn-stat-utxos">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Value</div>
+        <div class="value" id="tn-stat-value">—</div>
+      </div>
+    </div>
+
+    <!-- Recent Headers Panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon item-icon-block">📦</div>
+          Recent Wire Headers (PKT Testnet)
+        </div>
+      </div>
+      <div id="tn-headers-list">
+        <div style="padding:12px 18px;color:var(--muted);font-size:.85rem">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- ═══ FOOTER ════════════════════════════════════════════════════ -->
 <footer>
   <div class="footer-inner">
@@ -791,71 +865,113 @@
 </footer>
 
 <script>
-/* ── MOCK DATA ─────────────────────────────────────────────── */
-const ADDRS = [
-  '1KgwuW1giVnAHgsJmE9SBMRxMmRo5CVDc5',
-  '1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf4a',
-  '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
-  '1CounterpartyXXXXXXXXXXXXXXXUWLpVr',
-  '1PKTPool1minexxxxxxxxxxxxxxxxxxxxx',
-  '1PKT2nodexxxxxxxxxxxxxxxxxxxxxxxxxxW',
-];
+/* ── CONFIG ─────────────────────────────────────────────────── */
+const API_BASE = '/blockchain-rust';
 
-function rndAddr() { return ADDRS[Math.floor(Math.random() * ADDRS.length)]; }
-function rndHash(len=64) {
-  const hex = '0123456789abcdef';
-  return Array.from({length: len}, () => hex[Math.floor(Math.random()*16)]).join('');
-}
-function shortHash(h) { return h.slice(0,10)+'…'+h.slice(-8); }
-function shortAddr(a) { return a.slice(0,8)+'…'+a.slice(-6); }
+/* ── UTILS ──────────────────────────────────────────────────── */
+function shortHash(h) { return h ? h.slice(0,10)+'…'+h.slice(-8) : '—'; }
+function shortAddr(a) { return a ? a.slice(0,8)+'…'+a.slice(-6) : '—'; }
 function ago(secs) {
   if (secs < 60) return secs + 's ago';
   if (secs < 3600) return Math.floor(secs/60) + 'm ago';
   return Math.floor(secs/3600) + 'h ago';
 }
+function tsAgo(ts) {
+  const secs = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  return ago(secs);
+}
+function pakletsToPkt(p) { return (p / 1e9).toFixed(4) + ' PKT'; }
 
-let BASE_HEIGHT = 850412;
 let blocks = [];
-let txs = [];
-let tickInterval;
+let txs    = [];
+let stats  = {};
 
-function genBlocks(n=20) {
-  blocks = [];
-  for (let i = 0; i < n; i++) {
-    const height = BASE_HEIGHT - i;
-    const nTxs = Math.floor(Math.random() * 12) + 1;
-    blocks.push({
-      height,
-      hash: '0000' + rndHash(60),
-      prevHash: '0000' + rndHash(60),
-      timestamp: Date.now() - i * 60000 - Math.random() * 15000,
-      txCount: nTxs,
-      miner: rndAddr(),
-      reward: 50,
-      difficulty: 4,
-      nonce: Math.floor(Math.random() * 9999999),
-      size: Math.floor(Math.random() * 800 + 200),
-    });
-  }
+/* ── API FETCH ──────────────────────────────────────────────── */
+async function fetchStats() {
+  try {
+    const r = await fetch(`${API_BASE}/api/stats`);
+    if (!r.ok) return;
+    stats = await r.json();
+    document.getElementById('stat-height').textContent    = (stats.height ?? 0).toLocaleString();
+    document.getElementById('stat-blocktime').textContent = stats.avg_block_time_s
+      ? Math.round(stats.avg_block_time_s) + 's' : '—';
+    document.getElementById('stat-hashrate').textContent  = fmtHashrate(stats.hashrate ?? 0);
+    document.getElementById('stat-nodes').textContent     = stats.utxo_count ?? '—';
+    document.getElementById('stat-txs').textContent       = stats.utxo_count ?? '—';
+    document.getElementById('stat-diff').textContent      = stats.difficulty ?? '—';
+    buildTicker(stats);
+  } catch(e) { console.warn('fetchStats', e); }
 }
 
-function genTxs(n=20) {
-  txs = [];
-  for (let i = 0; i < n; i++) {
-    const amount = +(Math.random() * 200 + 0.001).toFixed(6);
-    const fee    = +(Math.random() * 0.01).toFixed(6);
-    const isCoinbase = i % 7 === 0;
-    txs.push({
-      txid:      rndHash(64),
-      blockHeight: BASE_HEIGHT - Math.floor(i / 3),
-      timestamp: Date.now() - i * 18000 - Math.random() * 5000,
-      from:      isCoinbase ? 'coinbase' : rndAddr(),
-      to:        rndAddr(),
-      amount,
-      fee:       isCoinbase ? 0 : fee,
-      isCoinbase,
-    });
-  }
+async function fetchBlocks() {
+  try {
+    const r = await fetch(`${API_BASE}/api/blocks?limit=20`);
+    if (!r.ok) return;
+    const data = await r.json();
+    blocks = (data.blocks ?? data ?? []).map(b => ({
+      height:    b.index ?? b.height ?? 0,
+      hash:      b.hash ?? '',
+      prevHash:  b.prev_hash ?? '',
+      timestamp: (b.timestamp ?? 0) * 1000,
+      txCount:   b.tx_count ?? b.transactions?.length ?? 0,
+      miner:     b.miner ?? b.miner_hash ?? '',
+      reward:    b.reward ?? 50e9,
+      difficulty: b.difficulty ?? stats.difficulty ?? 3,
+      nonce:     b.nonce ?? 0,
+    }));
+  } catch(e) { console.warn('fetchBlocks', e); }
+}
+
+async function fetchTxs() {
+  try {
+    const r = await fetch(`${API_BASE}/api/txs?limit=20`);
+    if (!r.ok) return;
+    const data = await r.json();
+    txs = (data.txs ?? data ?? []).map(t => ({
+      txid:        t.tx_id ?? t.txid ?? '',
+      blockHeight: t.block_height ?? t.block_index ?? 0,
+      timestamp:   (t.block_timestamp ?? t.timestamp ?? 0) * 1000,
+      from:        t.from ?? (t.is_coinbase ? 'coinbase' : ''),
+      to:          t.to ?? t.outputs?.[0]?.address ?? '',
+      amount:      (t.output_total ?? t.amount ?? t.total_out ?? 0) / 1e9,
+      fee:         (t.fee ?? 0) / 1e9,
+      isCoinbase:  t.is_coinbase ?? false,
+    }));
+  } catch(e) { console.warn('fetchTxs', e); }
+}
+
+async function fetchBlockDetail(height) {
+  const r = await fetch(`${API_BASE}/api/block/${height}`);
+  if (!r.ok) throw new Error('not found');
+  return r.json();
+}
+
+async function fetchTxDetail(txid) {
+  const r = await fetch(`${API_BASE}/api/tx/${txid}`);
+  if (!r.ok) throw new Error('not found');
+  return r.json();
+}
+
+async function fetchSearch(q) {
+  const r = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+function fmtHashrate(h) {
+  if (h >= 1e15) return (h/1e15).toFixed(2) + ' PH/s';
+  if (h >= 1e12) return (h/1e12).toFixed(2) + ' TH/s';
+  if (h >= 1e9)  return (h/1e9).toFixed(2)  + ' GH/s';
+  if (h >= 1e6)  return (h/1e6).toFixed(2)  + ' MH/s';
+  if (h >= 1e3)  return (h/1e3).toFixed(2)  + ' KH/s';
+  return h + ' H/s';
+}
+
+async function refreshAll() {
+  await fetchStats();
+  await fetchBlocks();
+  await fetchTxs();
+  if (document.getElementById('home-page').style.display !== 'none') renderHome();
 }
 
 /* ── THEME ──────────────────────────────────────────────────── */
@@ -874,26 +990,18 @@ function toggleTheme() {
 })();
 
 /* ── TICKER ─────────────────────────────────────────────────── */
-function buildTicker() {
-  const items = [
-    `📦 Block #${BASE_HEIGHT.toLocaleString()}`,
-    `⚡ 4.23 PH/s`,
-    `💰 50 PKT reward`,
-    `🌐 2,847 nodes`,
-    `🔄 Difficulty 4`,
-    `⏱ 60s block time`,
-    `💸 24.7M total txs`,
-    `🔐 BLAKE3 PoW`,
-    `🛡 Post-Quantum ready`,
-    `📦 Block #${BASE_HEIGHT.toLocaleString()}`,
-    `⚡ 4.23 PH/s`,
-    `💰 50 PKT reward`,
-    `🌐 2,847 nodes`,
-    `🔄 Difficulty 4`,
-    `⏱ 60s block time`,
-    `💸 24.7M total txs`,
-    `🔐 BLAKE3 PoW`,
-    `🛡 Post-Quantum ready`,
+function buildTicker(s) {
+  s = s || {};
+  const height = (s.height ?? 0).toLocaleString();
+  const diff   = s.difficulty ?? '—';
+  const hr     = fmtHashrate(s.hashrate ?? 0);
+  const reward = pakletsToPkt(s.block_reward ?? 50e9);
+  const bt     = s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—';
+  const items  = [
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${reward} reward`,
+    `🔄 Difficulty ${diff}`, `⏱ ${bt} block time`, `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${reward} reward`,
+    `🔄 Difficulty ${diff}`, `⏱ ${bt} block time`, `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
   ];
   const el = document.getElementById('tickerInner');
   el.innerHTML = items.map(t => `<span class="ticker-item">${t}<span class="ticker-sep"> ◆ </span></span>`).join('');
@@ -911,7 +1019,7 @@ function renderBlockItem(b, container, clickFn) {
       <div class="item-secondary">${b.txCount} txns &nbsp;·&nbsp; Miner: <span class="addr-short">${shortAddr(b.miner)}</span></div>
     </div>
     <div class="item-right">
-      <div class="item-amount">${b.reward} PKT</div>
+      <div class="item-amount">${pakletsToPkt(b.reward ?? 50e9)}</div>
       <div class="item-age">${ago(secsAgo)}</div>
     </div>
   `;
@@ -972,87 +1080,101 @@ function showStats() {
   hideAll();
   document.getElementById('stats-page').classList.add('active');
   const el = document.getElementById('statsContent');
-  el.innerHTML = '';
+  const s  = stats;
   const rows = [
-    ['Network', 'PKT Mainnet'],
-    ['Algorithm', 'BLAKE3 PacketCrypt PoW'],
-    ['Block Time', '60 seconds'],
-    ['Latest Block', `#${BASE_HEIGHT.toLocaleString()}`],
-    ['Block Reward', '50 PKT (50,000,000,000 paklets)'],
-    ['Halving Interval', '87,600 blocks (~2 years)'],
-    ['Difficulty', '4'],
-    ['Hashrate', '4.23 PH/s'],
-    ['Active Nodes', '2,847'],
-    ['Total Transactions', '24,700,000'],
-    ['Total Supply', '21,000,000,000 PKT'],
-    ['P2P Port', '8333'],
-    ['P2P Protocol', 'TCP (async tokio)'],
-    ['Signature', 'ECDSA + Dilithium (hybrid post-quantum)'],
-    ['Hash Function', 'BLAKE3 (PoW) · SHA-256 (address)'],
-    ['Address Format', 'Base58Check (P2PKH / P2TR)'],
+    ['Network',           'PKT Chain'],
+    ['Algorithm',         'BLAKE3 PoW'],
+    ['Latest Block',      `#${(s.height ?? 0).toLocaleString()}`],
+    ['Block Reward',      pakletsToPkt(s.block_reward ?? 50e9)],
+    ['Difficulty',        s.difficulty ?? '—'],
+    ['Hashrate',          fmtHashrate(s.hashrate ?? 0)],
+    ['Avg Block Time',    s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—'],
+    ['UTXO Count',        (s.utxo_count ?? 0).toLocaleString()],
+    ['Mempool',           (s.mempool_count ?? 0) + ' txs'],
+    ['Total Supply',      pakletsToPkt(s.total_supply ?? 0)],
+    ['Block Count',       (s.block_count ?? 0).toLocaleString()],
+    ['P2P Port (testnet)','8333'],
+    ['P2P Port (mainnet)','64764'],
+    ['Signature',         'ECDSA + Dilithium (hybrid post-quantum)'],
+    ['Hash Function',     'BLAKE3 (PoW) · SHA-256 (address)'],
+    ['Address Format',    'Base58Check (P2PKH / P2TR)'],
   ];
   const div = document.createElement('div');
   rows.forEach(([k, v]) => {
-    div.innerHTML += `
-      <div class="kv-row">
-        <div class="kv-key">${k}</div>
-        <div class="kv-val normal">${v}</div>
-      </div>`;
+    div.innerHTML += `<div class="kv-row"><div class="kv-key">${k}</div><div class="kv-val normal">${v}</div></div>`;
   });
+  el.innerHTML = '';
   el.appendChild(div);
 }
 
-function showBlockDetail(b) {
+async function showBlockDetail(b) {
   hideAll();
   document.getElementById('block-detail').classList.add('active');
   const el = document.getElementById('blockDetailContent');
-  el.innerHTML = `
-    <div class="detail-title">
-      <span>📦 Block <span style="color:var(--blue)">#${b.height.toLocaleString()}</span></span>
-    </div>
-    <div class="panel">
-      <div class="kv-row"><div class="kv-key">Block Height</div><div class="kv-val">${b.height.toLocaleString()}</div></div>
-      <div class="kv-row"><div class="kv-key">Hash</div><div class="kv-val">${b.hash}</div></div>
-      <div class="kv-row"><div class="kv-key">Previous Hash</div><div class="kv-val">${b.prevHash}</div></div>
-      <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${new Date(b.timestamp).toISOString()}</div></div>
-      <div class="kv-row"><div class="kv-key">Transactions</div><div class="kv-val normal">${b.txCount}</div></div>
-      <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${b.nonce.toLocaleString()}</div></div>
-      <div class="kv-row"><div class="kv-key">Difficulty</div><div class="kv-val normal">${b.difficulty}</div></div>
-      <div class="kv-row"><div class="kv-key">Block Reward</div><div class="kv-val normal" style="color:var(--pkt)">${b.reward} PKT</div></div>
-      <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${b.miner}</div></div>
-      <div class="kv-row"><div class="kv-key">Size</div><div class="kv-val normal">${b.size} bytes</div></div>
-    </div>
-  `;
+  el.innerHTML = '<div style="padding:24px;color:var(--muted)">Loading…</div>';
+  try {
+    const d = await fetchBlockDetail(b.height ?? b);
+    const block = d.block ?? d;
+    const height = block.index ?? block.height ?? b.height ?? 0;
+    const ts = block.timestamp ? new Date(block.timestamp * 1000).toISOString() : '—';
+    el.innerHTML = `
+      <div class="detail-title">
+        <span>📦 Block <span style="color:var(--blue)">#${height.toLocaleString()}</span></span>
+      </div>
+      <div class="panel">
+        <div class="kv-row"><div class="kv-key">Block Height</div><div class="kv-val">${height.toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Hash</div><div class="kv-val">${block.hash ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Previous Hash</div><div class="kv-val">${block.prev_hash ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${ts}</div></div>
+        <div class="kv-row"><div class="kv-key">Transactions</div><div class="kv-val normal">${block.tx_count ?? block.transactions?.length ?? 0}</div></div>
+        <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${(block.nonce ?? 0).toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Difficulty</div><div class="kv-val normal">${block.difficulty ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Block Reward</div><div class="kv-val normal" style="color:var(--pkt)">${pakletsToPkt(block.reward ?? 50e9)}</div></div>
+        <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${block.miner ?? block.miner_hash ?? '—'}</div></div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:24px;color:var(--red)">Block not found</div>';
+  }
 }
 
-function showTxDetail(tx) {
+async function showTxDetail(tx) {
   hideAll();
   document.getElementById('tx-detail').classList.add('active');
   const el = document.getElementById('txDetailContent');
-  el.innerHTML = `
-    <div class="detail-title">
-      <span>💸 Transaction</span>
-      <span class="hash">${tx.txid}</span>
-    </div>
-    <div class="panel">
-      <div class="kv-row"><div class="kv-key">TxID</div><div class="kv-val">${tx.txid}</div></div>
-      <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${tx.blockHeight.toLocaleString()}</div></div>
-      <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${new Date(tx.timestamp).toISOString()}</div></div>
-      <div class="kv-row"><div class="kv-key">Type</div><div class="kv-val normal"><span class="badge ${tx.isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${tx.isCoinbase ? 'coinbase' : 'transfer'}</span></div></div>
-      <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${tx.from}</div></div>
-      <div class="kv-row"><div class="kv-key">To</div><div class="kv-val" style="color:var(--blue)">${tx.to}</div></div>
-      <div class="kv-row"><div class="kv-key">Amount</div><div class="kv-val normal" style="color:var(--pkt)">${tx.amount.toFixed(8)} PKT</div></div>
-      <div class="kv-row"><div class="kv-key">Fee</div><div class="kv-val normal">${tx.fee.toFixed(8)} PKT</div></div>
-    </div>
-  `;
+  el.innerHTML = '<div style="padding:24px;color:var(--muted)">Loading…</div>';
+  try {
+    const d = await fetchTxDetail(tx.txid ?? tx);
+    const t = d.tx ?? d;
+    const ts = t.timestamp ? new Date(t.timestamp * 1000).toISOString() : '—';
+    const isCoinbase = t.is_coinbase ?? false;
+    const amount = ((t.amount ?? t.total_out ?? 0) / 1e9).toFixed(8);
+    const fee    = ((t.fee ?? 0) / 1e9).toFixed(8);
+    el.innerHTML = `
+      <div class="detail-title">
+        <span>💸 Transaction</span>
+        <span class="hash">${t.tx_id ?? t.txid ?? ''}</span>
+      </div>
+      <div class="panel">
+        <div class="kv-row"><div class="kv-key">TxID</div><div class="kv-val">${t.tx_id ?? t.txid ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${(t.block_height ?? t.block_index ?? 0).toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${ts}</div></div>
+        <div class="kv-row"><div class="kv-key">Type</div><div class="kv-val normal"><span class="badge ${isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${isCoinbase ? 'coinbase' : 'transfer'}</span></div></div>
+        <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${isCoinbase ? 'coinbase' : (t.from ?? '—')}</div></div>
+        <div class="kv-row"><div class="kv-key">To</div><div class="kv-val" style="color:var(--blue)">${t.to ?? t.outputs?.[0]?.address ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Amount</div><div class="kv-val normal" style="color:var(--pkt)">${amount} PKT</div></div>
+        <div class="kv-row"><div class="kv-key">Fee</div><div class="kv-val normal">${fee} PKT</div></div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:24px;color:var(--red)">Transaction not found</div>';
+  }
 }
 
 function renderHome() {
   const lb = document.getElementById('latestBlocks');
   const lt = document.getElementById('latestTxs');
-  lb.innerHTML = '';
-  lt.innerHTML = '';
-  blocks.slice(0, 8).forEach(b => renderBlockItem(b, lb));
+  lb.innerHTML = blocks.length ? '' : '<div style="padding:18px;color:var(--muted);font-size:.85rem">No blocks yet — run: cargo run -- mine</div>';
+  lt.innerHTML = txs.length   ? '' : '<div style="padding:18px;color:var(--muted);font-size:.85rem">No transactions yet</div>';
+  blocks.slice(0, 8).forEach(b  => renderBlockItem(b,  lb));
   txs.slice(0, 8).forEach(tx => renderTxItem(tx, lt));
 }
 
@@ -1094,8 +1216,9 @@ function doSearch(query) {
       results.push({ type: 'tx', label: 'Transaction', value: tx.txid, data: tx });
     }
   });
-  // address match
-  ADDRS.forEach(addr => {
+  // address match từ cached txs
+  const addrs = new Set([...txs.map(t => t.from), ...txs.map(t => t.to)].filter(Boolean));
+  addrs.forEach(addr => {
     if (addr.toLowerCase().includes(q)) {
       results.push({ type: 'address', label: 'Address', value: addr, data: null });
     }
@@ -1128,16 +1251,16 @@ function selectResult(i) {
   else if (r.type === 'tx') showTxDetail(r.data);
 }
 
-function heroSearch() {
+async function heroSearch() {
   const q = document.getElementById('heroInput').value.trim();
   if (!q) return;
   // try block height
   const height = parseInt(q);
-  if (!isNaN(height)) {
-    const b = blocks.find(x => x.height === height);
-    if (b) { showBlockDetail(b); return; }
+  if (!isNaN(height) && String(height) === q) {
+    showBlockDetail({ height });
+    return;
   }
-  // try tx hash prefix
+  // try tx hash prefix in local cache
   const tx = txs.find(x => x.txid.startsWith(q.toLowerCase()));
   if (tx) { showTxDetail(tx); return; }
   // fallback: open search modal
@@ -1146,53 +1269,11 @@ function heroSearch() {
   doSearch(q);
 }
 
-/* ── LIVE UPDATE ─────────────────────────────────────────────── */
-function liveUpdate() {
-  BASE_HEIGHT++;
-  const newBlock = {
-    height:    BASE_HEIGHT,
-    hash:      '0000' + rndHash(60),
-    prevHash:  blocks[0]?.hash || '0000' + rndHash(60),
-    timestamp: Date.now(),
-    txCount:   Math.floor(Math.random() * 12) + 1,
-    miner:     rndAddr(),
-    reward:    50,
-    difficulty: 4,
-    nonce:     Math.floor(Math.random() * 9999999),
-    size:      Math.floor(Math.random() * 800 + 200),
-  };
-  blocks.unshift(newBlock);
-  blocks = blocks.slice(0, 20);
-
-  // add a new tx
-  const newTx = {
-    txid:        rndHash(64),
-    blockHeight: BASE_HEIGHT,
-    timestamp:   Date.now(),
-    from:        rndAddr(),
-    to:          rndAddr(),
-    amount:      +(Math.random() * 200 + 0.001).toFixed(6),
-    fee:         +(Math.random() * 0.01).toFixed(6),
-    isCoinbase:  false,
-  };
-  txs.unshift(newTx);
-  txs = txs.slice(0, 20);
-
-  // update stat bar
-  document.getElementById('stat-height').textContent = BASE_HEIGHT.toLocaleString();
-
-  // re-render home if visible
-  if (document.getElementById('home-page').style.display !== 'none') {
-    renderHome();
-  }
-}
-
 /* ── INIT ────────────────────────────────────────────────────── */
-genBlocks();
-genTxs();
-buildTicker();
-renderHome();
-setInterval(liveUpdate, 60000); // new block every 60s
+buildTicker({});
+refreshAll().then(() => renderHome());
+setInterval(refreshAll, 15000); // refresh từ API mỗi 15s
 </script>
+<script src="/blockchain-rust/static/testnet.js"></script>
 </body>
 </html>

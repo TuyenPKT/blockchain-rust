@@ -1,11 +1,37 @@
+# Build artifacts
 target/
-
-.claude/
-
 target 2/
-
 target 3/
-
 target 4/
-
 target 5/
+
+# IDE / tools
+.claude/
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+**/*.rs.bk
+Cargo.lock
+
+# Local data / wallets / keys
+*.key
+*.pem
+*.env
+.env.*
+*.secret
+
+# RocksDB data (local node/chain state)
+~/.pkt/
+data/
+db/
+rocksdb/
+
+# Logs
+*.log
+audit.log

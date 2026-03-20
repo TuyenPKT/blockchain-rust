@@ -1,0 +1,570 @@
+#![allow(dead_code)]
+//! v15.7 — PKT Node Server
+//!
+//! Listen cho incoming PKT P2P connections, thực hiện handshake, giữ kết nối.
+//!
+//! Handshake flow (server side — ngược với client):
+//!   ← receive Version   (peer gửi trước)
+//!   → send Version       (ta gửi Version của ta)
+//!   → send Verack        (xác nhận Version của peer)
+//!   ← receive Verack     (peer xác nhận Version của ta)
+//!   → keepalive Ping/Pong + respond GetHeaders với empty Headers
+//!
+//! CLI: cargo run -- pkt-node [port] [--mainnet] [--max-peers N]
+//!
+//! Dùng pkt_wire + pkt_peer từ v15.0–v15.1
+
+use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::thread;
+
+use crate::pkt_wire::{PktMsg, VersionMsg, TESTNET_MAGIC, MAINNET_MAGIC, PROTOCOL_VERSION};
+use crate::pkt_peer::{send_msg, recv_msg, PeerError};
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+pub const DEFAULT_PORT:       u16 = 64512;   // PKT testnet official port
+pub const READ_TIMEOUT_SECS:  u64 = 60;      // inactivity → send ping
+pub const HANDSHAKE_TIMEOUT:  u64 = 20;      // max time để hoàn thành handshake
+pub const MAX_PEERS_DEFAULT:  usize = 50;
+
+// ── NodeConfig ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct NodeConfig {
+    pub port:       u16,
+    pub magic:      [u8; 4],
+    pub network:    String,
+    pub our_height: i32,
+    pub max_peers:  usize,
+}
+
+impl Default for NodeConfig {
+    fn default() -> Self {
+        Self {
+            port:       DEFAULT_PORT,
+            magic:      TESTNET_MAGIC,
+            network:    "testnet".to_string(),
+            our_height: 0,
+            max_peers:  MAX_PEERS_DEFAULT,
+        }
+    }
+}
+
+impl NodeConfig {
+    pub fn testnet(port: u16) -> Self {
+        Self { port, ..Self::default() }
+    }
+
+    pub fn mainnet(port: u16) -> Self {
+        Self {
+            port,
+            magic:   MAINNET_MAGIC,
+            network: "mainnet".to_string(),
+            ..Self::default()
+        }
+    }
+}
+
+// ── ConnectedPeer ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct ConnectedPeer {
+    pub addr:       String,
+    pub user_agent: String,
+    pub height:     i32,
+    pub version:    u32,
+}
+
+// ── Server-side handshake ─────────────────────────────────────────────────────
+//
+// Server waits for peer's Version first, then replies Version + Verack,
+// then waits for peer's Verack.
+
+pub fn server_handshake(
+    stream:     &mut TcpStream,
+    magic:      [u8; 4],
+    our_height: i32,
+) -> Result<ConnectedPeer, PeerError> {
+    stream.set_read_timeout(Some(Duration::from_secs(HANDSHAKE_TIMEOUT)))?;
+
+    let addr = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // ── Step 1: receive peer's Version ────────────────────────────────────────
+    let peer = loop {
+        let msg = recv_msg(stream, magic)?;
+        match msg {
+            PktMsg::Version(v) => {
+                break ConnectedPeer {
+                    addr:       addr.clone(),
+                    user_agent: v.user_agent.clone(),
+                    height:     v.start_height,
+                    version:    v.version,
+                };
+            }
+            PktMsg::Ping { nonce } => {
+                // peer might ping before sending Version — respond and keep waiting
+                send_msg(stream, PktMsg::Pong { nonce }, magic)?;
+            }
+            _ => {
+                return Err(PeerError::Handshake(
+                    "expected Version as first message".to_string(),
+                ));
+            }
+        }
+    };
+
+    // ── Step 2: send our Version ──────────────────────────────────────────────
+    send_msg(stream, PktMsg::Version(VersionMsg::new(our_height)), magic)?;
+
+    // ── Step 3: send Verack (acknowledge peer's Version) ─────────────────────
+    send_msg(stream, PktMsg::Verack, magic)?;
+
+    // ── Step 4: wait for peer's Verack ────────────────────────────────────────
+    loop {
+        let msg = recv_msg(stream, magic)?;
+        match msg {
+            PktMsg::Verack => break,
+            PktMsg::Ping { nonce } => {
+                send_msg(stream, PktMsg::Pong { nonce }, magic)?;
+            }
+            _ => {} // ignore other messages while waiting
+        }
+    }
+
+    Ok(peer)
+}
+
+// ── Per-peer session loop ─────────────────────────────────────────────────────
+
+fn handle_peer(
+    mut stream: TcpStream,
+    magic:      [u8; 4],
+    our_height: i32,
+    peers:      Arc<Mutex<Vec<ConnectedPeer>>>,
+) {
+    let addr = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    println!("[pkt-node] incoming: {}", addr);
+
+    let peer = match server_handshake(&mut stream, magic, our_height) {
+        Ok(p) => p,
+        Err(e) => {
+            println!("[pkt-node] handshake failed {}: {}", addr, e);
+            return;
+        }
+    };
+
+    println!(
+        "[pkt-node] connected: {} agent=\"{}\" height={}",
+        peer.addr, peer.user_agent, peer.height
+    );
+
+    {
+        let mut locked = peers.lock().unwrap();
+        locked.push(peer.clone());
+        println!("[pkt-node] total peers: {}", locked.len());
+    }
+
+    // Longer read timeout for established session
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)));
+
+    // ── Message loop ──────────────────────────────────────────────────────────
+    loop {
+        match recv_msg(&mut stream, magic) {
+            Ok(msg) => match msg {
+                PktMsg::Ping { nonce } => {
+                    if let Err(e) = send_msg(&mut stream, PktMsg::Pong { nonce }, magic) {
+                        println!("[pkt-node] send pong failed {}: {}", addr, e);
+                        break;
+                    }
+                }
+                PktMsg::Pong { .. } => {}
+                PktMsg::GetHeaders { .. } => {
+                    // Reply with empty Headers until we have a real chain
+                    if let Err(e) = send_msg(&mut stream, PktMsg::Headers { headers: vec![] }, magic) {
+                        println!("[pkt-node] send headers failed {}: {}", addr, e);
+                        break;
+                    }
+                }
+                PktMsg::Inv { items } => {
+                    println!("[pkt-node] inv from {}: {} items", addr, items.len());
+                }
+                PktMsg::Version(_) | PktMsg::Verack => {} // already done
+                other => {
+                    let dbg = format!("{:?}", other);
+                    let cmd = &dbg[..dbg.find('(').unwrap_or(dbg.len())];
+                    println!("[pkt-node] {} → {}", addr, cmd);
+                }
+            },
+            Err(PeerError::Timeout) => {
+                // Send keepalive ping
+                let nonce = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(1);
+                if let Err(e) = send_msg(&mut stream, PktMsg::Ping { nonce }, magic) {
+                    println!("[pkt-node] keepalive failed {}: {}", addr, e);
+                    break;
+                }
+            }
+            Err(PeerError::Disconnected) => {
+                println!("[pkt-node] disconnected: {}", addr);
+                break;
+            }
+            Err(e) => {
+                println!("[pkt-node] error {}: {}", addr, e);
+                break;
+            }
+        }
+    }
+
+    // Remove peer from active list
+    {
+        let mut locked = peers.lock().unwrap();
+        locked.retain(|p| p.addr != addr);
+        println!("[pkt-node] total peers: {}", locked.len());
+    }
+}
+
+// ── Main server loop ──────────────────────────────────────────────────────────
+
+pub fn run_pkt_node(cfg: NodeConfig) {
+    let bind_addr = format!("0.0.0.0:{}", cfg.port);
+    let listener  = TcpListener::bind(&bind_addr).unwrap_or_else(|e| {
+        eprintln!("[pkt-node] cannot bind {}: {}", bind_addr, e);
+        std::process::exit(1);
+    });
+
+    println!("[pkt-node] listening on {} (network={})", bind_addr, cfg.network);
+    println!(
+        "[pkt-node] magic: {:02x}{:02x}{:02x}{:02x}  protocol_version: {}",
+        cfg.magic[0], cfg.magic[1], cfg.magic[2], cfg.magic[3],
+        PROTOCOL_VERSION,
+    );
+
+    let peers: Arc<Mutex<Vec<ConnectedPeer>>> = Arc::new(Mutex::new(Vec::new()));
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(s) => {
+                let current = peers.lock().map(|l| l.len()).unwrap_or(0);
+                if current >= cfg.max_peers {
+                    println!(
+                        "[pkt-node] max peers ({}) reached, rejecting connection",
+                        cfg.max_peers
+                    );
+                    continue;
+                }
+
+                let peers_clone  = Arc::clone(&peers);
+                let magic        = cfg.magic;
+                let our_height   = cfg.our_height;
+
+                thread::spawn(move || {
+                    handle_peer(s, magic, our_height, peers_clone);
+                });
+            }
+            Err(e) => {
+                eprintln!("[pkt-node] accept error: {}", e);
+            }
+        }
+    }
+}
+
+// ── CLI arg parsing ───────────────────────────────────────────────────────────
+
+pub fn parse_node_args(args: &[String]) -> NodeConfig {
+    let mut cfg = NodeConfig::default();
+    let mut i   = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--mainnet" => {
+                cfg.magic   = MAINNET_MAGIC;
+                cfg.network = "mainnet".to_string();
+            }
+            "--port" | "-p" if i + 1 < args.len() => {
+                i += 1;
+                if let Ok(p) = args[i].parse() { cfg.port = p; }
+            }
+            "--height" if i + 1 < args.len() => {
+                i += 1;
+                if let Ok(h) = args[i].parse() { cfg.our_height = h; }
+            }
+            "--max-peers" if i + 1 < args.len() => {
+                i += 1;
+                if let Ok(n) = args[i].parse() { cfg.max_peers = n; }
+            }
+            other if !other.starts_with('-') => {
+                // bare port number
+                if let Ok(p) = other.parse::<u16>() { cfg.port = p; }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    cfg
+}
+
+pub fn cmd_pkt_node(args: &[String]) {
+    let cfg = parse_node_args(args);
+    println!("[pkt-node] starting on port {} ({})", cfg.port, cfg.network);
+    run_pkt_node(cfg);
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
+    use crate::pkt_wire::{TESTNET_MAGIC, MAINNET_MAGIC, PROTOCOL_VERSION as WIRE_PROTOCOL_VERSION};
+    use crate::pkt_peer::{send_msg, recv_msg};
+
+    // ── Config tests ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_node_config_default() {
+        let cfg = NodeConfig::default();
+        assert_eq!(cfg.port, DEFAULT_PORT);
+        assert_eq!(cfg.magic, TESTNET_MAGIC);
+        assert_eq!(cfg.network, "testnet");
+        assert_eq!(cfg.our_height, 0);
+        assert_eq!(cfg.max_peers, MAX_PEERS_DEFAULT);
+    }
+
+    #[test]
+    fn test_node_config_testnet() {
+        let cfg = NodeConfig::testnet(9000);
+        assert_eq!(cfg.port, 9000);
+        assert_eq!(cfg.magic, TESTNET_MAGIC);
+        assert_eq!(cfg.network, "testnet");
+    }
+
+    #[test]
+    fn test_node_config_mainnet() {
+        let cfg = NodeConfig::mainnet(64764);
+        assert_eq!(cfg.port, 64764);
+        assert_eq!(cfg.magic, MAINNET_MAGIC);
+        assert_eq!(cfg.network, "mainnet");
+    }
+
+    // ── parse_node_args tests ─────────────────────────────────────────────────
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_parse_node_args_empty() {
+        let cfg = parse_node_args(&args(&[]));
+        assert_eq!(cfg.port, DEFAULT_PORT);
+    }
+
+    #[test]
+    fn test_parse_node_args_bare_port() {
+        let cfg = parse_node_args(&args(&["8333"]));
+        assert_eq!(cfg.port, 8333);
+    }
+
+    #[test]
+    fn test_parse_node_args_port_flag() {
+        let cfg = parse_node_args(&args(&["--port", "9999"]));
+        assert_eq!(cfg.port, 9999);
+    }
+
+    #[test]
+    fn test_parse_node_args_short_port() {
+        let cfg = parse_node_args(&args(&["-p", "7777"]));
+        assert_eq!(cfg.port, 7777);
+    }
+
+    #[test]
+    fn test_parse_node_args_mainnet() {
+        let cfg = parse_node_args(&args(&["--mainnet"]));
+        assert_eq!(cfg.magic, MAINNET_MAGIC);
+        assert_eq!(cfg.network, "mainnet");
+    }
+
+    #[test]
+    fn test_parse_node_args_height() {
+        let cfg = parse_node_args(&args(&["--height", "1234"]));
+        assert_eq!(cfg.our_height, 1234);
+    }
+
+    #[test]
+    fn test_parse_node_args_max_peers() {
+        let cfg = parse_node_args(&args(&["--max-peers", "10"]));
+        assert_eq!(cfg.max_peers, 10);
+    }
+
+    #[test]
+    fn test_parse_node_args_combined() {
+        let cfg = parse_node_args(&args(&["8333", "--mainnet", "--height", "500", "--max-peers", "20"]));
+        assert_eq!(cfg.port, 8333);
+        assert_eq!(cfg.magic, MAINNET_MAGIC);
+        assert_eq!(cfg.our_height, 500);
+        assert_eq!(cfg.max_peers, 20);
+    }
+
+    #[test]
+    fn test_parse_node_args_unknown_ignored() {
+        let cfg = parse_node_args(&args(&["--unknown-flag"]));
+        assert_eq!(cfg.port, DEFAULT_PORT); // unchanged
+    }
+
+    // ── Handshake tests (loopback TCP) ────────────────────────────────────────
+    //
+    // client thread: connect → send Version → recv Version → recv Verack → send Verack
+    // server side:   server_handshake() called on accepted stream
+
+    fn run_client_handshake(addr: std::net::SocketAddr, magic: [u8; 4], height: i32) {
+        let mut stream = TcpStream::connect(addr).expect("client connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+
+        // Send Version first (client initiates in standard Bitcoin P2P)
+        send_msg(&mut stream, PktMsg::Version(VersionMsg::new(height)), magic).unwrap();
+
+        // Expect server's Version
+        let msg = recv_msg(&mut stream, magic).expect("recv server version");
+        assert!(matches!(msg, PktMsg::Version(_)), "expected Version, got {:?}", msg);
+
+        // Expect Verack
+        let msg = recv_msg(&mut stream, magic).expect("recv verack");
+        assert!(matches!(msg, PktMsg::Verack), "expected Verack");
+
+        // Send our Verack
+        send_msg(&mut stream, PktMsg::Verack, magic).unwrap();
+    }
+
+    #[test]
+    fn test_server_handshake_ok() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr     = listener.local_addr().unwrap();
+        let magic    = TESTNET_MAGIC;
+
+        let client = thread::spawn(move || {
+            run_client_handshake(addr, magic, 42);
+        });
+
+        let (mut stream, _) = listener.accept().unwrap();
+        let peer = server_handshake(&mut stream, magic, 0).expect("server handshake");
+
+        assert_eq!(peer.height, 42);
+        assert!(!peer.addr.is_empty());
+        client.join().unwrap();
+    }
+
+    #[test]
+    fn test_server_handshake_wrong_magic() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr     = listener.local_addr().unwrap();
+        let correct  = TESTNET_MAGIC;
+        let wrong    = MAINNET_MAGIC;
+
+        let client = thread::spawn(move || {
+            // Client sends with WRONG magic
+            let mut stream = TcpStream::connect(addr).unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            send_msg(&mut stream, PktMsg::Version(VersionMsg::new(0)), wrong).unwrap();
+            // server will reject — client may see broken pipe, that's OK
+        });
+
+        let (mut stream, _) = listener.accept().unwrap();
+        // Server expects correct magic — should fail
+        let result = server_handshake(&mut stream, correct, 0);
+        assert!(result.is_err(), "expected error for wrong magic");
+        client.join().unwrap();
+    }
+
+    #[test]
+    fn test_server_handshake_captures_peer_height() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr     = listener.local_addr().unwrap();
+        let magic    = TESTNET_MAGIC;
+
+        thread::spawn(move || {
+            run_client_handshake(addr, magic, 9999);
+        });
+
+        let (mut stream, _) = listener.accept().unwrap();
+        let peer = server_handshake(&mut stream, magic, 0).unwrap();
+        assert_eq!(peer.height, 9999);
+    }
+
+    #[test]
+    fn test_server_handshake_captures_user_agent() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr     = listener.local_addr().unwrap();
+        let magic    = TESTNET_MAGIC;
+
+        thread::spawn(move || {
+            run_client_handshake(addr, magic, 0);
+        });
+
+        let (mut stream, _) = listener.accept().unwrap();
+        let peer = server_handshake(&mut stream, magic, 0).unwrap();
+        // VersionMsg::new() sets USER_AGENT
+        assert!(!peer.user_agent.is_empty());
+        assert!(peer.user_agent.contains("blockchain-rust"));
+    }
+
+    #[test]
+    fn test_server_handshake_version_number() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr     = listener.local_addr().unwrap();
+        let magic    = TESTNET_MAGIC;
+
+        thread::spawn(move || {
+            run_client_handshake(addr, magic, 0);
+        });
+
+        let (mut stream, _) = listener.accept().unwrap();
+        let peer = server_handshake(&mut stream, magic, 0).unwrap();
+        assert_eq!(peer.version, WIRE_PROTOCOL_VERSION);
+    }
+
+    // ── ConnectedPeer tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_connected_peer_clone() {
+        let peer = ConnectedPeer {
+            addr:       "127.0.0.1:1234".to_string(),
+            user_agent: "/test:1.0/".to_string(),
+            height:     100,
+            version:    70013,
+        };
+        let cloned = peer.clone();
+        assert_eq!(cloned.addr, peer.addr);
+        assert_eq!(cloned.height, peer.height);
+    }
+
+    // ── DEFAULT_PORT ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_default_port_is_pkt_testnet() {
+        // PKT testnet official port
+        assert_eq!(DEFAULT_PORT, 64512);
+    }
+
+    #[test]
+    fn test_handshake_timeout_reasonable() {
+        assert!(HANDSHAKE_TIMEOUT >= 10);
+        assert!(HANDSHAKE_TIMEOUT <= 60);
+    }
+
+    #[test]
+    fn test_read_timeout_longer_than_handshake() {
+        assert!(READ_TIMEOUT_SECS > HANDSHAKE_TIMEOUT);
+    }
+}

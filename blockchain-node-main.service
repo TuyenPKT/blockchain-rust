@@ -1,19 +1,18 @@
 [Unit]
-Description=Blockchain Rust P2P Node
+Description=Blockchain Rust P2P Node (Mainnet)
 After=network.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# đổi thành username của bạn:
 User=tuyenpkt
 WorkingDirectory=/home/tuyenpkt/blockchain-rust
-ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust pkt-node 8333
+ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust pkt-node 64764 --mainnet
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=blockchain-node
+SyslogIdentifier=blockchain-node-main
 
 # Giới hạn resource
 LimitNOFILE=65535

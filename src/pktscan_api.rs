@@ -287,22 +287,23 @@ async fn get_blocks(
     State(db): State<ScanDb>,
     Query(page): Query<PageParams>,
 ) -> Json<Value> {
-    let bc    = db.lock().await;
-    let limit = page.limit.min(100);
-    let total = bc.chain.len();
+    let bc         = db.lock().await;
+    let limit      = page.limit.min(100);
+    let total      = bc.chain.len();
+    let difficulty = bc.difficulty;
 
     let (blocks, next_cursor) = if let Some(from) = page.from {
         // Cursor-based pagination
         let slice = crate::pagination::paginate_blocks(&bc.chain, Some(from), limit);
         let next  = crate::pagination::next_block_cursor(&bc.chain, Some(from), limit);
-        let blks: Vec<Value> = slice.iter().rev().map(block_summary).collect();
+        let blks: Vec<Value> = slice.iter().rev().map(|b| block_summary(b, difficulty)).collect();
         (blks, next)
     } else {
         // Offset-based (legacy)
         let blks: Vec<Value> = bc.chain.iter().rev()
             .skip(page.offset)
             .take(limit)
-            .map(block_summary)
+            .map(|b| block_summary(b, difficulty))
             .collect();
         (blks, None)
     };
@@ -323,9 +324,11 @@ async fn get_block(
     Path(height): Path<u64>,
 ) -> (StatusCode, Json<Value>) {
     let bc = db.lock().await;
+    let difficulty = bc.difficulty;
     match bc.chain.iter().find(|b| b.index == height) {
         Some(block) => {
             let reward = crate::reward::RewardEngine::subsidy_at(block.index);
+            let miner  = miner_from_block(block);
             (StatusCode::OK, Json(json!({
                 "index":        block.index,
                 "hash":         block.hash,
@@ -336,6 +339,8 @@ async fn get_block(
                 "tx_count":     block.transactions.len(),
                 "transactions": block.transactions.iter().map(tx_summary).collect::<Vec<_>>(),
                 "reward":       reward,
+                "miner":        miner,
+                "difficulty":   difficulty,
             })))
         }
         None => (
@@ -425,12 +430,17 @@ async fn get_tx(
         if let Some(tx) = block.transactions.iter().find(|t| t.tx_id == txid) {
             let output_total: u64 = tx.outputs.iter().map(|o| o.amount).sum();
             let confirmations = tip_height.saturating_sub(block.index) + 1;
+            let from = if tx.is_coinbase { "coinbase".to_string() }
+                       else { tx.inputs.first().map(|i| i.tx_id.clone()).unwrap_or_default() };
+            let to = tx.outputs.first().map(addr_from_output).unwrap_or_default();
             return (StatusCode::OK, Json(json!({
                 "tx_id":          tx.tx_id,
                 "wtx_id":         tx.wtx_id,
                 "is_coinbase":    tx.is_coinbase,
                 "fee":            tx.fee,
                 "output_total":   output_total,
+                "from":           from,
+                "to":             to,
                 "inputs":         tx.inputs,
                 "outputs":        tx.outputs,
                 "block_height":   block.index,
@@ -683,26 +693,81 @@ async fn get_txs_csv(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn block_summary(block: &crate::block::Block) -> Value {
+/// Convert 20-byte pubkey hash → Base58Check address (version byte 0x00).
+/// Cùng logic với Wallet::pubkey_to_address nhưng nhận sẵn hash bytes.
+fn pubkey_hash_to_address(hash20: &[u8]) -> String {
+    let mut payload = vec![0x00u8];
+    payload.extend_from_slice(hash20);
+    let checksum = blake3::hash(blake3::hash(&payload).as_bytes());
+    payload.extend_from_slice(&checksum.as_bytes()[..4]);
+    bs58::encode(payload).into_string()
+}
+
+/// Extract pubkey hash bytes from a P2PKH/P2WPKH script_pubkey.
+/// P2PKH ops = [OpDup, OpHash160, OpPushData(hash20), OpEqualVerify, OpCheckSig]
+/// P2WPKH ops = [Op0, OpPushData(hash20)]
+fn pubkey_hash_from_output(out: &crate::transaction::TxOutput) -> Option<Vec<u8>> {
+    use crate::script::Opcode;
+    for op in &out.script_pubkey.ops {
+        if let Opcode::OpPushData(bytes) = op {
+            if bytes.len() == 20 {
+                return Some(bytes.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Returns Base58Check address of the miner (from coinbase output).
+fn miner_from_block(block: &crate::block::Block) -> String {
+    block.transactions.iter()
+        .find(|t| t.is_coinbase)
+        .and_then(|cb| cb.outputs.first())
+        .and_then(pubkey_hash_from_output)
+        .map(|h| pubkey_hash_to_address(&h))
+        .unwrap_or_default()
+}
+
+/// Returns Base58Check address from first output of a tx (for "to" field).
+fn addr_from_output(out: &crate::transaction::TxOutput) -> String {
+    pubkey_hash_from_output(out)
+        .map(|h| pubkey_hash_to_address(&h))
+        .unwrap_or_default()
+}
+
+fn block_summary(block: &crate::block::Block, difficulty: usize) -> Value {
+    let miner  = miner_from_block(block);
+    let reward = crate::reward::RewardEngine::subsidy_at(block.index);
     json!({
-        "index":     block.index,
-        "hash":      block.hash,
-        "prev_hash": block.prev_hash,
-        "timestamp": block.timestamp,
-        "tx_count":  block.transactions.len(),
-        "nonce":     block.nonce,
+        "index":      block.index,
+        "hash":       block.hash,
+        "prev_hash":  block.prev_hash,
+        "timestamp":  block.timestamp,
+        "tx_count":   block.transactions.len(),
+        "nonce":      block.nonce,
+        "miner":      miner,
+        "difficulty": difficulty,
+        "reward":     reward,
     })
 }
 
 fn tx_summary(tx: &crate::transaction::Transaction) -> Value {
     let output_total: u64 = tx.outputs.iter().map(|o| o.amount).sum();
+    let from = if tx.is_coinbase {
+        "coinbase".to_string()
+    } else {
+        tx.inputs.first().map(|i| i.tx_id.clone()).unwrap_or_default()
+    };
+    let to = tx.outputs.first().map(addr_from_output).unwrap_or_default();
     json!({
-        "tx_id":       tx.tx_id,
-        "is_coinbase": tx.is_coinbase,
-        "fee":         tx.fee,
+        "tx_id":        tx.tx_id,
+        "is_coinbase":  tx.is_coinbase,
+        "fee":          tx.fee,
         "output_total": output_total,
-        "input_count": tx.inputs.len(),
+        "input_count":  tx.inputs.len(),
         "output_count": tx.outputs.len(),
+        "from":         from,
+        "to":           to,
     })
 }
 
@@ -829,7 +894,10 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::audit_log::admin_router(Arc::clone(&audit_db)))
         .merge(crate::web_frontend::static_router())   // v14.2: embedded /static/app.js + /static/style.css
         .merge(crate::web_charts::charts_router())    // v14.5: embedded /static/charts.js
-        .merge(crate::block_detail::detail_router())  // v14.6: embedded /static/detail.js
+        .merge(crate::block_detail::detail_router())   // v14.6: embedded /static/detail.js
+        .merge(crate::address_detail::address_router()) // v14.7: embedded /static/address.js
+        .merge(crate::ws_live::live_router())          // v14.8: embedded /static/live.js
+        .merge(crate::pkt_testnet_web::testnet_web_router()) // v15.6: /api/testnet/* + /static/testnet.js
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),
             crate::audit_log::audit_middleware,
@@ -958,7 +1026,7 @@ mod tests {
     fn test_block_summary_fields() {
         let bc = make_bc();
         let b  = bc.chain.last().unwrap();
-        let v  = block_summary(b);
+        let v  = block_summary(b, bc.difficulty);
         assert!(v["index"].is_number());
         assert!(v["hash"].is_string());
         assert!(v["tx_count"].is_number());

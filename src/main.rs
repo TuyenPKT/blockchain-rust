@@ -116,6 +116,20 @@ mod qr_code;
 mod shell_completions;
 mod web_charts;
 mod block_detail;
+mod address_detail;
+mod ws_live;
+mod devnet;
+mod docs_gen;
+mod integration_test;
+mod hot_reload;
+mod pkt_wire;
+mod pkt_peer;
+mod pkt_sync;
+mod pkt_utxo_sync;
+mod pkt_explorer_api;
+mod pkt_sync_ui;
+mod pkt_testnet_web;
+mod pkt_node;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -234,6 +248,38 @@ fn main() {
         }
         Some("completions") => {
             shell_completions::cmd_completions(&args[2..].to_vec());
+        }
+        Some("devnet") => {
+            let cfg = devnet::parse_devnet_args(&args[2..].to_vec());
+            devnet::run_devnet(cfg);
+        }
+        Some("docs") => {
+            docs_gen::cmd_docs(&args[2..].to_vec());
+        }
+        Some("dev") => {
+            let cfg = hot_reload::parse_dev_args(&args[2..].to_vec());
+            hot_reload::run_dev(cfg);
+        }
+        Some("peer") => {
+            pkt_peer::cmd_peer(&args[2..].to_vec());
+        }
+        Some("sync") => {
+            pkt_sync::cmd_sync(&args[2..].to_vec());
+        }
+        Some("utxosync") => {
+            pkt_utxo_sync::cmd_utxo_sync(&args[2..].to_vec());
+        }
+        Some("explorer-testnet") => {
+            pkt_explorer_api::cmd_explorer_status();
+        }
+        Some("sync-status") => {
+            println!("sync-status: use GET /api/testnet/sync-status for live data");
+        }
+        Some("testnet-web") => {
+            pkt_testnet_web::cmd_testnet_web();
+        }
+        Some("pkt-node") => {
+            pkt_node::cmd_pkt_node(&args[2..].to_vec());
         }
         Some("charts") => {
             web_charts::cmd_charts(&args[2..].to_vec());
@@ -384,7 +430,7 @@ fn run_miner(args: &[String]) {
     };
     let cfg = match node_addr {
         Some(ref addr) => cfg.with_node(addr),
-        None           => cfg,
+        None           => cfg.standalone(),  // không có node → standalone
     };
     let cfg = match threads {
         Some(t) => cfg.with_threads(t),

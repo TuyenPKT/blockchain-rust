@@ -554,6 +554,16 @@ impl Blockchain {
         self.chain.push(block);
     }
 
+    /// Push một block đã được mine xong (từ parallel miner) vào chain.
+    /// Không re-mine — chỉ apply state: UTXO, fee estimator, token txs.
+    pub fn commit_mined_block(&mut self, block: crate::block::Block) {
+        self.adjust_difficulty();
+        self.utxo_set.apply_block(&block.transactions);
+        self.fee_estimator.record_block(&block.transactions);
+        self.apply_token_txs(&block.transactions);
+        self.chain.push(block);
+    }
+
     // ── v10.4 — Token TX processing ───────────────────────────────────────────
 
     /// Extract OP_RETURN token TXs từ block, validate, và apply vào token_registry.

@@ -54,22 +54,29 @@ pub struct MinerConfig {
     pub node_addr:  String,
     /// Số rayon threads (mặc định = cores/3)
     pub threads:    usize,
+    /// true = mine standalone không cần node (local chain)
+    pub standalone: bool,
 }
 
 impl MinerConfig {
     pub fn new(address: &str) -> Self {
         MinerConfig { address: address.to_string(), max_blocks: None,
-            node_addr: DEFAULT_NODE.to_string(), threads: default_threads() }
+            node_addr: DEFAULT_NODE.to_string(), threads: default_threads(),
+            standalone: false }
     }
     pub fn with_limit(address: &str, n: u32) -> Self {
         MinerConfig { address: address.to_string(), max_blocks: Some(n),
-            node_addr: DEFAULT_NODE.to_string(), threads: default_threads() }
+            node_addr: DEFAULT_NODE.to_string(), threads: default_threads(),
+            standalone: false }
     }
     pub fn with_node(mut self, node_addr: &str) -> Self {
         self.node_addr = node_addr.to_string(); self
     }
     pub fn with_threads(mut self, n: usize) -> Self {
         self.threads = n.max(1); self
+    }
+    pub fn standalone(mut self) -> Self {
+        self.standalone = true; self
     }
 }
 
@@ -248,21 +255,91 @@ impl Miner {
         println!();
         println!("  Reward address : {}", self.cfg.address);
         println!("  Threads        : {}  (cores/3 default = {})", self.cfg.threads, default_threads());
-        println!("  Node           : {}", self.cfg.node_addr);
+        if self.cfg.standalone {
+            println!("  Mode           : standalone (local chain)");
+        } else {
+            println!("  Node           : {}", self.cfg.node_addr);
+        }
         match self.cfg.max_blocks {
             Some(n) => println!("  Target         : {} blocks", n),
             None    => println!("  Target         : ∞ (Ctrl-C to stop)"),
         }
         println!();
 
+        if self.cfg.standalone {
+            self.run_standalone();
+        } else {
+            loop {
+                if let Some(max) = self.cfg.max_blocks {
+                    if self.stats.blocks_mined >= max { break; }
+                }
+                self.mine_one();
+            }
+            self.print_summary();
+        }
+    }
+
+    fn run_standalone(&mut self) {
+        let mut chain = crate::storage::load_or_new();
+
         loop {
             if let Some(max) = self.cfg.max_blocks {
                 if self.stats.blocks_mined >= max { break; }
             }
-            self.mine_one();
+            self.mine_one_standalone(&mut chain);
         }
 
         self.print_summary();
+    }
+
+    fn mine_one_standalone(&mut self, chain: &mut crate::chain::Blockchain) {
+        let height   = chain.chain.len() as u64;
+        let prev_hash = chain.chain.last()
+            .map(|b| b.hash.clone())
+            .unwrap_or_else(|| "0".repeat(64));
+        let diff     = chain.difficulty;
+
+        let coinbase_reward = RewardEngine::subsidy_at(height);
+        let pending_txs: Vec<Transaction> = chain.mempool.select_transactions(100);
+        let total_fee: u64 = pending_txs.iter().map(|t| t.fee).sum();
+        let earned = coinbase_reward + total_fee;
+
+        let coinbase = Transaction::coinbase_at(&self.cfg.address, total_fee, height);
+        let mut all_txs = vec![coinbase];
+        all_txs.extend(pending_txs.into_iter().filter(|t| !t.is_coinbase));
+
+        let mut block = Block::new(height, all_txs.clone(), prev_hash);
+
+        println!("  ┌─ Block #{:<5}  diff={}  txs={}  [standalone]",
+            height, diff, block.transactions.len() - 1);
+
+        let result = mine_live(&mut block, diff, self.cfg.threads);
+
+        // Commit mined block vào chain (không re-mine)
+        chain.commit_mined_block(block.clone());
+
+        // Persist chain to RocksDB (pktscan đọc từ đây)
+        if let Err(e) = crate::storage::save_blockchain(chain) {
+            eprintln!("  [miner] ⚠️  Cannot save chain: {}", e);
+        }
+
+        // Persist earnings
+        if let Err(e) = crate::storage::add_mined_earnings(&self.cfg.address, earned) {
+            eprintln!("  [miner] ⚠️  Cannot save balance: {}", e);
+        }
+
+        self.stats.update(result.hashes, result.elapsed_ms, earned);
+        let rate = result.hashes as f64 / (result.elapsed_ms.max(1) as f64 / 1000.0);
+        println!("  │  nonce={:<12}  hashes={:<12}  {:<12}",
+            block.nonce, result.hashes, hashrate_str(rate));
+        println!("  │  hash  = {}...{}", &block.hash[..16], &block.hash[56..]);
+        println!("  │  time  = {}  earned = {}  chain_height={}",
+            elapsed_str(result.elapsed_ms), fmt_pkt(earned), chain.chain.len() - 1);
+        println!("  └─ total_blocks={}  total_hashes={}  uptime={}",
+            self.stats.blocks_mined,
+            fmt_big(self.stats.total_hashes),
+            elapsed_str(self.stats.uptime_secs() as u64 * 1000));
+        println!();
     }
 
     fn mine_one(&mut self) {

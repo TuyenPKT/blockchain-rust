@@ -5,7 +5,7 @@
 Dự án xây dựng blockchain từ Bitcoin 0.1 đến 2030 bằng Rust.
 Mỗi version build trên nền version trước, không viết lại từ đầu.
 
-**Version hiện tại: v14.6 ✅**
+**Version hiện tại: v15.6 ✅**
 
 ## Quy tắc làm việc
 
@@ -95,9 +95,34 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
 
 ### Dependency
 
-* Pin version
+* Pin version — ghi rõ version và lý do trong `CONTEXT.md`
 * `cargo audit`
 * Tránh lib không maintain
+* Trước khi dùng lib mới: đọc CHANGELOG của lib từ version AI biết → version hiện tại
+* Ghi gotcha / breaking change vào mục **Lưu ý kỹ thuật** trong `CLAUDE.md`
+
+---
+
+### Làm việc với AI (Claude)
+
+AI bị đóng băng tại thời điểm training — mọi breaking change, deprecated API, signature thay đổi sau đó đều có thể sai.
+
+**Quy trình chuẩn khi thêm dependency mới:**
+
+1. Thêm dep vào `Cargo.toml` với version cố định
+2. Đọc CHANGELOG/docs của dep đó
+3. Ghi gotcha vào `CLAUDE.md` (mục Lưu ý kỹ thuật)
+4. Hỏi AI viết code
+5. `cargo build` → paste lỗi compiler cho AI nếu có
+6. Lặp lại tối đa 2–3 lần; nếu vẫn lỗi → đọc docs thật
+
+**Nguyên tắc:**
+
+* AI giỏi structure và logic — compiler giỏi correctness — docs giỏi truth
+* Dùng cả ba, không chỉ dùng AI
+* Lỗi compiler (`E0308`, `no method named X`…) đủ để AI sửa chính xác
+* Không tin AI về API thay đổi sau cutoff — verify bằng `cargo build`
+* `CLAUDE.md` là "correction file": ghi một lần, AI đọc mãi
 
 ---
 
@@ -112,6 +137,14 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
   * spam
 * Regression khi fix bug
 
+**Nguyên tắc cứng về data trong test:**
+
+* Không dùng `mock_data()` / hardcode giá trị ảo để test business logic
+* API tests phải dùng chain thật (mine block thật, gửi tx thật, kiểm tra kết quả thật)
+* Test UI/chart phải dùng data từ API thật — nếu API trả rỗng thì test phải phản ánh đúng trạng thái đó
+* `mock_data()` chỉ được dùng để test thuật toán render thuần túy (sparkline, format string...), không được dùng để test flow
+* Test xanh với data ảo = test vô nghĩa — không tính vào coverage có giá trị
+
 ---
 
 ### CI
@@ -125,7 +158,26 @@ Mỗi version build trên nền version trước, không viết lại từ đầ
 ### Docs
 
 * `CONTEXT.md` (version, decision, bug)
+* `CHANGELOG.md` — **bắt buộc cập nhật sau mỗi version**
 * (optional) `ARCHITECTURE.md`, `API.md`
+
+**CHANGELOG.md format (mỗi version):**
+
+```markdown
+## v{X.Y} — {Tên version} ({ngày})
+
+### Added
+- Mô tả ngắn tính năng chính
+
+### Files
+- `src/{file}.rs` — module mới
+
+### Tests
+- +N tests ({tổng} total)
+
+### Breaking / Gotcha
+- Ghi nếu có API thay đổi, dep mới, lưu ý kỹ thuật
+```
 
 ---
 
@@ -240,10 +292,18 @@ src/
 ├── tui_wallet.rs        ← Wallet TUI: balance/send/receive/history tabs (v14.1)
 ├── web_frontend.rs      ← Embedded static assets (index.html/app.js/style.css) (v14.2)
 ├── qr_code.rs           ← QR code render: terminal half-block/full-block, BIP21 URI (v14.3)
-└── shell_completions.rs ← Bash/Zsh/Fish completion scripts, install hints (v14.4)
+├── shell_completions.rs ← Bash/Zsh/Fish completion scripts, install hints (v14.4)
+├── web_charts.rs        ← sparkline engine (▁▂▃▄▅▆▇█), charts_router() (v14.5)
+├── block_detail.rs      ← BlockDetailView, TxDetailView, detail_router() (v14.6)
+├── address_detail.rs    ← TxDirection, AddressDetailView, address_router() (v14.7)
+└── ws_live.rs           ← WsEventType, ToastLevel, LiveEvent, ConnectionState, live_router() (v14.8)
 
 frontend/
 ├── app.js               ← Vanilla JS SPA: fetch API, auto-refresh, theme toggle
+├── charts.js            ← Chart.js sparkline + web charts (v14.5)
+├── detail.js            ← hash-router #block/N + #tx/ID (v14.6)
+├── address.js           ← hash-router #addr/ADDRESS, IN/OUT badges (v14.7)
+├── live.js              ← WebSocket live feed, toast notifications, reconnect (v14.8)
 └── style.css            ← Dark theme CSS, stat cards, data tables
 
 index.html               ← Entry point (embedded via include_bytes!)
@@ -261,16 +321,25 @@ index.html               ← Entry point (embedded via include_bytes!)
 - Tránh `try_into()` trên `&[u8;64]` — dùng `copy_from_slice` thay thế
 - `#![allow(dead_code)]` ở đầu file khi có nhiều public API chưa dùng
 - ratatui: dùng `TestBackend` cho unit tests, không cần real terminal
+- `SyncDb::open_temp()` / `UtxoSyncDb::open_temp()` dùng `SystemTime` hash — race condition khi nhiều tests chạy song song → dùng `static Mutex<()>` để serialize (áp dụng cho bất kỳ test module nào gọi `open_temp()` song song)
+- `testnet_web_router()` opens DBs tại `~/.pkt/syncdb` + `~/.pkt/utxodb` — cần chạy `cargo run -- sync` trước; nếu chưa có DB thì server vẫn khởi động (graceful degradation: js-only)
 - `web_frontend`: `static_router()` chỉ mount `/static/*`, merge vào `pktscan_api::serve()`
 - QR width = `17 + 4×N` (QR spec) — test: `(w - 17) % 4 == 0`
 
 ## Thứ tự version tiếp theo (Era 21 còn lại — UI)
 
 ~~v14.4 — Shell Completions [CX]~~ ✅
-v14.5 — Web Charts [UI]: sparkline TUI + Chart.js web (hashrate/block time/tx volume)
-v14.6 — Block Detail Page [UI]: /block/:height + /tx/:txid, hash-router trong app.js
-v14.7 — Address Detail Page [UI]: balance + UTXO list + tx history
-v14.8 — WebSocket Live Feed [UI]: /ws real-time NewBlock/NewTx, toast notification
+~~v14.5 — Web Charts [UI]~~ ✅
+~~v14.6 — Block Detail Page [UI]~~ ✅
+~~v14.7 — Address Detail Page [UI]~~ ✅
+~~v14.8 — WebSocket Live Feed [UI]~~ ✅
+
+## Era 23 — Developer Experience (v16.x)
+
+~~v16.0 — Devnet One-Command [DX]~~ ✅
+~~v16.1 — Dev Docs Generator [DX]~~ ✅
+~~v16.2 — Integration Test Harness [DX]~~ ✅
+~~v16.3 — Hot Reload Dev Mode [DX]~~ ✅
 
 ## Era 22 — PKT Testnet Integration (v15.x)
 
