@@ -592,7 +592,6 @@
     <a class="nav-link" href="#" onclick="showBlocks(); return false;">Blocks</a>
     <a class="nav-link" href="#" onclick="showTxs(); return false;">Transactions</a>
     <a class="nav-link" href="#" onclick="showStats(); return false;">Stats</a>
-    <a class="nav-link" href="#" onclick="showTestnet(); return false;">Testnet</a>
     <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme" id="themeBtn">☀️</button>
   </div>
 </nav>
@@ -780,77 +779,6 @@
 </div>
 
 <!-- ═══ TESTNET PAGE ══════════════════════════════════════════════ -->
-<div id="testnet-page" class="page">
-  <div class="main-wrap">
-
-    <!-- Sync Status Panel -->
-    <div class="panel" style="margin-bottom:24px">
-      <div class="panel-head">
-        <div class="panel-title">
-          <div class="panel-title-icon" style="background:rgba(247,161,51,.15);color:var(--pkt);border:1px solid rgba(247,161,51,.25);">🔗</div>
-          PKT Testnet Sync
-        </div>
-        <span id="tn-stat-synced"></span>
-      </div>
-      <div style="padding:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px">
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Phase</div>
-          <div id="tn-sync-phase" style="font-weight:700">—</div>
-        </div>
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Progress</div>
-          <div id="tn-sync-bar" class="mono" style="font-size:.85rem">—</div>
-        </div>
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Headers</div>
-          <div id="tn-headers-count" class="mono" style="font-weight:700">—</div>
-        </div>
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">UTXO Height</div>
-          <div id="tn-utxo-height" class="mono" style="font-weight:700">—</div>
-        </div>
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Speed</div>
-          <div id="tn-speed" class="mono">—</div>
-        </div>
-        <div>
-          <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">ETA</div>
-          <div id="tn-eta" class="mono">—</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stats Row -->
-    <div class="grid-stats" style="margin-bottom:24px">
-      <div class="stat-card">
-        <div class="label">Header Height</div>
-        <div class="value" id="tn-stat-height" style="color:var(--pkt)">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">UTXO Count</div>
-        <div class="value" id="tn-stat-utxos">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Total Value</div>
-        <div class="value" id="tn-stat-value">—</div>
-      </div>
-    </div>
-
-    <!-- Recent Headers Panel -->
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title">
-          <div class="panel-title-icon item-icon-block">📦</div>
-          Recent Wire Headers (PKT Testnet)
-        </div>
-      </div>
-      <div id="tn-headers-list">
-        <div style="padding:12px 18px;color:var(--muted);font-size:.85rem">Loading…</div>
-      </div>
-    </div>
-
-  </div>
-</div>
 
 <!-- ═══ FOOTER ════════════════════════════════════════════════════ -->
 <footer>
@@ -1274,6 +1202,5 @@ buildTicker({});
 refreshAll().then(() => renderHome());
 setInterval(refreshAll, 15000); // refresh từ API mỗi 15s
 </script>
-<script src="/blockchain-rust/static/testnet.js"></script>
 </body>
 </html>
