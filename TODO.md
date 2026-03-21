@@ -1,7 +1,7 @@
 # TODO — Blockchain Rust
 
-**Version hiện tại: v5.9 ✅**
-**Tiến độ: 58 versions — Era 1–11 hoàn thành · Era 12: 0/10**
+**Version hiện tại: v15.8 ✅**
+**Tiến độ: 130+ versions — Era 1–23 hoàn thành (trừ Era 20 hardware-dependent)**
 
 ---
 
@@ -88,6 +88,24 @@
 
 ---
 
+## ✅ Era 12–23 (v6.x – v15.x) — Hoàn thành
+
+- [x] Era 12 (v6.x) — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD, HW auto-config
+- [x] Era 13 (v7.x) — Token Economy: ERC-20, EVM-lite, DeFi AMM, Staking, Economics
+- [x] Era 14 (v8.x) — PKTScan: Block Explorer, WebSocket, Search, Analytics, Cache, Export
+- [x] Era 15 (v9.x) — Read-Only APIs + Zero-Trust: OpenAPI, GraphQL, SDK, CORS, WS Subscriptions
+- [x] Era 16 (v10.x) — Auth Layer: API Key, Audit Log, EVM fix, Oracle sig, GraphQL, Webhook
+- [x] Era 17 (v11.x) — Write APIs + Production: TX/Token/Contract write, Deploy Config
+- [x] Era 18 (v12.x) — HD Wallet CLI: BIP39 restore, Ed25519 SLIP-0010
+- [x] Era 19 (v13.x) — PKT Core: PacketCrypt chuẩn, Network Steward, PKT Address, Genesis
+- [x] Era 21 (v14.x) — UX & Frontend: TUI Dashboard, Wallet TUI, Web, QR, Shell Completions, Charts, Block/Addr Detail, WS Live
+- [x] Era 22 (v15.x) — PKT Testnet Integration: Wire Protocol, Peer Connect, Block Download, UTXO Sync, Explorer Live, Sync UI, Testnet Web, PKT Node Server, **Single Chain Architecture (v15.8)**
+- [x] Era 23 (v16.x) — Developer Experience: Devnet, Docs Generator, Integration Test Harness, Hot Reload
+
+> Xem chi tiết từng version trong [CONTEXT.md](CONTEXT.md)
+
+---
+
 ## 🔜 Era 12 — Multi-threading & GPU Acceleration (2036+)
 
 - [ ] v6.0 — **BLAKE3 Hash Engine**: thay SHA-256 cho PoW, 3–4x nhanh hơn → `blake3_hash.rs`
@@ -126,7 +144,17 @@
 | Era 9 (2027–2030)  | 6  | 6  | 0  |
 | Era 10 (2031+)     | 9  | 9  | 0  |
 | Era 11 (2032–2035) | 10 | 10 | 0  |
-| Era 12 (2036+)     | 10 | 0  | 10 |
-| **Tổng**           | **68** | **58** | **10** |
+| Era 12 (2036+)     | 10 | 10 | 0  |
+| Era 13 (2037+)     | 10 | 10 | 0  |
+| Era 14             | 10 | 10 | 0  |
+| Era 15             | 10 | 10 | 0  |
+| Era 16             | 10 | 10 | 0  |
+| Era 17             | 10 | 10 | 0  |
+| Era 18             | 1  | 1  | 0  |
+| Era 19             | 4  | 4  | 0  |
+| Era 21 (UI)        | 9  | 9  | 0  |
+| Era 22 (Testnet)   | 9  | 9  | 0  |
+| Era 23 (DX)        | 4  | 4  | 0  |
+| **Tổng**           | **~130** | **~130** | **0** |
 
-> Cập nhật lần cuối: **v5.9 ✅ — 136/136 tests · 0 warnings**
+> Cập nhật lần cuối: **v15.8 ✅ — 2023 tests · 0 warnings**

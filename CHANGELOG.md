@@ -4,6 +4,46 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v15.8 — Single Chain Architecture + PKTScan Live Data (2026-03-21)
+
+### Added
+- `pkt_node.rs`: template server trên port+1 (default 8334)
+  - `handle_template_client()` — GetTemplate / NewBlock / GetBlocks JSON-lines protocol
+  - `run_template_server(port, chain)` — bind 0.0.0.0:{port} nhận miner + explorer
+  - `cmd_pkt_node()` — load chain từ RocksDB, spawn template thread, rồi run PKT wire server
+- `chain.rs`: `commit_mined_block(block)` — push block đã mine mà không re-mine
+- `miner.rs`: fallback chain `127.0.0.1:8334` → `seed.testnet.oceif.com:8334` → standalone
+  - `DEFAULT_NODE = "127.0.0.1:8334"`, `FALLBACK_NODE = "seed.testnet.oceif.com:8334"`
+  - 3 lần liên tiếp thất bại → tự chuyển sang standalone
+  - `run_standalone()` load chain từ RocksDB (thay vì reset)
+  - `try_mine_one() -> bool` — trả false nếu node không phản hồi
+- `pktscan_api.rs`: selective reload từ RocksDB mỗi 5s
+  - Chỉ sync khi `fresh.chain.len() > bc.chain.len()` (giữ nguyên mempool/staking/tokens)
+  - `miner_from_block()` — Base58Check P2PKH address từ coinbase tx
+  - `block_summary()` — thêm `miner`, `difficulty`, `reward`
+  - `tx_summary()` — thêm `from`, `to`
+- `main.rs`: `mine` mặc định kết nối node (không còn standalone)
+- `index.html`: fix hiển thị reward (paklets→PKT), tx timestamp (`block_timestamp`), tx amount (`output_total`), path `/static/testnet.js`
+
+### Files
+- `src/pkt_node.rs` — mở rộng: template server port+1
+- `src/chain.rs` — thêm `commit_mined_block()`
+- `src/miner.rs` — mở rộng: fallback logic, load DB khi standalone
+- `src/pktscan_api.rs` — mở rộng: live reload, address/difficulty/reward fields
+- `index.html` — fix display bugs
+
+### Tests
+- Không có tests mới (infrastructure + hotfix)
+
+### Gotcha
+- Template server port = PKT wire port + 1 (node chạy 8333 → template 8334; node chạy 64512 → template 64513)
+- Explorer CLI (`cargo run -- explorer chain`) kết nối `DEFAULT_NODE = 127.0.0.1:8334` để GetBlocks — cần pkt-node đang chạy
+- `commit_mined_block()` không mine lại — dùng khi block đã có hash; dùng `add_block()` khi muốn chain tự mine
+- pktscan selective reload giữ nguyên `mempool`/`staking_pool`/`token_registry` trong memory — chỉ update chain/utxo_set/difficulty
+- `try_clone().unwrap()` trong template client đã fix thành graceful error return
+
+---
+
 ## v15.7 — PKT Node Server (2026-03-20)
 
 ### Added

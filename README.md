@@ -2,7 +2,7 @@
 
 > Xây dựng một blockchain hoàn chỉnh từ Bitcoin 0.1 đến PKT Native Chain bằng Rust thuần — không dùng bất kỳ blockchain framework nào.
 
-**v14.3 ✅ · 130+ versions · 21 eras · 1324 tests · 0 warnings**
+**v15.8 ✅ · 130+ versions · 22 eras · 2023 tests · 0 warnings**
 
 ---
 
@@ -30,9 +30,9 @@ Era 16              — Auth Layer: API Key, Audit Log, EVM fix, Webhooks, Graph
 Era 17              — Write APIs + Production: TX/Token/Contract write, Deploy Config     ✅
 Era 18              — HD Wallet & UX: BIP39 restore, Ed25519 SLIP-0010                   ✅
 Era 19              — PKT Core: PacketCrypt chuẩn, Network Steward, PKT Address, Genesis  ✅
-Era 21              — UX & Frontend: TUI Dashboard, Wallet TUI, Web Frontend, QR Code     🔄 v14.3
-Era 22              — PKT Testnet Integration: Wire Protocol, Block Download, UTXO Sync   📋
-Era 23              — Developer Experience: Devnet, Docs, E2E Tests, Hot Reload           📋
+Era 21              — UX & Frontend: TUI Dashboard, Wallet TUI, Web Frontend, QR Code     ✅
+Era 22              — PKT Testnet Integration: Wire Protocol, Sync, Explorer, PKT Node    ✅ v15.8
+Era 23              — Developer Experience: Devnet, Docs, E2E Tests, Hot Reload           ✅
 ```
 
 ---
@@ -45,7 +45,7 @@ Era 23              — Developer Experience: Devnet, Docs, E2E Tests, Hot Reloa
 git clone https://github.com/TuyenPKT/blockchain-rust.git
 cd blockchain-rust
 cargo build
-cargo test        # 1324 tests, 0 warnings
+cargo test        # 2023 tests, 0 warnings
 ```
 
 **GPU mining (tùy chọn):**
@@ -69,10 +69,16 @@ cargo run -- qr <pkt-address>                 # QR address trong terminal
 cargo run -- qr <address> 10.5               # QR payment URI (BIP21)
 cargo run -- qr <address> 10.5 "donation"    # QR + label
 
+# PKT Node (v15.7–v15.8)
+cargo run -- pkt-node                         # PKT wire node (64512) + template server (64513)
+cargo run -- pkt-node 8333                    # PKT wire (8333) + template server (8334)
+cargo run -- pkt-node 8333 --mainnet          # mainnet magic
+
 # Mining
-cargo run -- mine                             # mine dùng ví đã tạo
+cargo run -- mine                             # mine, kết nối local node 127.0.0.1:8334
+                                              # fallback: seed.testnet.oceif.com:8334 → standalone
 cargo run -- mine <addr_hex> <n>              # mine n blocks
-cargo run -- mine <addr_hex> <n> <node:port>  # mine + kết nối P2P node
+cargo run -- mine <addr_hex> <n> <node:port>  # mine + kết nối node cụ thể
 cargo run -- cpumine                          # CPU multi-thread (rayon, cores/3)
 cargo run -- gpumine                          # GPU/software backend
 cargo run -- gpumine <addr> <diff> <n> opencl # OpenCL GPU (--features opencl)
@@ -303,18 +309,29 @@ cust = { version = "0.3",  optional = true }  # v6.6: CUDA
 
 ## Testnet
 
-Bootstrap peer: `seed.testnet.oceif.com:18333`
+Bootstrap peer: `seed.testnet.oceif.com:8333` (PKT wire) / `seed.testnet.oceif.com:8334` (template)
 
 ```bash
-# Kết nối node đến testnet
-cargo run -- node 18334 seed.testnet.oceif.com:18333
+# Chạy pkt-node local (wire port 8333, template port 8334)
+cargo run -- pkt-node 8333
 
-# Mine về testnet
-cargo run -- mine <addr> 0 seed.testnet.oceif.com:18333
+# Mine về VPS testnet node (tự động fallback nếu local không có)
+cargo run -- mine
+# hoặc chỉ định node cụ thể:
+cargo run -- mine <addr> 0 seed.testnet.oceif.com:8334
+
+# Block explorer CLI (kết nối template server)
+cargo run -- explorer chain
+
+# PKTScan web explorer
+cargo run -- pktscan 3000
+# Browser: http://localhost:3000
 
 # Check health
 curl http://seed.testnet.oceif.com:3001/health
 ```
+
+**Web explorer:** [oceif.com/blockchain-rust](https://oceif.com/blockchain-rust/)
 
 ---
 
