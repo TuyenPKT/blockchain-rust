@@ -356,6 +356,15 @@ fn handle_template_client(mut stream: std::net::TcpStream, chain: SharedChain) {
                 }
                 Message::Height { height: h }
             }
+            Message::GetBlocks { from_index } => {
+                let bc = chain.lock().unwrap();
+                let blocks = bc.chain.iter()
+                    .skip(from_index as usize)
+                    .cloned()
+                    .collect();
+                drop(bc);
+                Message::Blocks { blocks }
+            }
             _ => break,
         };
         if stream.write_all(&reply.serialize()).is_err() { break; }
