@@ -41,7 +41,8 @@ fn fmt_pkt(paklets: u64) -> String {
     format!("{}.{:09} PKT", whole, frac)
 }
 
-pub const DEFAULT_NODE: &str = "seed.testnet.oceif.com:8333";
+pub const DEFAULT_NODE:      &str = "127.0.0.1:8334";              // local pkt-node template
+pub const FALLBACK_NODE:     &str = "seed.testnet.oceif.com:8334"; // remote VPS pkt-node template
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -124,20 +125,13 @@ impl MinerStats {
 fn node_rpc(addr: &str, msg: &Message) -> Option<Message> {
     let mut stream = match TcpStream::connect(addr) {
         Ok(s)  => s,
-        Err(e) => {
-            eprintln!("  [rpc] connect {} FAILED: {}", addr, e);
-            return None;
-        }
+        Err(_) => return None,
     };
     stream.set_read_timeout(Some(Duration::from_secs(10))).ok()?;
-    if let Err(e) = stream.write_all(&msg.serialize()) {
-        eprintln!("  [rpc] write FAILED: {}", e);
-        return None;
-    }
+    if stream.write_all(&msg.serialize()).is_err() { return None; }
     let mut line = String::new();
     match BufReader::new(stream).read_line(&mut line) {
-        Ok(0)  => { eprintln!("  [rpc] connection closed before response"); None }
-        Err(e) => { eprintln!("  [rpc] read FAILED: {}", e); None }
+        Ok(0) | Err(_) => None,
         Ok(_)  => Message::deserialize(line.trim_end_matches('\n').as_bytes()),
     }
 }
@@ -269,11 +263,47 @@ impl Miner {
         if self.cfg.standalone {
             self.run_standalone();
         } else {
-            loop {
-                if let Some(max) = self.cfg.max_blocks {
-                    if self.stats.blocks_mined >= max { break; }
+            // Thử node theo thứ tự: configured → FALLBACK_NODE → standalone
+            let nodes = if self.cfg.node_addr == DEFAULT_NODE {
+                vec![DEFAULT_NODE.to_string(), FALLBACK_NODE.to_string()]
+            } else {
+                vec![self.cfg.node_addr.clone()]
+            };
+
+            let mut connected = false;
+            for node in &nodes {
+                self.cfg.node_addr = node.clone();
+                println!("  [miner] thử kết nối {}", node);
+                if self.try_mine_one() {
+                    connected = true;
+                    break;
                 }
-                self.mine_one();
+            }
+
+            if connected {
+                // Tiếp tục mine với node đang hoạt động
+                let mut fail_streak = 0u32;
+                loop {
+                    if let Some(max) = self.cfg.max_blocks {
+                        if self.stats.blocks_mined >= max { break; }
+                    }
+                    if self.try_mine_one() {
+                        fail_streak = 0;
+                    } else {
+                        fail_streak += 1;
+                        if fail_streak >= 3 {
+                            println!("  [miner] Node mất kết nối — chuyển standalone");
+                            self.cfg.standalone = true;
+                            self.run_standalone();
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_secs(3));
+                    }
+                }
+            } else {
+                println!("  [miner] Tất cả nodes không phản hồi — chuyển standalone");
+                self.cfg.standalone = true;
+                self.run_standalone();
             }
             self.print_summary();
         }
@@ -342,7 +372,8 @@ impl Miner {
         println!();
     }
 
-    fn mine_one(&mut self) {
+    /// Trả về true nếu mine thành công, false nếu node không phản hồi.
+    fn try_mine_one(&mut self) -> bool {
         let node = self.cfg.node_addr.clone();
 
         // ── 1. Lấy block template từ node ────────────────────────────────────
@@ -351,9 +382,8 @@ impl Miner {
                 (prev_hash, height, difficulty, txs)
             }
             _ => {
-                eprintln!("  [miner] ⚠️  Node {} không phản hồi — thử lại sau 3s", node);
-                std::thread::sleep(Duration::from_secs(3));
-                return;
+                eprintln!("  [miner] ⚠️  Node {} không phản hồi", node);
+                return false;
             }
         };
 
@@ -412,6 +442,7 @@ impl Miner {
             fmt_big(self.stats.total_hashes),
             elapsed_str(self.stats.uptime_secs() as u64 * 1000));
         println!();
+        true
     }
 
     fn print_summary(&self) {

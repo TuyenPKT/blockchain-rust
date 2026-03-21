@@ -806,6 +806,24 @@ pub async fn serve(state: ScanDb, port: u16) {
     use crate::oracle::{OracleRegistry, LendingProtocol};
     use std::sync::Arc as StdArc;
 
+    // Sync chain + utxo_set + difficulty từ RocksDB mỗi 5s.
+    // Chỉ overwrite data fields — giữ nguyên mempool, staking, token_registry in-memory.
+    {
+        let db_reload = Arc::clone(&state);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                let fresh = crate::storage::load_or_new();
+                let mut bc = db_reload.lock().await;
+                if fresh.chain.len() > bc.chain.len() {
+                    bc.chain      = fresh.chain;
+                    bc.utxo_set   = fresh.utxo_set;
+                    bc.difficulty = fresh.difficulty;
+                }
+            }
+        });
+    }
+
     let hub      = StdArc::new(pktscan_ws::WsHub::new());
     let ws_state = pktscan_ws::WsState {
         hub:    StdArc::clone(&hub),

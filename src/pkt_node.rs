@@ -313,9 +313,84 @@ pub fn parse_node_args(args: &[String]) -> NodeConfig {
     cfg
 }
 
+// ── Template server (port+1) ──────────────────────────────────────────────────
+//
+// Speaks crate::message::Message protocol (JSON lines).
+// GetTemplate → Template { prev_hash, height, difficulty, txs }
+// NewBlock    → validate + commit + save RocksDB
+//
+// Miner kết nối 127.0.0.1:(p2p_port+1) thay vì testnet node.
+
+type SharedChain = Arc<Mutex<crate::chain::Blockchain>>;
+
+fn handle_template_client(mut stream: std::net::TcpStream, chain: SharedChain) {
+    use std::io::{BufRead, BufReader, Write};
+    use crate::message::Message;
+
+    stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    let cloned = match stream.try_clone() {
+        Ok(s) => s,
+        Err(e) => { eprintln!("[template] stream clone failed: {}", e); return; }
+    };
+    let reader = BufReader::new(cloned);
+    for line in reader.lines() {
+        let line = match line { Ok(l) => l, Err(_) => break };
+        let msg  = match Message::deserialize(line.as_bytes()) { Some(m) => m, None => break };
+        let reply = match msg {
+            Message::GetTemplate => {
+                let bc       = chain.lock().unwrap();
+                let height   = bc.chain.len() as u64;
+                let prev     = bc.chain.last().map(|b| b.hash.clone())
+                                .unwrap_or_else(|| "0".repeat(64));
+                let diff     = bc.difficulty;
+                let txs      = bc.mempool.select_transactions(100);
+                drop(bc);
+                Message::Template { prev_hash: prev, height, difficulty: diff, txs }
+            }
+            Message::NewBlock { block } => {
+                let mut bc = chain.lock().unwrap();
+                bc.commit_mined_block(block);
+                let h = bc.chain.len() as u64;
+                if let Err(e) = crate::storage::save_blockchain(&bc) {
+                    eprintln!("[template] save error: {}", e);
+                }
+                Message::Height { height: h }
+            }
+            _ => break,
+        };
+        if stream.write_all(&reply.serialize()).is_err() { break; }
+    }
+}
+
+fn run_template_server(port: u16, chain: SharedChain) {
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = match TcpListener::bind(&addr) {
+        Ok(l) => l,
+        Err(e) => { eprintln!("[template] cannot bind {}: {}", addr, e); return; }
+    };
+    println!("[template] listening on {} (miner endpoint)", addr);
+    for stream in listener.incoming() {
+        if let Ok(s) = stream {
+            let c = Arc::clone(&chain);
+            thread::spawn(move || handle_template_client(s, c));
+        }
+    }
+}
+
 pub fn cmd_pkt_node(args: &[String]) {
-    let cfg = parse_node_args(args);
-    println!("[pkt-node] starting on port {} ({})", cfg.port, cfg.network);
+    let cfg   = parse_node_args(args);
+    let chain = Arc::new(Mutex::new(crate::storage::load_or_new()));
+    {
+        let bc = chain.lock().unwrap();
+        println!("[pkt-node] starting on port {} ({})", cfg.port, cfg.network);
+        println!("[pkt-node] chain loaded: height={}", bc.chain.len().saturating_sub(1));
+    }
+
+    // Spawn template server on port+1 (local miner endpoint)
+    let template_port  = cfg.port + 1;
+    let chain_template = Arc::clone(&chain);
+    thread::spawn(move || run_template_server(template_port, chain_template));
+
     run_pkt_node(cfg);
 }
 

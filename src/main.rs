@@ -430,7 +430,7 @@ fn run_miner(args: &[String]) {
     };
     let cfg = match node_addr {
         Some(ref addr) => cfg.with_node(addr),
-        None           => cfg.standalone(),  // không có node → standalone
+        None           => cfg,  // dùng DEFAULT_NODE (testnet), tự fallback standalone nếu lỗi
     };
     let cfg = match threads {
         Some(t) => cfg.with_threads(t),
