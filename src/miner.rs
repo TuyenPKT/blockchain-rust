@@ -41,8 +41,10 @@ fn fmt_pkt(paklets: u64) -> String {
     format!("{}.{:09} PKT", whole, frac)
 }
 
-pub const DEFAULT_NODE:      &str = "127.0.0.1:8334";              // local pkt-node template
-pub const FALLBACK_NODE:     &str = "seed.testnet.oceif.com:8334"; // remote VPS pkt-node template
+pub const DEFAULT_NODE:           &str = "127.0.0.1:8334";              // local pkt-node template
+pub const FALLBACK_NODE:          &str = "seed.testnet.oceif.com:8334"; // remote VPS pkt-node template
+/// Re-fetch template sau N giây nếu chưa tìm được block (chain có thể đã advance).
+pub const TEMPLATE_REFRESH_SECS: u64  = 1800; // 30 phút
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -138,9 +140,11 @@ fn node_rpc(addr: &str, msg: &Message) -> Option<Message> {
 
 // ─── Live mining loop (rayon parallel) ───────────────────────────────────────
 
-struct MineResult { hashes: u64, elapsed_ms: u64 }
+struct MineResult { hashes: u64, elapsed_ms: u64, found: bool }
 
-fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult {
+/// Mine block với timeout re-fetch.
+/// Trả `found=false` nếu hết `timeout_secs` mà chưa tìm được nonce → caller re-fetch template.
+fn mine_live(block: &mut Block, difficulty: usize, threads: usize, timeout_secs: u64) -> MineResult {
     let t0           = Instant::now();
     let stop         = Arc::new(AtomicBool::new(false));
     let total_hashes = Arc::new(AtomicU64::new(0));
@@ -155,6 +159,15 @@ fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult
         "{}|{}|{}|{}|{}|",
         block.index, block.timestamp, txid_root, witness_root, block.prev_hash,
     );
+
+    // Timeout thread: set stop=true sau timeout_secs giây.
+    if timeout_secs > 0 {
+        let stop_t = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(timeout_secs));
+            stop_t.store(true, Ordering::Relaxed);
+        });
+    }
 
     // Progress reporter: shares latest_nonce to display hash preview.
     let latest_nonce = Arc::new(AtomicU64::new(0));
@@ -217,6 +230,7 @@ fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult
     print!("\r{}\r", " ".repeat(72));
     let _ = std::io::stdout().flush();
 
+    let found_block = found.is_some();
     let (nonce, hash) = found.unwrap_or((0, "f".repeat(64)));
     block.nonce = nonce;
     block.hash  = hash;
@@ -224,6 +238,7 @@ fn mine_live(block: &mut Block, difficulty: usize, threads: usize) -> MineResult
     MineResult {
         hashes:     total_hashes.load(Ordering::Relaxed),
         elapsed_ms: t0.elapsed().as_millis() as u64,
+        found:      found_block,
     }
 }
 
@@ -343,7 +358,7 @@ impl Miner {
         println!("  ┌─ Block #{:<5}  diff={}  txs={}  [standalone]",
             height, diff, block.transactions.len() - 1);
 
-        let result = mine_live(&mut block, diff, self.cfg.threads);
+        let result = mine_live(&mut block, diff, self.cfg.threads, 0); // standalone: no timeout
 
         // Commit mined block vào chain (không re-mine)
         chain.commit_mined_block(block.clone());
@@ -377,7 +392,7 @@ impl Miner {
         let node = self.cfg.node_addr.clone();
 
         // ── 1. Lấy block template từ node ────────────────────────────────────
-        let (prev_hash, height, diff, pending_txs) = match node_rpc(&node, &Message::GetTemplate) {
+        let (prev_hash, height, mut diff, pending_txs) = match node_rpc(&node, &Message::GetTemplate) {
             Some(Message::Template { prev_hash, height, difficulty, txs }) => {
                 (prev_hash, height, difficulty, txs)
             }
@@ -409,11 +424,41 @@ impl Miner {
         all_txs.extend(valid_txs);
         let mut block   = Block::new(height, all_txs, prev_hash);
 
-        println!("  ┌─ Block #{:<5}  diff={}  txs={}  node={}",
-            height, diff, block.transactions.len() - 1, &node);
+        println!("  ┌─ Block #{:<5}  diff={}  txs={}  node={}  timeout={}m",
+            height, diff, block.transactions.len() - 1, &node,
+            TEMPLATE_REFRESH_SECS / 60);
 
-        // ── 3. Mine ───────────────────────────────────────────────────────────
-        let result = mine_live(&mut block, diff, self.cfg.threads);
+        // ── 3. Mine với timeout re-fetch ──────────────────────────────────────
+        let result = loop {
+            let r = mine_live(&mut block, diff, self.cfg.threads, TEMPLATE_REFRESH_SECS);
+            if r.found { break r; }
+
+            // Timeout: re-fetch template để cập nhật prev_hash/height từ node
+            println!("\n  [miner] ⏱  {}m không tìm được block → re-fetch template …",
+                TEMPLATE_REFRESH_SECS / 60);
+            match node_rpc(&node, &Message::GetTemplate) {
+                Some(Message::Template { prev_hash: new_prev, height: new_h, difficulty: new_diff, txs: new_txs }) => {
+                    let new_valid: Vec<Transaction> = new_txs.into_iter()
+                        .filter(|t| !t.is_coinbase)
+                        .collect();
+                    let new_fee: u64      = new_valid.iter().map(|t| t.fee).sum();
+                    let new_reward        = RewardEngine::subsidy_at(new_h);
+                    let new_cb            = Transaction::coinbase_at(&self.cfg.address, new_fee, new_h);
+                    let mut new_txs_full  = vec![new_cb];
+                    new_txs_full.extend(new_valid);
+                    block = Block::new(new_h, new_txs_full, new_prev);
+                    diff  = new_diff;
+                    // Update earned with fresh values
+                    let _ = new_reward; // earnings tracked per-submit
+                    println!("  [miner] 🔄 Template mới: height={} diff={}", new_h, new_diff);
+                }
+                _ => {
+                    println!("  [miner] ⚠️  Không lấy được template mới, tiếp tục template cũ");
+                }
+            }
+            // Accumulate hashes to stats even on timeout round
+            self.stats.update(r.hashes, r.elapsed_ms, 0);
+        };
 
         // ── 4. Submit về node ─────────────────────────────────────────────────
         match node_rpc(&node, &Message::NewBlock { block: block.clone() }) {
