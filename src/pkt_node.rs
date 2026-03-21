@@ -141,11 +141,42 @@ pub fn server_handshake(
 
 // ── Per-peer session loop ─────────────────────────────────────────────────────
 
+/// Convert our Block → WireBlockHeader để serve qua PKT wire protocol.
+fn block_to_wire_header(block: &crate::block::Block) -> crate::pkt_wire::WireBlockHeader {
+    use crate::pkt_wire::WireBlockHeader;
+    use crate::block::Block;
+
+    // prev_block: hex → [u8;32]
+    let mut prev_block = [0u8; 32];
+    if let Ok(b) = hex::decode(&block.prev_hash) {
+        let len = b.len().min(32);
+        prev_block[..len].copy_from_slice(&b[..len]);
+    }
+
+    // merkle_root: txid merkle root hex → [u8;32]
+    let mr_hex = Block::merkle_root_txid(&block.transactions);
+    let mut merkle_root = [0u8; 32];
+    if let Ok(b) = hex::decode(&mr_hex) {
+        let len = b.len().min(32);
+        merkle_root[..len].copy_from_slice(&b[..len]);
+    }
+
+    WireBlockHeader {
+        version:     1,
+        prev_block,
+        merkle_root,
+        timestamp:   block.timestamp as u32,
+        bits:        0x207f_ffff,           // testnet compact target placeholder
+        nonce:       (block.nonce & 0xFFFF_FFFF) as u32,
+    }
+}
+
 fn handle_peer(
     mut stream: TcpStream,
     magic:      [u8; 4],
     our_height: i32,
     peers:      Arc<Mutex<Vec<ConnectedPeer>>>,
+    chain:      SharedChain,
 ) {
     let addr = stream
         .peer_addr()
@@ -187,12 +218,32 @@ fn handle_peer(
                     }
                 }
                 PktMsg::Pong { .. } => {}
-                PktMsg::GetHeaders { .. } => {
-                    // Reply with empty Headers until we have a real chain
-                    if let Err(e) = send_msg(&mut stream, PktMsg::Headers { headers: vec![] }, magic) {
+                PktMsg::GetHeaders { locator_hashes, .. } => {
+                    // Build WireBlockHeader list from our chain.
+                    // Bitcoin protocol: find the last known block (highest matching locator),
+                    // return up to 2000 headers after it.
+                    let headers: Vec<_> = {
+                        let bc = chain.lock().unwrap();
+                        let locator_set: std::collections::HashSet<String> = locator_hashes
+                            .iter()
+                            .map(|h| hex::encode(h))
+                            .collect();
+                        // Last block in our chain whose hash is in the locator
+                        let after = bc.chain.iter()
+                            .rposition(|b| locator_set.contains(&b.hash))
+                            .map(|i| i + 1)
+                            .unwrap_or(0);
+                        bc.chain[after..].iter()
+                            .take(2000)
+                            .map(block_to_wire_header)
+                            .collect()
+                    };
+                    let count = headers.len();
+                    if let Err(e) = send_msg(&mut stream, PktMsg::Headers { headers }, magic) {
                         println!("[pkt-node] send headers failed {}: {}", addr, e);
                         break;
                     }
+                    println!("[pkt-node] → Headers({}) to {}", count, addr);
                 }
                 PktMsg::Inv { items } => {
                     println!("[pkt-node] inv from {}: {} items", addr, items.len());
@@ -236,7 +287,7 @@ fn handle_peer(
 
 // ── Main server loop ──────────────────────────────────────────────────────────
 
-pub fn run_pkt_node(cfg: NodeConfig) {
+pub fn run_pkt_node(cfg: NodeConfig, chain: SharedChain) {
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
     let listener  = TcpListener::bind(&bind_addr).unwrap_or_else(|e| {
         eprintln!("[pkt-node] cannot bind {}: {}", bind_addr, e);
@@ -265,11 +316,12 @@ pub fn run_pkt_node(cfg: NodeConfig) {
                 }
 
                 let peers_clone  = Arc::clone(&peers);
+                let chain_clone  = Arc::clone(&chain);
                 let magic        = cfg.magic;
                 let our_height   = cfg.our_height;
 
                 thread::spawn(move || {
-                    handle_peer(s, magic, our_height, peers_clone);
+                    handle_peer(s, magic, our_height, peers_clone, chain_clone);
                 });
             }
             Err(e) => {
@@ -400,7 +452,7 @@ pub fn cmd_pkt_node(args: &[String]) {
     let chain_template = Arc::clone(&chain);
     thread::spawn(move || run_template_server(template_port, chain_template));
 
-    run_pkt_node(cfg);
+    run_pkt_node(cfg, chain);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
