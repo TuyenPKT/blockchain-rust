@@ -225,33 +225,33 @@ fn handle_peer(
                 }
                 PktMsg::Pong { .. } => {}
                 PktMsg::GetHeaders { locator_hashes, .. } => {
-                    // Bitcoin protocol: find last known block, return up to 2000 after it.
-                    // Wire headers must form a self-consistent SHA256d chain.
+                    // Locator hashes are SHA256d wire hashes (stored by sync client),
+                    // NOT our BLAKE3 block hashes. Must walk chain computing wire hashes
+                    // to find the correct resume point.
                     let headers = {
                         let bc = chain.lock().unwrap();
-                        let locator_set: std::collections::HashSet<String> = locator_hashes
-                            .iter()
-                            .map(|h| hex::encode(h))
-                            .collect();
-                        let after = bc.chain.iter()
-                            .rposition(|b| locator_set.contains(&b.hash))
-                            .map(|i| i + 1)
-                            .unwrap_or(0);
-                        let slice = &bc.chain[after..bc.chain.len().min(after + 2000)];
-                        // prev_hash wire = SHA256d of the block before slice (zeros if genesis)
-                        let prev_wire = if after == 0 {
-                            [0u8; 32]
-                        } else {
-                            // Recompute wire hash of block[after-1] by building its wire header.
-                            // Use zeros as its prev so the chain builds correctly from the start.
-                            // For simplicity we just pass zeros — sync will validate from genesis.
-                            // A full impl would cache wire hashes; this is sufficient for our chain.
-                            blocks_to_wire_headers(
-                                &bc.chain[..after],
-                                [0u8; 32],
-                            ).last().map(|h| h.block_hash()).unwrap_or([0u8; 32])
-                        };
-                        blocks_to_wire_headers(slice, prev_wire)
+                        let locator_set: std::collections::HashSet<[u8; 32]> =
+                            locator_hashes.iter().copied().collect();
+
+                        // Walk all blocks, compute wire hashes in sequence (deterministic).
+                        // Find the highest block whose wire hash appears in the locator.
+                        let mut wire_prev    = [0u8; 32];
+                        let mut start_after  = 0usize;
+                        let mut start_prev_w = [0u8; 32];
+
+                        for (i, block) in bc.chain.iter().enumerate() {
+                            let wh = blocks_to_wire_headers(
+                                std::slice::from_ref(block), wire_prev
+                            ).into_iter().next().unwrap();
+                            wire_prev = wh.block_hash();
+                            if locator_set.contains(&wire_prev) {
+                                start_after  = i + 1;
+                                start_prev_w = wire_prev;
+                            }
+                        }
+
+                        let slice = &bc.chain[start_after..bc.chain.len().min(start_after + 2000)];
+                        blocks_to_wire_headers(slice, start_prev_w)
                     };
                     let count = headers.len();
                     if let Err(e) = send_msg(&mut stream, PktMsg::Headers { headers }, magic) {
