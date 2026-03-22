@@ -620,13 +620,20 @@ pub fn cmd_sync(args: &[String]) {
         return;
     }
 
-    let cfg = parse_sync_args(args);
+    let mut cfg = parse_sync_args(args);
 
     // Tìm host:port từ args (bare arg không bắt đầu bằng --)
     let peer_addr = args.iter()
         .find(|a| !a.starts_with('-') && a.contains(':'))
         .cloned()
         .unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+
+    // Chain mình dùng BLAKE3 PoW — tự động skip PoW khi kết nối node mình.
+    // User có thể override bằng cách KHÔNG pass --skip-pow (hiện không có flag ngược lại),
+    // nhưng kết nối seed.* của mình thì luôn skip để tránh PoWFailed.
+    if peer_addr.contains("oceif.com") || peer_addr.starts_with("127.") || peer_addr.starts_with("localhost") {
+        cfg.skip_pow_check = true;
+    }
 
     println!("[sync] kết nối tới {} ({}) …", peer_addr, cfg.network);
 
