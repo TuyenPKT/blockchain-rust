@@ -141,34 +141,40 @@ pub fn server_handshake(
 
 // ── Per-peer session loop ─────────────────────────────────────────────────────
 
-/// Convert our Block → WireBlockHeader để serve qua PKT wire protocol.
-fn block_to_wire_header(block: &crate::block::Block) -> crate::pkt_wire::WireBlockHeader {
+/// Build WireBlockHeader slice từ chain blocks, đảm bảo wire-chain linkage:
+/// header[i].prev_block == SHA256d(wire_bytes_of_header[i-1]).
+/// Sync client validate điều này trong validate_chain_links().
+fn blocks_to_wire_headers(
+    blocks:    &[crate::block::Block],
+    prev_hash: [u8; 32],   // SHA256d hash của block ngay trước slice (hoặc zeros nếu genesis)
+) -> Vec<crate::pkt_wire::WireBlockHeader> {
     use crate::pkt_wire::WireBlockHeader;
     use crate::block::Block;
 
-    // prev_block: hex → [u8;32]
-    let mut prev_block = [0u8; 32];
-    if let Ok(b) = hex::decode(&block.prev_hash) {
-        let len = b.len().min(32);
-        prev_block[..len].copy_from_slice(&b[..len]);
-    }
+    let mut headers = Vec::with_capacity(blocks.len());
+    let mut prev = prev_hash;
 
-    // merkle_root: txid merkle root hex → [u8;32]
-    let mr_hex = Block::merkle_root_txid(&block.transactions);
-    let mut merkle_root = [0u8; 32];
-    if let Ok(b) = hex::decode(&mr_hex) {
-        let len = b.len().min(32);
-        merkle_root[..len].copy_from_slice(&b[..len]);
-    }
+    for block in blocks {
+        // merkle_root từ txids
+        let mr_hex = Block::merkle_root_txid(&block.transactions);
+        let mut merkle_root = [0u8; 32];
+        if let Ok(b) = hex::decode(&mr_hex) {
+            let len = b.len().min(32);
+            merkle_root[..len].copy_from_slice(&b[..len]);
+        }
 
-    WireBlockHeader {
-        version:     1,
-        prev_block,
-        merkle_root,
-        timestamp:   block.timestamp as u32,
-        bits:        0x207f_ffff,           // testnet compact target placeholder
-        nonce:       (block.nonce & 0xFFFF_FFFF) as u32,
+        let wh = WireBlockHeader {
+            version:     1,
+            prev_block:  prev,
+            merkle_root,
+            timestamp:   block.timestamp as u32,
+            bits:        0x207f_ffff,
+            nonce:       (block.nonce & 0xFFFF_FFFF) as u32,
+        };
+        prev = wh.block_hash(); // SHA256d của wire bytes → dùng làm prev_block cho header tiếp
+        headers.push(wh);
     }
+    headers
 }
 
 fn handle_peer(
@@ -219,24 +225,33 @@ fn handle_peer(
                 }
                 PktMsg::Pong { .. } => {}
                 PktMsg::GetHeaders { locator_hashes, .. } => {
-                    // Build WireBlockHeader list from our chain.
-                    // Bitcoin protocol: find the last known block (highest matching locator),
-                    // return up to 2000 headers after it.
-                    let headers: Vec<_> = {
+                    // Bitcoin protocol: find last known block, return up to 2000 after it.
+                    // Wire headers must form a self-consistent SHA256d chain.
+                    let headers = {
                         let bc = chain.lock().unwrap();
                         let locator_set: std::collections::HashSet<String> = locator_hashes
                             .iter()
                             .map(|h| hex::encode(h))
                             .collect();
-                        // Last block in our chain whose hash is in the locator
                         let after = bc.chain.iter()
                             .rposition(|b| locator_set.contains(&b.hash))
                             .map(|i| i + 1)
                             .unwrap_or(0);
-                        bc.chain[after..].iter()
-                            .take(2000)
-                            .map(block_to_wire_header)
-                            .collect()
+                        let slice = &bc.chain[after..bc.chain.len().min(after + 2000)];
+                        // prev_hash wire = SHA256d of the block before slice (zeros if genesis)
+                        let prev_wire = if after == 0 {
+                            [0u8; 32]
+                        } else {
+                            // Recompute wire hash of block[after-1] by building its wire header.
+                            // Use zeros as its prev so the chain builds correctly from the start.
+                            // For simplicity we just pass zeros — sync will validate from genesis.
+                            // A full impl would cache wire hashes; this is sufficient for our chain.
+                            blocks_to_wire_headers(
+                                &bc.chain[..after],
+                                [0u8; 32],
+                            ).last().map(|h| h.block_hash()).unwrap_or([0u8; 32])
+                        };
+                        blocks_to_wire_headers(slice, prev_wire)
                     };
                     let count = headers.len();
                     if let Err(e) = send_msg(&mut stream, PktMsg::Headers { headers }, magic) {
