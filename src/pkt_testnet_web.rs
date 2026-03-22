@@ -85,14 +85,15 @@ pub fn testnet_web_router_with_dbs(sync_db: Arc<SyncDb>, utxo_db: Arc<UtxoSyncDb
 pub fn testnet_web_router() -> Router {
     let js_only = Router::new().route("/static/testnet.js", get(serve_testnet_js));
 
-    let sync_db = match SyncDb::open(&default_sync_db_path()) {
+    // Mở read-only để không conflict lock với pkt-sync đang ghi cùng lúc.
+    let sync_db = match SyncDb::open_read_only(&default_sync_db_path()) {
         Ok(db) => Arc::new(db),
         Err(e) => {
             eprintln!("[testnet-web] syncdb unavailable ({}): API routes disabled", e);
             return js_only;
         }
     };
-    let utxo_db = match UtxoSyncDb::open(&default_utxo_db_path()) {
+    let utxo_db = match UtxoSyncDb::open_read_only(&default_utxo_db_path()) {
         Ok(db) => Arc::new(db),
         Err(e) => {
             eprintln!("[testnet-web] utxodb unavailable ({}): API routes disabled", e);

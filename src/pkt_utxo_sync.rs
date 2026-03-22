@@ -300,6 +300,16 @@ impl UtxoSyncDb {
         Ok(Self { db, path: path.to_path_buf() })
     }
 
+    /// Open read-only — không giữ write lock, dùng cho pktscan khi sync đang chạy.
+    pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
+        std::fs::create_dir_all(path)
+            .map_err(|e| SyncError::Db(e.to_string()))?;
+        let opts = Options::default();
+        let db = DB::open_for_read_only(&opts, path, false)
+            .map_err(|e| SyncError::Db(e.to_string()))?;
+        Ok(Self { db, path: path.to_path_buf() })
+    }
+
     pub fn open_temp() -> Result<Self, SyncError> {
         let path = std::env::temp_dir()
             .join(format!("pkt_utxodb_test_{}", rand_u64()));
