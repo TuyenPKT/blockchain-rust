@@ -177,6 +177,59 @@ fn blocks_to_wire_headers(
     headers
 }
 
+/// Serialize one chain Block to Bitcoin wire format:
+///   [80B: wire header] [varint: tx_count] [tx_0] ... [tx_n]
+/// `prev_wire_hash` = SHA256d of the preceding block's wire header bytes.
+fn block_to_wire_payload(
+    block:          &crate::block::Block,
+    prev_wire_hash: [u8; 32],
+) -> Vec<u8> {
+    use crate::pkt_utxo_sync::{WireTx, WireTxIn, WireTxOut, encode_wire_tx};
+
+    // 80-byte wire header
+    let headers = blocks_to_wire_headers(std::slice::from_ref(block), prev_wire_hash);
+    let hdr_bytes = headers[0].to_bytes();
+
+    // varint helper (inline, no import needed)
+    let write_varint = |buf: &mut Vec<u8>, n: u64| {
+        if n < 0xfd { buf.push(n as u8); }
+        else if n <= 0xffff { buf.push(0xfd); buf.extend_from_slice(&(n as u16).to_le_bytes()); }
+        else if n <= 0xffff_ffff { buf.push(0xfe); buf.extend_from_slice(&(n as u32).to_le_bytes()); }
+        else { buf.push(0xff); buf.extend_from_slice(&n.to_le_bytes()); }
+    };
+
+    // Convert chain Transaction → WireTx
+    let wire_txs: Vec<WireTx> = block.transactions.iter().map(|tx| {
+        let inputs = tx.inputs.iter().map(|inp| {
+            let mut prev_txid = [0u8; 32];
+            if let Ok(b) = hex::decode(&inp.tx_id) {
+                let n = b.len().min(32);
+                prev_txid[..n].copy_from_slice(&b[..n]);
+            }
+            WireTxIn {
+                prev_txid,
+                prev_vout:  inp.output_index as u32,
+                script_sig: inp.script_sig.to_bytes(),
+                sequence:   inp.sequence,
+            }
+        }).collect();
+        let outputs = tx.outputs.iter().map(|out| WireTxOut {
+            value:        out.amount,
+            script_pubkey: out.script_pubkey.to_bytes(),
+        }).collect();
+        WireTx { version: 1, inputs, outputs, locktime: 0 }
+    }).collect();
+
+    // Assemble payload
+    let mut payload = Vec::with_capacity(80 + 9 + wire_txs.len() * 256);
+    payload.extend_from_slice(&hdr_bytes);
+    write_varint(&mut payload, wire_txs.len() as u64);
+    for tx in &wire_txs {
+        payload.extend_from_slice(&encode_wire_tx(tx));
+    }
+    payload
+}
+
 fn handle_peer(
     mut stream: TcpStream,
     magic:      [u8; 4],
@@ -259,6 +312,40 @@ fn handle_peer(
                         break;
                     }
                     println!("[pkt-node] → Headers({}) to {}", count, addr);
+                }
+                PktMsg::GetData { items } => {
+                    let bc = chain.lock().unwrap();
+                    for item in &items {
+                        if item.inv_type != crate::pkt_wire::INV_MSG_BLOCK { continue; }
+                        // Find block by wire hash: walk chain computing SHA256d wire hashes
+                        let mut wire_prev = [0u8; 32];
+                        let mut found_idx: Option<usize> = None;
+                        for (i, blk) in bc.chain.iter().enumerate() {
+                            let hdrs = blocks_to_wire_headers(std::slice::from_ref(blk), wire_prev);
+                            let h = hdrs[0].block_hash();
+                            if h == item.hash { found_idx = Some(i); break; }
+                            wire_prev = h;
+                        }
+                        if let Some(idx) = found_idx {
+                            // Recompute prev_wire_hash for this block
+                            let mut prev_w = [0u8; 32];
+                            for blk in bc.chain[..idx].iter() {
+                                let hdrs = blocks_to_wire_headers(std::slice::from_ref(blk), prev_w);
+                                prev_w = hdrs[0].block_hash();
+                            }
+                            let payload = block_to_wire_payload(&bc.chain[idx], prev_w);
+                            let mut cmd = [0u8; crate::pkt_wire::COMMAND_LEN];
+                            cmd[..5].copy_from_slice(b"block");
+                            let msg = PktMsg::Unknown { command: cmd, payload };
+                            if let Err(e) = send_msg(&mut stream, msg, magic) {
+                                println!("[pkt-node] send block failed {}: {}", addr, e);
+                                break;
+                            }
+                            println!("[pkt-node] → Block(h={}) to {}", bc.chain[idx].index, addr);
+                        } else {
+                            println!("[pkt-node] GetData: block not found for {}", hex::encode(&item.hash[..8]));
+                        }
+                    }
                 }
                 PktMsg::Inv { items } => {
                     println!("[pkt-node] inv from {}: {} items", addr, items.len());

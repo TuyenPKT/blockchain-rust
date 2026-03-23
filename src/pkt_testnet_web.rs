@@ -14,21 +14,197 @@
 //!   GET /api/testnet/sync-status        → sync progress JSON (for progress bar)
 //!
 //! Default DB paths: ~/.pkt/syncdb (headers) and ~/.pkt/utxodb (UTXOs).
-//! Graceful degradation: if a DB cannot be opened, only /static/testnet.js
-//! is served and the API routes are absent (frontend shows "Offline").
+//! Graceful degradation: if a DB cannot be opened at request time, the handler
+//! returns 503 (frontend shows "Offline") but all routes are always registered.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::{http::header, response::IntoResponse, routing::get, Router};
+use axum::{
+    extract::{Path, Query, State},
+    http::{header, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Json, Router,
+};
+use serde::Deserialize;
+use serde_json::json;
 
-use crate::pkt_explorer_api::{testnet_router, TestnetState};
+use crate::pkt_addr_index::AddrIndexDb;
+use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
 use crate::pkt_sync::SyncDb;
-use crate::pkt_sync_ui::{sync_status_router, SyncUiState};
+use crate::pkt_sync_ui::{sync_status_router, SyncProgress, SyncUiState};
 use crate::pkt_utxo_sync::UtxoSyncDb;
+
+// ── Per-request DB open state ──────────────────────────────────────────────────
+
+/// Chỉ lưu paths, mở DB fresh mỗi request → không giữ lock, luôn thấy data mới.
+#[derive(Clone)]
+struct PathState {
+    sync_path: PathBuf,
+    utxo_path: PathBuf,
+    addr_path: PathBuf,
+}
+
+impl PathState {
+    fn open(&self) -> Option<(SyncDb, UtxoSyncDb)> {
+        let sdb = SyncDb::open_read_only(&self.sync_path).ok()?;
+        let udb = UtxoSyncDb::open_read_only(&self.utxo_path).ok()?;
+        Some((sdb, udb))
+    }
+
+    fn open_addr(&self) -> Option<AddrIndexDb> {
+        AddrIndexDb::open_read_only(&self.addr_path).ok()
+    }
+}
+
+async fn ps_sync_status(State(ps): State<PathState>) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE,
+                 Json(json!({"phase":"not_synced","overall_progress":0}))).into_response(),
+        Some((sdb, udb)) => {
+            let p = SyncProgress::from_dbs(&sdb, &udb);
+            Json(crate::pkt_sync_ui::sync_status_json(&p)).into_response()
+        }
+    }
+}
+
+async fn ps_stats(State(ps): State<PathState>) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((sdb, udb)) => {
+            let state = TestnetState::new(sdb, udb);
+            let stats = crate::pkt_explorer_api::query_sync_stats(&state.sync_db, &state.utxo_db);
+            Json(stats).into_response()
+        }
+    }
+}
+
+async fn ps_headers(
+    State(ps): State<PathState>,
+    Query(params): Query<HeaderListParams>,
+) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((sdb, _udb)) => {
+            match crate::pkt_explorer_api::query_headers(
+                &sdb, params.limit.min(100), params.offset,
+            ) {
+                Ok((headers, tip)) => Json(json!({"headers": headers, "tip": tip})).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
+            }
+        }
+    }
+}
+
+async fn ps_header(
+    State(ps): State<PathState>,
+    Path(height): Path<u64>,
+) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((sdb, _udb)) => match crate::pkt_explorer_api::query_header(&sdb, height) {
+            Ok(Some(v)) => Json(v).into_response(),
+            Ok(None)    => (StatusCode::NOT_FOUND, Json(json!({"error":"not found"}))).into_response(),
+            Err(e)      => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
+        }
+    }
+}
+
+async fn ps_balance(
+    State(ps): State<PathState>,
+    Path(script): Path<String>,
+) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((_sdb, udb)) => {
+            let balance = crate::pkt_explorer_api::query_balance(&udb, &script);
+            Json(json!({"balance": balance})).into_response()
+        }
+    }
+}
+
+async fn ps_utxos(
+    State(ps): State<PathState>,
+    Path(script): Path<String>,
+) -> impl IntoResponse {
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((_sdb, udb)) => {
+            let utxos = crate::pkt_explorer_api::query_utxos(&udb, &script, 100);
+            Json(json!({"utxos": utxos})).into_response()
+        }
+    }
+}
 
 /// Embedded testnet panel JS — served at /static/testnet.js.
 const TESTNET_JS: &str = include_str!("../frontend/testnet.js");
+
+// ── Address index handlers ─────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AddrTxsParams {
+    cursor: Option<u64>,
+    limit:  Option<usize>,
+}
+
+/// GET /api/testnet/address/:script/txs?cursor=HEIGHT&limit=N
+async fn ps_addr_txs(
+    State(ps):        State<PathState>,
+    Path(script):     Path<String>,
+    Query(params):    Query<AddrTxsParams>,
+) -> impl IntoResponse {
+    let adb = match ps.open_addr() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"address index not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    let limit = params.limit.unwrap_or(50).min(200);
+    match adb.get_tx_history(&script, params.cursor, limit) {
+        Ok(entries) => {
+            let txs: Vec<_> = entries.iter().map(|e| json!({
+                "height": e.height,
+                "txid":   e.txid,
+            })).collect();
+            let count = txs.len();
+            Json(json!({"address": script, "txs": txs, "count": count})).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+                   Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct RichListParams {
+    limit: Option<usize>,
+}
+
+/// GET /api/testnet/rich-list?limit=N
+async fn ps_rich_list(
+    State(ps):     State<PathState>,
+    Query(params): Query<RichListParams>,
+) -> impl IntoResponse {
+    let adb = match ps.open_addr() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"address index not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    let limit = params.limit.unwrap_or(100).min(1000);
+    match adb.get_rich_list(limit) {
+        Ok(list) => {
+            // PAKLETS_PER_PKT = 2^30 = 1_073_741_824
+            let holders: Vec<_> = list.iter().map(|(script, bal)| json!({
+                "script":      script,
+                "balance":     bal,
+                "balance_pkt": (*bal as f64) / 1_073_741_824.0,
+            })).collect();
+            let count = holders.len();
+            Json(json!({"holders": holders, "count": count})).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+                   Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
 
 // ── Path helpers ───────────────────────────────────────────────────────────────
 
@@ -45,7 +221,7 @@ pub fn default_sync_db_path() -> PathBuf {
     home_path(".pkt/syncdb")
 }
 
-/// Default UtxoSyncDb path: `~/.pkt/utxodb`.
+///// Default UtxoSyncDb path: `~/.pkt/utxodb`.
 pub fn default_utxo_db_path() -> PathBuf {
     home_path(".pkt/utxodb")
 }
@@ -80,28 +256,25 @@ pub fn testnet_web_router_with_dbs(sync_db: Arc<SyncDb>, utxo_db: Arc<UtxoSyncDb
 
 /// Build the combined testnet router using default DB paths.
 ///
-/// Graceful degradation: if the DBs cannot be opened (e.g. sync hasn't run),
-/// returns a JS-only router so the frontend loads without crashing the server.
+/// Routes are always registered. If the DB is unavailable at request time,
+/// handlers return 503 so the frontend shows "Offline" gracefully.
 pub fn testnet_web_router() -> Router {
-    let js_only = Router::new().route("/static/testnet.js", get(serve_testnet_js));
-
-    // Mở read-only để không conflict lock với pkt-sync đang ghi cùng lúc.
-    let sync_db = match SyncDb::open_read_only(&default_sync_db_path()) {
-        Ok(db) => Arc::new(db),
-        Err(e) => {
-            eprintln!("[testnet-web] syncdb unavailable ({}): API routes disabled", e);
-            return js_only;
-        }
+    let ps = PathState {
+        sync_path: default_sync_db_path(),
+        utxo_path: default_utxo_db_path(),
+        addr_path: crate::pkt_addr_index::default_addr_db_path(),
     };
-    let utxo_db = match UtxoSyncDb::open_read_only(&default_utxo_db_path()) {
-        Ok(db) => Arc::new(db),
-        Err(e) => {
-            eprintln!("[testnet-web] utxodb unavailable ({}): API routes disabled", e);
-            return js_only;
-        }
-    };
-
-    testnet_web_router_with_dbs(sync_db, utxo_db)
+    Router::new()
+        .route("/static/testnet.js", get(serve_testnet_js))
+        .route("/api/testnet/sync-status", get(ps_sync_status))
+        .route("/api/testnet/stats", get(ps_stats))
+        .route("/api/testnet/headers", get(ps_headers))
+        .route("/api/testnet/header/:h", get(ps_header))
+        .route("/api/testnet/balance/:s", get(ps_balance))
+        .route("/api/testnet/utxos/:s", get(ps_utxos))
+        .route("/api/testnet/address/:s/txs", get(ps_addr_txs))
+        .route("/api/testnet/rich-list", get(ps_rich_list))
+        .with_state(ps)
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────────
@@ -174,17 +347,17 @@ mod tests {
 
     #[test]
     fn test_testnet_js_hits_sync_status_endpoint() {
-        assert!(TESTNET_JS.contains("/api/testnet/sync-status"));
+        assert!(TESTNET_JS.contains("api/testnet/sync-status"));
     }
 
     #[test]
     fn test_testnet_js_hits_stats_endpoint() {
-        assert!(TESTNET_JS.contains("/api/testnet/stats"));
+        assert!(TESTNET_JS.contains("api/testnet/stats"));
     }
 
     #[test]
     fn test_testnet_js_hits_headers_endpoint() {
-        assert!(TESTNET_JS.contains("/api/testnet/headers"));
+        assert!(TESTNET_JS.contains("api/testnet/headers"));
     }
 
     #[test]

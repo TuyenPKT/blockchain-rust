@@ -164,6 +164,31 @@ _Mục tiêu: explorer hiển thị data thật từ PKT testnet, không phải 
 - [x] v15.8 — **Single Chain Architecture**: `src/pkt_node.rs` spawn template server port+1 (0.0.0.0:8334 khi node chạy 8333) — `handle_template_client` xử lý GetTemplate/NewBlock/GetBlocks JSON-lines; `src/chain.rs` thêm `commit_mined_block(block)` push block đã mine không re-mine; `src/miner.rs` fallback chain local→VPS→standalone, `try_mine_one()->bool`, `run_standalone()` load RocksDB; `src/pktscan_api.rs` selective reload 5s (chỉ sync chain/utxo_set/difficulty khi fresh dài hơn, giữ mempool/staking/tokens), thêm `miner`/`difficulty`/`reward`/`from`/`to` vào block+tx summary, `miner_from_block()` Base58Check; `main.rs` mine default kết nối node; `index.html` fix reward/timestamp/amount display
 - [x] v15.5 — **Sync Status UI**: `src/pkt_sync_ui.rs` — `SyncProgressPhase` (Idle/ConnectingPeer/DownloadingHeaders/ApplyingUtxo/Complete + label()/color()/is_active()/is_complete()); `SyncProgress` (headers_downloaded/headers_target/utxo_height/utxo_target/elapsed_secs/blocks_per_sec/peer_addr/event_log + idle()/from_dbs()); `header_progress()/utxo_progress()/overall_progress()` (weighted 60/40); `eta_secs()/format_eta()` ("10s"/"1m 30s"/"2h 0m"/"synced"); `blocks_per_sec_display()/header_progress_display()/utxo_progress_display()/elapsed_display()`; `format_progress_bar(progress,width)` (█/░ ASCII bar); `format_sync_oneline(p)` (one-liner CLI); `sync_status_json(p)` (JSON payload); `SyncUiState` + `sync_status_router()` (GET /api/testnet/sync-status); `render_sync_progress_panel(frame,area,progress)` (3-panel: Gauge+Paragraph+List via ratatui); CLI: `cargo run -- sync-status`; tests: TestBackend TUI (5 scenarios), from_dbs real RocksDB (4 scenarios), progress math, ETA, format helpers — **+55 tests** (1979 total)
 
+### Era 24 — PKT Explorer Pro (v17.x)
+
+_Mục tiêu: explorer UTXO-chuẩn — address index O(log n), reorg-safe, mempool realtime._
+
+**RocksDB schema mới:**
+```
+addr_idx_db/
+  "atx:{addr}:{height}:{txid}"  → ""          ← tx history, scan by prefix+height
+  "bal:{addr}"                   → u64 (sats)  ← balance snapshot, update mỗi block
+  "rich:{pad10(balance)}:{addr}" → ""          ← rich list, reverse scan = top holders
+
+reorg_db/
+  "delta:{height}"  → UTXO delta (added[], removed[])   ← rollback data
+  "chk:{height}"    → block hash checkpoint              ← detect fork
+
+mempool_db/
+  "tx:{txid}"                 → raw tx bytes
+  "fee:{inv_fee_rate}:{txid}" → ""      ← sorted: scan = highest fee first
+  "ts:{txid}"                 → i64     ← timestamp added
+```
+
+- [x] v17.0 — **Address Index**: `src/pkt_addr_index.rs` — `AddrIndexDb` (RocksDB: `~/.pkt/addrdb`); 3 key families: `atx:{script_hex}:{height:016x}:{txid_hex}`→"" (tx history O(log n)), `bal:{script_hex}`→u64 LE (balance snapshot), `rich:{u64::MAX-bal:020}:{script_hex}`→"" (rich list, reverse sort = highest first); `index_tx_inputs(utxo_db, tx, txid, height)` lookup UTXO trước khi `apply_wire_tx` xóa + ghi atx + trừ balance; `index_tx_outputs(tx, txid, height)` ghi atx + cộng balance; `get_tx_history(script, cursor, limit)` prefix scan ascending; `get_balance(script)` → u64; `get_rich_list(limit)` → Vec<(String,u64)>; `get/set_addr_height()` tracking; `open/open_read_only/open_temp`; tích hợp inline vào `pkt_block_sync::apply_block_streaming` (inputs trước apply, outputs sau apply); `pkt_sync::cmd_sync` mở addrdb, pass `Some(&addr_db)` vào `sync_blocks`, wipe addrdb khi chain_reset; API: `GET /api/testnet/address/:s/txs?cursor=&limit=` + `GET /api/testnet/rich-list?limit=` (PathState.open_addr() per-request read_only) — **+14 tests** (2051 total)
+- [x] v17.1 — **Reorg Handle**: `src/pkt_reorg.rs` — `ReorgDb` (`~/.pkt/reorgdb`); `BlockDelta` (Serialize/Deserialize): `block_hash`+`utxo_spent: Vec<UtxoSnapshot>`+`utxo_created: Vec<(txid,vout)>`+`atx_keys: Vec<String>`; `save_delta(height, delta)` ghi checkpoint+delta JSON vào RocksDB; `get_checkpoint(height)`→Option<[u8;32]>; `get_delta(height)`→Option<BlockDelta>; `detect_reorg(sync_db, utxo_height)`→bool (so sánh checkpoint vs sync_db header hash); `find_common_ancestor(sync_db, from_height)`→Option<u64> (walk back tối đa MAX_LOOKBACK=100); `rollback_to(target, current, utxo_db, addr_db)`: delete atx keys + remove utxo_created + restore utxo_spent + rebuild_balances_from_utxo + update heights; `already_applied(sync_db, height)` idempotency check; tích hợp vào `pkt_block_sync::apply_block_streaming`: collect delta inline per-tx (inputs before apply, outputs after); `pkt_sync::cmd_sync`: open reorgdb, Phase 2 detect_reorg → rollback hoặc full reset trước khi sync_blocks; wipe reorgdb khi chain_reset; `pkt_addr_index` thêm: `delete_key`, `sub_from_balance` public, `clear_balance_index`, `rebuild_balances_from_utxo` (scan utxo_db.raw_db, rebuild tất cả bal:/rich:) — **+11 tests** (2062 total)
+- [ ] v17.2 — **Mempool Realtime**: `src/pkt_mempool_sync.rs` — `MempoolDb` (`mempool_db/`); gửi `mempool` message → nhận txids → fetch từng tx qua `getdata`; `index_tx(txid, raw, fee_rate)` ghi 3 keys; `get_pending(limit, sort_by_fee)` scan `fee:` prefix; `evict_confirmed(txids)` xoá khi block mới confirm; `fee_rate_histogram()` → phân phối sat/vB; WebSocket push `{"type":"mempool_tx","txid":...,"fee_rate":...,"size":...}` khi có tx mới; API: `GET /v1/mempool?limit=&sort=fee` + `GET /v1/mempool/fee-histogram`
+
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 

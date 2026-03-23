@@ -396,6 +396,17 @@ impl SyncDb {
             .map_err(|e| SyncError::Db(e.to_string()))
     }
 
+    /// Return the SHA256d wire hash of the header at `height` (= block_hash peer uses).
+    pub fn get_header_hash(&self, height: u64) -> Result<Option<[u8; 32]>, SyncError> {
+        match self.load_header(height)? {
+            None => Ok(None),
+            Some(raw) => {
+                let h = crate::pkt_wire::WireBlockHeader::block_hash_of_bytes(&raw);
+                Ok(Some(h))
+            }
+        }
+    }
+
     /// Count headers stored (iterates wireheader: keys).
     pub fn count_headers(&self) -> Result<u64, SyncError> {
         use rocksdb::IteratorMode;
@@ -690,20 +701,136 @@ pub fn cmd_sync(args: &[String]) {
         }
     };
 
-    let start_height: u64   = db.get_sync_height().ok().flatten().unwrap_or(0);
+    // Mở UtxoDb, BlockDb và AddrIndexDb để apply transactions
+    let utxo_path  = crate::pkt_testnet_web::default_utxo_db_path();
+    let block_path = crate::pkt_testnet_web::home_path(".pkt/blockdb");
+    let addr_path  = crate::pkt_addr_index::default_addr_db_path();
+
+    let utxo_db = match crate::pkt_utxo_sync::UtxoSyncDb::open(&utxo_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sync] mở utxodb thất bại: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let block_db = match crate::pkt_block_sync::BlockSyncDb::open(&block_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sync] mở blockdb thất bại: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let addr_db = match crate::pkt_addr_index::AddrIndexDb::open(&addr_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sync] mở addrdb thất bại: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let reorg_path = crate::pkt_reorg::default_reorg_db_path();
+    let reorg_db = match crate::pkt_reorg::ReorgDb::open(&reorg_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sync] mở reorgdb thất bại: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let start_height: u64  = db.get_sync_height().ok().flatten().unwrap_or(0);
     let tip_hash: [u8; 32] = db.get_tip_hash().ok().flatten().unwrap_or([0u8; 32]);
 
     println!("[sync] resume từ height={} tip={}", start_height, hex::encode(&tip_hash[..8]));
 
-    // Sync headers
-    match sync_headers(&mut stream, &db, &cfg, start_height, tip_hash) {
-        Ok(r) => {
-            println!("[sync] ✅  {}", format_header_result(&r));
+    // Poll loop: sync headers → apply blocks → đợi block mới.
+    let poll_secs = 60u64;
+    let mut chain_reset = false;
+    loop {
+        let cur_height = db.get_sync_height().ok().flatten().unwrap_or(0);
+        let cur_tip    = db.get_tip_hash().ok().flatten().unwrap_or([0u8; 32]);
+
+        // Phase 1: download new headers
+        match sync_headers(&mut stream, &db, &cfg, cur_height, cur_tip) {
+            Ok(r) => {
+                if r.headers_saved > 0 {
+                    println!("[sync] ✅  {}", format_header_result(&r));
+                }
+            }
+            Err(SyncError::InvalidChain(ref msg)) if msg.contains("prev_block mismatch") => {
+                // Node restarted with a fresh chain → our stored tip is stale.
+                eprintln!("[sync] node chain changed — sẽ reset DBs và sync lại từ genesis");
+                chain_reset = true;
+                break;
+            }
+            Err(e) => {
+                eprintln!("[sync] header lỗi: {:?} — reconnect sau {}s", e, poll_secs);
+                break;
+            }
         }
-        Err(e) => {
-            eprintln!("[sync] lỗi: {:?}", e);
-            std::process::exit(1);
+
+        // Phase 2: detect reorg trước khi apply blocks
+        let utxo_h = utxo_db.get_utxo_height().ok().flatten().unwrap_or(0);
+        if utxo_h > 0 {
+            match reorg_db.detect_reorg(&db, utxo_h) {
+                Ok(true) => {
+                    eprintln!("[reorg] phát hiện reorg tại height={}, tìm common ancestor...", utxo_h);
+                    match reorg_db.find_common_ancestor(&db, utxo_h) {
+                        Ok(Some(ancestor)) => {
+                            match reorg_db.rollback_to(ancestor, utxo_h, &utxo_db, &addr_db) {
+                                Ok(n) => eprintln!("[reorg] ✅  rollback {} blocks → ancestor={}", n, ancestor),
+                                Err(e) => {
+                                    eprintln!("[reorg] rollback thất bại: {:?} → full reset", e);
+                                    chain_reset = true;
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(None) | Err(_) => {
+                            eprintln!("[reorg] không tìm được common ancestor (reorg sâu > {} blocks) → full reset",
+                                crate::pkt_reorg::MAX_LOOKBACK);
+                            chain_reset = true;
+                            break;
+                        }
+                    }
+                }
+                Ok(false) => {} // no reorg
+                Err(e) => eprintln!("[reorg] detect lỗi: {:?} — bỏ qua", e),
+            }
         }
+
+        // Phase 3: apply blocks → UTXOs + address index (streaming, RAM ≈ size(tx))
+        match crate::pkt_block_sync::sync_blocks(
+            &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db), &cfg.magic, cfg.skip_pow_check,
+        ) {
+            Ok(r) if r.blocks_applied > 0 => {
+                println!(
+                    "[block-sync] ✅  applied {} blocks, utxo_height={}  ({} ms)",
+                    r.blocks_applied, r.final_height, r.elapsed_ms,
+                );
+            }
+            Ok(_) => {} // đã đủ, không có block mới
+            Err(e) => {
+                eprintln!("[block-sync] lỗi: {:?} — tiếp tục poll", e);
+            }
+        }
+
+        std::thread::sleep(Duration::from_secs(poll_secs));
+    }
+
+    // Reset DBs khi phát hiện node chain thay đổi.
+    // Drop DB handles trước khi xóa directory (giải phóng RocksDB LOCK file).
+    if chain_reset {
+        let _ = db.set_sync_height(0);
+        let _ = db.set_tip_hash(&[0u8; 32]);
+        drop(utxo_db);
+        drop(block_db);
+        drop(addr_db);
+        drop(reorg_db);
+        if utxo_path.exists()   { let _ = std::fs::remove_dir_all(&utxo_path); }
+        if block_path.exists()  { let _ = std::fs::remove_dir_all(&block_path); }
+        if addr_path.exists()   { let _ = std::fs::remove_dir_all(&addr_path); }
+        if reorg_path.exists()  { let _ = std::fs::remove_dir_all(&reorg_path); }
+        eprintln!("[sync] DBs đã reset — systemd sẽ restart để sync từ genesis");
+        std::process::exit(0); // systemd restarts → fresh start
     }
 }
 

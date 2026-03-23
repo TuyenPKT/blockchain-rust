@@ -300,6 +300,13 @@ impl WireBlockHeader {
         let second = Sha256::digest(&first);
         second.into()
     }
+
+    /// SHA256d of a raw 80-byte header (no parsing needed).
+    pub fn block_hash_of_bytes(raw: &[u8; 80]) -> [u8; 32] {
+        let first  = Sha256::digest(raw.as_ref());
+        let second = Sha256::digest(&first);
+        second.into()
+    }
 }
 
 // ── PktMsg enum ───────────────────────────────────────────────────────────────

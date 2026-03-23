@@ -13,7 +13,8 @@ use crate::staking::StakingPool;
 use crate::reward::RewardEngine;
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
-const BLOCK_TIME_TARGET_SECS: i64 = 300; // 5 phút = 1/2 Bitcoin (10 phút)
+const BLOCK_TIME_TARGET_SECS: i64 = 60;  // 1 phút/block — phù hợp hashrate ~4 MH/s
+const MAX_DIFFICULTY: usize = 8;          // diff=9 cần ~286 phút ở 4 MH/s → bất khả thi
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {
@@ -798,6 +799,9 @@ impl Blockchain {
             // Chậm hơn 2x → giảm 1
             self.difficulty -= 1;
             println!("📉 Difficulty → {} ({}s vs target {}s)", self.difficulty, time_taken, time_expected);
+        }
+        if self.difficulty > MAX_DIFFICULTY {
+            self.difficulty = MAX_DIFFICULTY;
         }
     }
 

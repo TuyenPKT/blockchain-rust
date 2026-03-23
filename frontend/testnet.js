@@ -44,7 +44,7 @@
 
   async function fetchSyncStatus() {
     try {
-      var r = await fetch('/api/testnet/sync-status');
+      var r = await fetch('api/testnet/sync-status');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
 
@@ -77,7 +77,7 @@
 
   async function fetchTestnetStats() {
     try {
-      var r = await fetch('/api/testnet/stats');
+      var r = await fetch('api/testnet/stats');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
 
@@ -100,7 +100,7 @@
     var el = document.getElementById('tn-headers-list');
     if (!el) return;
     try {
-      var r = await fetch('/api/testnet/headers?limit=5');
+      var r = await fetch('api/testnet/headers?limit=5');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
       var headers = d.headers || [];
