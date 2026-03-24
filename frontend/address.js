@@ -56,6 +56,9 @@
   // ── Address detail ─────────────────────────────────────────────────────────
 
   async function showAddress(addr) {
+    // Hide block/tx detail pages if active
+    document.querySelectorAll('.detail-page.active').forEach(el => el.classList.remove('active'));
+
     showLoading(truncAddr(addr));
 
     // Use the dedicated Base58 address endpoint (backend converts → script key internally)
