@@ -19,18 +19,55 @@
   window.addEventListener('hashchange', () => route(location.hash));
   if (location.hash) route(location.hash);
 
+  // ── Base58Check decode (PKT/Bitcoin P2PKH) ────────────────────────────────
+
+  const B58_ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+  function b58Decode(s) {
+    var n = BigInt(0);
+    for (var i = 0; i < s.length; i++) {
+      var c = B58_ALPHA.indexOf(s[i]);
+      if (c < 0) return null;
+      n = n * BigInt(58) + BigInt(c);
+    }
+    var bytes = [];
+    while (n > BigInt(0)) { bytes.unshift(Number(n & BigInt(0xff))); n >>= BigInt(8); }
+    var leading = 0;
+    for (var j = 0; j < s.length && s[j] === '1'; j++) leading++;
+    while (leading--) bytes.unshift(0);
+    return bytes;
+  }
+
+  function addrToScriptHex(addr) {
+    addr = (addr || '').trim();
+    if (!addr) return null;
+    // Already hex script_pubkey
+    if (/^[0-9a-fA-F]{40,}$/.test(addr)) return addr.toLowerCase();
+    // Base58Check P2PKH
+    if (/^[1mnpP]/.test(addr)) {
+      var dec = b58Decode(addr);
+      if (!dec || dec.length !== 25) return null;
+      var hash = dec.slice(1, 21).map(function(b) { return ('0'+b.toString(16)).slice(-2); }).join('');
+      return '76a914' + hash + '88ac';
+    }
+    return null;
+  }
+
   // ── Address detail ─────────────────────────────────────────────────────────
 
   async function showAddress(addr) {
     showLoading(truncAddr(addr));
 
-    // Fetch address detail (v8.2: balance + tx_history + tx_count)
-    const detail = await fetchJson(`/api/address/${addr}`);
-    const bal    = await fetchJson(`/api/balance/${addr}`);
+    // Convert PKT Base58 address → script_pubkey hex for testnet API
+    var script = addrToScriptHex(addr) || addr;
+    var enc    = encodeURIComponent(script);
 
-    const balance  = detail?.balance   ?? bal?.balance  ?? 0;
-    const txCount  = detail?.tx_count  ?? 0;
-    const txHistory = detail?.tx_history ?? [];
+    const bal = await fetchJson('api/testnet/balance/' + enc);
+    const txr = await fetchJson('api/testnet/address/' + enc + '/txs?limit=50');
+
+    const balance   = bal?.balance  ?? 0;
+    const txHistory = txr?.txs      ?? [];
+    const txCount   = txr?.count    ?? txHistory.length;
 
     getPanel().innerHTML = renderAddress(addr, balance, txCount, txHistory);
     injectStyles();
@@ -41,24 +78,14 @@
     const txsShow = history.slice(0, MAX_TXS);
 
     const txRows = txsShow.map(tx => {
-      const txid    = tx.txid || tx.tx_id || '';
-      const height  = tx.block_height ?? tx.height ?? null;
-      const isInput = tx.is_input === true;          // true = address là input (outgoing)
-      const amount  = tx.amount ?? 0;
-      const dir     = isInput ? 'outgoing' : 'incoming';
-      const sign    = isInput ? '−' : '+';
-      const amtPkt  = (Math.abs(amount) / PAKLETS).toFixed(4);
-      const badge   = isInput
-        ? '<span class="pk-badge pk-red">OUT</span>'
-        : '<span class="pk-badge pk-green">IN</span>';
+      const txid     = tx.txid || tx.tx_id || '';
+      const height   = tx.block_height ?? tx.height ?? null;
       const blockLnk = height !== null
-        ? `<a href="#block/${height}" class="pk-link">#${height}</a>` : '—';
+        ? `<a href="#block/${height}" class="pk-link">#${height.toLocaleString()}</a>` : '—';
 
       return `<tr>
-        <td>${badge}</td>
         <td><a href="#tx/${txid}" class="pk-link pk-mono">${shortH(txid)}</a></td>
         <td>${blockLnk}</td>
-        <td class="pk-num pk-${dir}">${sign}${amtPkt} PKT</td>
       </tr>`;
     }).join('');
 
@@ -80,7 +107,7 @@
       (txsShow.length > 0
         ? `<h4 class="pk-section">Transaction History</h4>
            <table class="pk-table">
-             <thead><tr><th>Dir</th><th>TXID</th><th>Block</th><th class="pk-num">Amount</th></tr></thead>
+             <thead><tr><th>TXID</th><th>Block</th></tr></thead>
              <tbody>${txRows}</tbody>
            </table>
            ${moreNote}`

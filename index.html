@@ -938,10 +938,7 @@ function addrLink(addr) {
   return '<span class="addr-clickable" title="Click to look up address" onclick="gotoAddress(\'' + safe + '\')">' + addr + '</span>';
 }
 function gotoAddress(addr) {
-  if (typeof window.showTestnet === 'function') window.showTestnet();
-  setTimeout(function() {
-    if (typeof window.tnLookupByAddr === 'function') window.tnLookupByAddr(addr);
-  }, 150);
+  window.location.hash = '#addr/' + encodeURIComponent(addr);
 }
 function ago(secs) {
   if (secs < 60) return secs + 's ago';
