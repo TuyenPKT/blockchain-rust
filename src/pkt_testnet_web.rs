@@ -59,6 +59,21 @@ fn script_hex_to_address(script_hex: &str) -> Option<String> {
     Some(bs58::encode(payload).into_string())
 }
 
+/// Convert Base58Check P2PKH address → JSON-hex script key used by address index.
+fn address_to_script_hex(addr: &str) -> Option<String> {
+    let decoded = bs58::decode(addr).into_vec().ok()?;
+    if decoded.len() != 25 { return None; }
+    let (payload, checksum) = decoded.split_at(21);
+    let expected = blake3::hash(blake3::hash(payload).as_bytes());
+    if &expected.as_bytes()[..4] != checksum { return None; }
+    let hash160: Vec<u8> = payload[1..21].to_vec();
+    let script = json!({
+        "ops": ["OpDup", "OpHash160", {"OpPushData": hash160}, "OpEqualVerify", "OpCheckSig"]
+    });
+    let script_bytes = serde_json::to_vec(&script).ok()?;
+    Some(hex::encode(script_bytes))
+}
+
 // ── Per-request DB open state ──────────────────────────────────────────────────
 
 /// Chỉ lưu paths, mở DB fresh mỗi request → không giữ lock, luôn thấy data mới.
@@ -201,6 +216,34 @@ async fn ps_addr_txs(
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
                    Json(json!({"error": e.to_string()}))).into_response(),
     }
+}
+
+/// GET /api/testnet/addr/:base58?limit=N
+/// Accepts human-readable Base58Check address, returns balance + tx history.
+async fn ps_addr_by_base58(
+    State(ps):     State<PathState>,
+    Path(addr):    Path<String>,
+    Query(params): Query<AddrTxsParams>,
+) -> impl IntoResponse {
+    let script = match address_to_script_hex(&addr) {
+        Some(s) => s,
+        None    => return (StatusCode::BAD_REQUEST,
+                           Json(json!({"error":"invalid address"}))).into_response(),
+    };
+    let adb = match ps.open_addr() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"address index not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    let balance = adb.get_balance(&script).unwrap_or(0);
+    let limit   = params.limit.unwrap_or(50).min(200);
+    let txs: Vec<_> = adb.get_tx_history(&script, params.cursor, limit)
+        .unwrap_or_default()
+        .iter()
+        .map(|e| json!({"height": e.height, "txid": e.txid}))
+        .collect();
+    let count = txs.len();
+    Json(json!({"address": addr, "balance": balance, "txs": txs, "count": count})).into_response()
 }
 
 #[derive(Deserialize)]
@@ -358,6 +401,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/balance/:s", get(ps_balance))
         .route("/api/testnet/utxos/:s", get(ps_utxos))
         .route("/api/testnet/address/:s/txs", get(ps_addr_txs))
+        .route("/api/testnet/addr/:base58", get(ps_addr_by_base58))
         .route("/api/testnet/rich-list", get(ps_rich_list))
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))

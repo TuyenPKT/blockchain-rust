@@ -58,17 +58,13 @@
   async function showAddress(addr) {
     showLoading(truncAddr(addr));
 
-    // Convert PKT Base58 address → script_pubkey hex for testnet API
-    var script = addrToScriptHex(addr) || addr;
-    var enc    = encodeURIComponent(script);
+    // Use the dedicated Base58 address endpoint (backend converts → script key internally)
+    var enc = encodeURIComponent(addr);
+    const data = await fetchJson('api/testnet/addr/' + enc + '?limit=50');
 
-    const bal = await fetchJson('api/testnet/balance/' + enc);
-    const txr = await fetchJson('api/testnet/address/' + enc + '/txs?limit=50');
-
-    const balRaw    = bal?.balance;
-    const balance   = (balRaw && typeof balRaw === 'object') ? (balRaw.Ok ?? 0) : (balRaw ?? 0);
-    const txHistory = txr?.txs      ?? [];
-    const txCount   = txr?.count    ?? txHistory.length;
+    const balance   = data?.balance  ?? 0;
+    const txHistory = data?.txs      ?? [];
+    const txCount   = data?.count    ?? txHistory.length;
 
     getPanel().innerHTML = renderAddress(addr, balance, txCount, txHistory);
     injectStyles();
