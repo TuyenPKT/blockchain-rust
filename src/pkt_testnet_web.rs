@@ -29,7 +29,6 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 use crate::pkt_addr_index::AddrIndexDb;
 use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
@@ -54,9 +53,9 @@ fn script_hex_to_address(script_hex: &str) -> Option<String> {
     if hash160.len() != 20 { return None; }
     let mut payload = vec![0x00u8]; // version byte: mainnet P2PKH
     payload.extend_from_slice(&hash160);
-    let h1 = Sha256::digest(&payload);
-    let h2 = Sha256::digest(h1);
-    payload.extend_from_slice(&h2[..4]);
+    // wallet.rs uses BLAKE3 double-hash for checksum (not SHA256)
+    let checksum = blake3::hash(blake3::hash(&payload).as_bytes());
+    payload.extend_from_slice(&checksum.as_bytes()[..4]);
     Some(bs58::encode(payload).into_string())
 }
 
