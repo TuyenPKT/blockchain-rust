@@ -385,7 +385,7 @@ fn _mine_ocl_impl(
 
     loop {
         // Reset found_nonce = sentinel
-        found_buf.write(&[sentinel]).enq().map_err(|e| e.to_string())?;
+        found_buf.write(&[sentinel][..]).enq().map_err(|e| e.to_string())?;
 
         let kernel = Kernel::builder()
             .program(&program)

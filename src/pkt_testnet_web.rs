@@ -32,6 +32,7 @@ use serde_json::json;
 
 use crate::pkt_addr_index::AddrIndexDb;
 use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
+use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_sync::SyncDb;
 use crate::pkt_sync_ui::{sync_status_router, SyncProgress, SyncUiState};
 use crate::pkt_utxo_sync::UtxoSyncDb;
@@ -41,9 +42,10 @@ use crate::pkt_utxo_sync::UtxoSyncDb;
 /// Chỉ lưu paths, mở DB fresh mỗi request → không giữ lock, luôn thấy data mới.
 #[derive(Clone)]
 struct PathState {
-    sync_path: PathBuf,
-    utxo_path: PathBuf,
-    addr_path: PathBuf,
+    sync_path:    PathBuf,
+    utxo_path:    PathBuf,
+    addr_path:    PathBuf,
+    mempool_path: PathBuf,
 }
 
 impl PathState {
@@ -55,6 +57,10 @@ impl PathState {
 
     fn open_addr(&self) -> Option<AddrIndexDb> {
         AddrIndexDb::open_read_only(&self.addr_path).ok()
+    }
+
+    fn open_mempool(&self) -> Option<MempoolDb> {
+        MempoolDb::open_read_only(&self.mempool_path).ok()
     }
 }
 
@@ -206,6 +212,57 @@ async fn ps_rich_list(
     }
 }
 
+// ── Mempool handlers ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct MempoolParams {
+    limit: Option<usize>,
+}
+
+/// GET /api/testnet/mempool?limit=N
+///
+/// Returns pending transactions sorted by fee rate (highest first).
+async fn ps_mempool(
+    State(ps):     State<PathState>,
+    Query(params): Query<MempoolParams>,
+) -> impl IntoResponse {
+    let mdb = match ps.open_mempool() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"mempool not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    let limit = params.limit.unwrap_or(50).min(500);
+    match mdb.get_pending(limit) {
+        Ok(txs) => {
+            let count = txs.len();
+            Json(json!({"txs": txs, "count": count})).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+                   Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+/// GET /api/testnet/mempool/fee-histogram
+///
+/// Returns fee rate distribution as [{lower_msat_vb, count}].
+async fn ps_mempool_histogram(State(ps): State<PathState>) -> impl IntoResponse {
+    let mdb = match ps.open_mempool() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"mempool not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    match mdb.fee_rate_histogram() {
+        Ok(hist) => {
+            let buckets: Vec<_> = hist.iter()
+                .map(|(lower, count)| json!({"lower_msat_vb": lower, "count": count}))
+                .collect();
+            Json(json!({"buckets": buckets})).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+                   Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 // ── Path helpers ───────────────────────────────────────────────────────────────
 
 /// Build a path under $HOME (falls back to "." if HOME/USERPROFILE unset).
@@ -260,9 +317,10 @@ pub fn testnet_web_router_with_dbs(sync_db: Arc<SyncDb>, utxo_db: Arc<UtxoSyncDb
 /// handlers return 503 so the frontend shows "Offline" gracefully.
 pub fn testnet_web_router() -> Router {
     let ps = PathState {
-        sync_path: default_sync_db_path(),
-        utxo_path: default_utxo_db_path(),
-        addr_path: crate::pkt_addr_index::default_addr_db_path(),
+        sync_path:    default_sync_db_path(),
+        utxo_path:    default_utxo_db_path(),
+        addr_path:    crate::pkt_addr_index::default_addr_db_path(),
+        mempool_path: crate::pkt_mempool_sync::default_mempool_db_path(),
     };
     Router::new()
         .route("/static/testnet.js", get(serve_testnet_js))
@@ -274,6 +332,8 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/utxos/:s", get(ps_utxos))
         .route("/api/testnet/address/:s/txs", get(ps_addr_txs))
         .route("/api/testnet/rich-list", get(ps_rich_list))
+        .route("/api/testnet/mempool", get(ps_mempool))
+        .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .with_state(ps)
 }
 

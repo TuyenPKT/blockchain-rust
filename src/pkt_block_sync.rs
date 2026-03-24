@@ -25,6 +25,7 @@ use rocksdb::{DB, Options};
 use sha2::{Digest, Sha256};
 
 use crate::pkt_addr_index::AddrIndexDb;
+use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_reorg::{BlockDelta, ReorgDb};
 use crate::pkt_sync::{SyncDb, SyncError};
 use crate::pkt_utxo_sync::{apply_wire_tx, wire_txid, UtxoSyncDb, WireTx, WireTxIn, WireTxOut};
@@ -212,7 +213,7 @@ fn read_txout_s<R: Read>(r: &mut R) -> Result<WireTxOut, SyncError> {
 }
 
 /// Parse one Bitcoin wire tx (legacy + segwit).
-fn read_tx_s<R: Read>(r: &mut R) -> Result<WireTx, SyncError> {
+pub fn read_tx_s<R: Read>(r: &mut R) -> Result<WireTx, SyncError> {
     let version   = read_i32_le_s(r)?;
     let in_count  = read_varint_s(r)? as usize;
 
@@ -303,9 +304,11 @@ fn recv_wire_msg_header(
 
 /// Result of applying one block's UTXOs.
 pub struct BlockApplyResult {
-    pub height:    u64,
-    pub tx_count:  u64,
-    pub hash:      [u8; 32],
+    pub height:          u64,
+    pub tx_count:        u64,
+    pub hash:            [u8; 32],
+    /// Txids confirmed by this block (used for mempool eviction).
+    pub confirmed_txids: Vec<[u8; 32]>,
 }
 
 /// Send GetData for one block hash, stream-receive and apply UTXOs.
@@ -321,6 +324,7 @@ pub fn sync_one_block(
     block_db:     &BlockSyncDb,
     addr_db:      Option<&AddrIndexDb>,
     reorg_db:     Option<&ReorgDb>,
+    mempool_db:   Option<&MempoolDb>,
     skip_merkle:  bool,
 ) -> Result<BlockApplyResult, SyncError> {
     // Request the block
@@ -361,6 +365,10 @@ pub fn sync_one_block(
                 )?;
                 reader.drain()
                     .map_err(|e| SyncError::InvalidHeader(format!("drain: {}", e)))?;
+                // Evict confirmed txs from mempool
+                if let Some(mdb) = mempool_db {
+                    let _ = mdb.evict_confirmed(&result.confirmed_txids);
+                }
                 return Ok(result);
             }
             other => {
@@ -402,7 +410,7 @@ fn apply_block_streaming<R: Read>(
             adb.set_addr_height(height)
                 .map_err(|e| SyncError::Db(format!("addr_height: {:?}", e)))?;
         }
-        return Ok(BlockApplyResult { height, tx_count: 0, hash: block_hash });
+        return Ok(BlockApplyResult { height, tx_count: 0, hash: block_hash, confirmed_txids: vec![] });
     }
 
     let mut txids: Vec<[u8; 32]> = Vec::with_capacity(tx_count);
@@ -490,8 +498,9 @@ fn apply_block_streaming<R: Read>(
 
     Ok(BlockApplyResult {
         height,
-        tx_count: tx_count as u64,
-        hash: block_hash,
+        tx_count:        tx_count as u64,
+        hash:            block_hash,
+        confirmed_txids: txids,
     })
 }
 
@@ -514,6 +523,7 @@ pub fn sync_blocks(
     block_db:    &BlockSyncDb,
     addr_db:     Option<&AddrIndexDb>,
     reorg_db:    Option<&ReorgDb>,
+    mempool_db:  Option<&MempoolDb>,
     magic:       &[u8; 4],
     skip_merkle: bool,
 ) -> Result<BlockSyncResult, SyncError> {
@@ -539,7 +549,7 @@ pub fn sync_blocks(
             .map_err(|e| SyncError::Db(format!("{:?}", e)))?
             .ok_or_else(|| SyncError::InvalidHeader(format!("no header at height {}", height)))?;
 
-        let r = sync_one_block(stream, magic, block_hash, height, utxo_db, block_db, addr_db, reorg_db, skip_merkle)?;
+        let r = sync_one_block(stream, magic, block_hash, height, utxo_db, block_db, addr_db, reorg_db, mempool_db, skip_merkle)?;
         applied += 1;
         final_h  = r.height;
 

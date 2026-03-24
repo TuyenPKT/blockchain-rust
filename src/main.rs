@@ -129,6 +129,7 @@ mod pkt_utxo_sync;
 mod pkt_block_sync;
 mod pkt_addr_index;
 mod pkt_reorg;
+mod pkt_mempool_sync;
 mod pkt_explorer_api;
 mod pkt_sync_ui;
 mod pkt_testnet_web;

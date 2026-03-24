@@ -701,10 +701,11 @@ pub fn cmd_sync(args: &[String]) {
         }
     };
 
-    // Mở UtxoDb, BlockDb và AddrIndexDb để apply transactions
-    let utxo_path  = crate::pkt_testnet_web::default_utxo_db_path();
-    let block_path = crate::pkt_testnet_web::home_path(".pkt/blockdb");
-    let addr_path  = crate::pkt_addr_index::default_addr_db_path();
+    // Mở UtxoDb, BlockDb, AddrIndexDb và MempoolDb để apply transactions
+    let utxo_path    = crate::pkt_testnet_web::default_utxo_db_path();
+    let block_path   = crate::pkt_testnet_web::home_path(".pkt/blockdb");
+    let addr_path    = crate::pkt_addr_index::default_addr_db_path();
+    let mempool_path = crate::pkt_mempool_sync::default_mempool_db_path();
 
     let utxo_db = match crate::pkt_utxo_sync::UtxoSyncDb::open(&utxo_path) {
         Ok(d) => d,
@@ -724,6 +725,13 @@ pub fn cmd_sync(args: &[String]) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("[sync] mở addrdb thất bại: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let mempool_db = match crate::pkt_mempool_sync::MempoolDb::open(&mempool_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[sync] mở mempooldb thất bại: {}", e);
             std::process::exit(1);
         }
     };
@@ -799,7 +807,8 @@ pub fn cmd_sync(args: &[String]) {
 
         // Phase 3: apply blocks → UTXOs + address index (streaming, RAM ≈ size(tx))
         match crate::pkt_block_sync::sync_blocks(
-            &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db), &cfg.magic, cfg.skip_pow_check,
+            &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db),
+            Some(&mempool_db), &cfg.magic, cfg.skip_pow_check,
         ) {
             Ok(r) if r.blocks_applied > 0 => {
                 println!(
@@ -813,6 +822,20 @@ pub fn cmd_sync(args: &[String]) {
             }
         }
 
+        // Phase 4: sync mempool (best-effort — errors are non-fatal)
+        match crate::pkt_mempool_sync::sync_mempool(
+            &mut stream, cfg.magic, &utxo_db, &mempool_db,
+        ) {
+            Ok(n) if n > 0 => {
+                let count = mempool_db.count().unwrap_or(0);
+                println!("[mempool] +{} txs  (total pending: {})", n, count);
+            }
+            Ok(_)  => {} // no new txs
+            Err(e) => eprintln!("[mempool] sync lỗi: {:?}", e),
+        }
+        // Restore normal recv timeout after mempool ops
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(cfg.recv_timeout_secs)));
+
         std::thread::sleep(Duration::from_secs(poll_secs));
     }
 
@@ -825,10 +848,12 @@ pub fn cmd_sync(args: &[String]) {
         drop(block_db);
         drop(addr_db);
         drop(reorg_db);
-        if utxo_path.exists()   { let _ = std::fs::remove_dir_all(&utxo_path); }
-        if block_path.exists()  { let _ = std::fs::remove_dir_all(&block_path); }
-        if addr_path.exists()   { let _ = std::fs::remove_dir_all(&addr_path); }
-        if reorg_path.exists()  { let _ = std::fs::remove_dir_all(&reorg_path); }
+        drop(mempool_db);
+        if utxo_path.exists()    { let _ = std::fs::remove_dir_all(&utxo_path); }
+        if block_path.exists()   { let _ = std::fs::remove_dir_all(&block_path); }
+        if addr_path.exists()    { let _ = std::fs::remove_dir_all(&addr_path); }
+        if reorg_path.exists()   { let _ = std::fs::remove_dir_all(&reorg_path); }
+        if mempool_path.exists() { let _ = std::fs::remove_dir_all(&mempool_path); }
         eprintln!("[sync] DBs đã reset — systemd sẽ restart để sync từ genesis");
         std::process::exit(0); // systemd restarts → fresh start
     }

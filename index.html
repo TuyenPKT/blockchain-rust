@@ -425,6 +425,8 @@
       word-break: break-all;
     }
     .kv-val.normal { font-family: 'Sora', sans-serif; }
+    .addr-clickable { cursor: pointer; }
+    .addr-clickable:hover { text-decoration: underline; }
     @media (max-width: 600px) {
       .kv-row { grid-template-columns: 1fr; gap: 4px; }
     }
@@ -849,6 +851,63 @@
       </div>
     </div>
 
+    <!-- Address Lookup Panel -->
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon" style="background:rgba(100,210,255,.12);color:#64d2ff;border:1px solid rgba(100,210,255,.2)">🔍</div>
+          Address Lookup
+        </div>
+        <span id="tn-addr-badge" style="font-size:.8rem;color:var(--muted)"></span>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="tn-addr-input" type="text"
+            placeholder="PKT address  (e.g. 18114ap…)  hoặc  script_pubkey hex  (0014…)"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                   border-radius:6px;padding:8px 12px;font-family:monospace;font-size:.83rem;outline:none"/>
+          <button onclick="tnLookupAddress()"
+            style="background:var(--pkt);color:#000;border:none;border-radius:6px;
+                   padding:8px 20px;cursor:pointer;font-weight:700;white-space:nowrap">Search</button>
+        </div>
+        <div id="tn-addr-balance"></div>
+        <div id="tn-addr-txs"></div>
+        <div id="tn-addr-more" style="display:none;text-align:center;padding:10px 0">
+          <button onclick="tnLoadMoreTxs()"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                   border-radius:6px;padding:6px 18px;cursor:pointer;font-size:.85rem">Load more</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rich List Panel -->
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon" style="background:rgba(255,215,0,.12);color:#ffd700;border:1px solid rgba(255,215,0,.2)">🏆</div>
+          Rich List — Top Holders
+        </div>
+        <span id="tn-rich-count" style="font-size:.8rem;color:var(--muted)"></span>
+      </div>
+      <div id="tn-rich-list">
+        <div style="padding:12px 18px;color:var(--muted);font-size:.85rem">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Mempool Panel -->
+    <div class="panel" style="margin-top:24px;margin-bottom:0">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon" style="background:rgba(100,255,200,.1);color:#64ffc8;border:1px solid rgba(100,255,200,.2)">⏳</div>
+          Mempool — Pending Transactions
+        </div>
+        <span id="tn-mempool-count" style="font-size:.8rem;color:var(--muted)"></span>
+      </div>
+      <div id="tn-mempool-list">
+        <div style="padding:12px 18px;color:var(--muted);font-size:.85rem">Loading…</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -871,6 +930,19 @@ const API_BASE = '/blockchain-rust';
 /* ── UTILS ──────────────────────────────────────────────────── */
 function shortHash(h) { return h ? h.slice(0,10)+'…'+h.slice(-8) : '—'; }
 function shortAddr(a) { return a ? a.slice(0,8)+'…'+a.slice(-6) : '—'; }
+
+// Make an address string clickable → navigate to Testnet page + lookup
+function addrLink(addr) {
+  if (!addr || addr === '—' || addr === 'coinbase' || addr === 'unknown') return addr || '—';
+  var safe = addr.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return '<span class="addr-clickable" title="Click to look up address" onclick="gotoAddress(\'' + safe + '\')">' + addr + '</span>';
+}
+function gotoAddress(addr) {
+  if (typeof window.showTestnet === 'function') window.showTestnet();
+  setTimeout(function() {
+    if (typeof window.tnLookupByAddr === 'function') window.tnLookupByAddr(addr);
+  }, 150);
+}
 function ago(secs) {
   if (secs < 60) return secs + 's ago';
   if (secs < 3600) return Math.floor(secs/60) + 'm ago';
@@ -1130,7 +1202,7 @@ async function showBlockDetail(b) {
         <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${(block.nonce ?? 0).toLocaleString()}</div></div>
         <div class="kv-row"><div class="kv-key">Difficulty</div><div class="kv-val normal">${block.difficulty ?? '—'}</div></div>
         <div class="kv-row"><div class="kv-key">Block Reward</div><div class="kv-val normal" style="color:var(--pkt)">${pakletsToPkt(block.reward ?? 50e9)}</div></div>
-        <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${block.miner ?? block.miner_hash ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${addrLink(block.miner ?? block.miner_hash ?? '—')}</div></div>
       </div>`;
   } catch(e) {
     el.innerHTML = '<div style="padding:24px;color:var(--red)">Block not found</div>';
@@ -1159,8 +1231,8 @@ async function showTxDetail(tx) {
         <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${(t.block_height ?? t.block_index ?? 0).toLocaleString()}</div></div>
         <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${ts}</div></div>
         <div class="kv-row"><div class="kv-key">Type</div><div class="kv-val normal"><span class="badge ${isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${isCoinbase ? 'coinbase' : 'transfer'}</span></div></div>
-        <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${isCoinbase ? 'coinbase' : (t.from ?? '—')}</div></div>
-        <div class="kv-row"><div class="kv-key">To</div><div class="kv-val" style="color:var(--blue)">${t.to ?? t.outputs?.[0]?.address ?? '—'}</div></div>
+        <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${isCoinbase ? 'coinbase' : addrLink(t.from ?? '—')}</div></div>
+        <div class="kv-row"><div class="kv-key">To</div><div class="kv-val" style="color:var(--blue)">${addrLink(t.to ?? t.outputs?.[0]?.address ?? '—')}</div></div>
         <div class="kv-row"><div class="kv-key">Amount</div><div class="kv-val normal" style="color:var(--pkt)">${amount} PKT</div></div>
         <div class="kv-row"><div class="kv-key">Fee</div><div class="kv-val normal">${fee} PKT</div></div>
       </div>`;

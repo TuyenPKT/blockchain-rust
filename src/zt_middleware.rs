@@ -55,7 +55,7 @@ pub struct ZtConfig {
 impl Default for ZtConfig {
     fn default() -> Self {
         ZtConfig {
-            max_per_window: 100,
+            max_per_window: 600,
             window_secs:    60,
             max_query_len:  512,
             max_path_len:   256,
