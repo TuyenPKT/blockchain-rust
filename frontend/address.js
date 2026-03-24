@@ -164,8 +164,18 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'pk-addr-panel';
-      const root = document.querySelector('.main-wrap, main, .main-content, body');
-      root.prepend(el);
+      const mainWrap = document.querySelector('.main-wrap');
+      if (mainWrap) {
+        mainWrap.prepend(el);
+      } else {
+        // fallback: insert after <nav>, never before it
+        const nav = document.querySelector('nav');
+        if (nav) {
+          nav.insertAdjacentElement('afterend', el);
+        } else {
+          document.body.appendChild(el);
+        }
+      }
     }
     el.style.display = 'block';
     el.scrollIntoView({ behavior: 'smooth' });
