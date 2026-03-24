@@ -28,7 +28,8 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::pkt_addr_index::AddrIndexDb;
 use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
@@ -36,6 +37,28 @@ use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_sync::SyncDb;
 use crate::pkt_sync_ui::{sync_status_router, SyncProgress, SyncUiState};
 use crate::pkt_utxo_sync::UtxoSyncDb;
+
+// ── Script helpers ─────────────────────────────────────────────────────────────
+
+/// Decode a JSON-hex script (custom format used by this chain) to Base58Check P2PKH address.
+/// Script JSON: {"ops":["OpDup","OpHash160",{"OpPushData":[b0,b1,...,b19]},"OpEqualVerify","OpCheckSig"]}
+fn script_hex_to_address(script_hex: &str) -> Option<String> {
+    let bytes = hex::decode(script_hex).ok()?;
+    let json: Value = serde_json::from_slice(&bytes).ok()?;
+    let ops = json["ops"].as_array()?;
+    let hash160: Vec<u8> = ops.iter().find_map(|op| {
+        op["OpPushData"].as_array().map(|arr| {
+            arr.iter().filter_map(|b| b.as_u64().map(|x| x as u8)).collect()
+        })
+    })?;
+    if hash160.len() != 20 { return None; }
+    let mut payload = vec![0x00u8]; // version byte: mainnet P2PKH
+    payload.extend_from_slice(&hash160);
+    let h1 = Sha256::digest(&payload);
+    let h2 = Sha256::digest(h1);
+    payload.extend_from_slice(&h2[..4]);
+    Some(bs58::encode(payload).into_string())
+}
 
 // ── Per-request DB open state ──────────────────────────────────────────────────
 
@@ -121,11 +144,12 @@ async fn ps_balance(
     State(ps): State<PathState>,
     Path(script): Path<String>,
 ) -> impl IntoResponse {
-    match ps.open() {
+    match ps.open_addr() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
-        Some((_sdb, udb)) => {
-            let balance = crate::pkt_explorer_api::query_balance(&udb, &script);
-            Json(json!({"balance": balance})).into_response()
+        Some(adb) => {
+            let balance = adb.get_balance(&script).unwrap_or(0);
+            let address = script_hex_to_address(&script);
+            Json(json!({"balance": balance, "address": address})).into_response()
         }
     }
 }
@@ -199,11 +223,15 @@ async fn ps_rich_list(
     match adb.get_rich_list(limit) {
         Ok(list) => {
             // PAKLETS_PER_PKT = 2^30 = 1_073_741_824
-            let holders: Vec<_> = list.iter().map(|(script, bal)| json!({
-                "script":      script,
-                "balance":     bal,
-                "balance_pkt": (*bal as f64) / 1_073_741_824.0,
-            })).collect();
+            let holders: Vec<_> = list.iter().map(|(script, bal)| {
+                let address = script_hex_to_address(script);
+                json!({
+                    "script":      script,
+                    "address":     address,
+                    "balance":     bal,
+                    "balance_pkt": (*bal as f64) / 1_073_741_824.0,
+                })
+            }).collect();
             let count = holders.len();
             Json(json!({"holders": holders, "count": count})).into_response()
         }

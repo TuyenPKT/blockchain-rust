@@ -65,7 +65,8 @@
     const bal = await fetchJson('api/testnet/balance/' + enc);
     const txr = await fetchJson('api/testnet/address/' + enc + '/txs?limit=50');
 
-    const balance   = bal?.balance  ?? 0;
+    const balRaw    = bal?.balance;
+    const balance   = (balRaw && typeof balRaw === 'object') ? (balRaw.Ok ?? 0) : (balRaw ?? 0);
     const txHistory = txr?.txs      ?? [];
     const txCount   = txr?.count    ?? txHistory.length;
 
