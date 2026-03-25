@@ -332,7 +332,7 @@
         var addr    = h.address || h.script || '';
         var display = addr.length > 24 ? addr.slice(0, 12) + '…' + addr.slice(-8) : addr;
         var escaped = addr.replace(/'/g, "\\'");
-        return '<div class="list-item" style="cursor:pointer" onclick="window.location.hash=\'#addr/\'+encodeURIComponent(\'' + escaped + '\')" title="Click to view address">' +
+        return '<div class="list-item" style="cursor:pointer" onclick="window.location.href=\'/blockchain-rust/address/\'+encodeURIComponent(\'' + escaped + '\')" title="Click to view address">' +
           '<div class="item-icon" style="background:rgba(255,215,0,.1);color:#ffd700;' +
           'border:1px solid rgba(255,215,0,.25);font-size:.78rem;font-weight:700">' + (i + 1) + '</div>' +
           '<div class="item-main">' +
