@@ -371,6 +371,100 @@ async fn ps_mempool_histogram(State(ps): State<PathState>) -> impl IntoResponse 
     }
 }
 
+// ── Search handler ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct SearchParams {
+    q: Option<String>,
+}
+
+/// GET /api/testnet/search?q=<query>
+/// Detect type và trả unified results.
+async fn ps_search(
+    State(ps):     State<PathState>,
+    Query(params): Query<SearchParams>,
+) -> impl IntoResponse {
+    use crate::pkt_search::{detect_kind, search_labels, QueryKind};
+    use crate::pkt_explorer_api::format_header_json;
+    use crate::pkt_wire::WireBlockHeader;
+
+    let q = match params.q.as_deref() {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => return Json(json!({"query": "", "results": []})).into_response(),
+    };
+
+    let mut results: Vec<Value> = Vec::new();
+
+    match detect_kind(&q) {
+        QueryKind::Height(h) => {
+            if let Some(sdb) = SyncDb::open_read_only(&ps.sync_path).ok() {
+                if let Ok(Some(raw)) = sdb.load_header(h) {
+                    if let Ok(hdr) = WireBlockHeader::from_bytes(&raw) {
+                        let data = format_header_json(&hdr, h);
+                        results.push(json!({
+                            "type":  "block",
+                            "label": format!("Block #{}", h),
+                            "value": h.to_string(),
+                            "meta":  data,
+                        }));
+                    }
+                }
+            }
+        }
+
+        QueryKind::Txid(txid) => {
+            let in_mempool = ps.open_mempool()
+                .map(|mdb| mdb.has_tx(&txid))
+                .unwrap_or(false);
+            results.push(json!({
+                "type":  "tx",
+                "label": if in_mempool { "Transaction (mempool)" } else { "Transaction" },
+                "value": txid,
+                "meta":  { "in_mempool": in_mempool },
+            }));
+        }
+
+        QueryKind::Address(addr) => {
+            let script    = address_to_script_hex(&addr);
+            let balance   = ps.open_addr()
+                .and_then(|adb| script.as_deref().map(|s| adb.get_balance(s).unwrap_or(0)))
+                .unwrap_or(0);
+            let label     = ps.open_label()
+                .and_then(|ldb| ldb.get_label_for(
+                    script.as_deref().unwrap_or(""),
+                    Some(&addr),
+                ));
+            results.push(json!({
+                "type":  "address",
+                "label": label.as_ref().map(|l| l.label.as_str()).unwrap_or("Address"),
+                "value": addr,
+                "meta":  {
+                    "balance":     balance,
+                    "balance_pkt": (balance as f64) / 1_073_741_824.0,
+                    "label":       label,
+                },
+            }));
+        }
+
+        QueryKind::Label(text) => {
+            let ldb = ps.open_label();
+            let hits = search_labels(&text, ldb.as_ref());
+            for (key, lbl, cat, verified) in hits {
+                results.push(json!({
+                    "type":  "label",
+                    "label": lbl,
+                    "value": key,
+                    "meta":  { "category": cat, "verified": verified },
+                }));
+            }
+        }
+
+        QueryKind::Unknown => {}
+    }
+
+    Json(json!({"query": q, "results": results})).into_response()
+}
+
 // ── Label handler ──────────────────────────────────────────────────────────────
 
 /// GET /api/testnet/label/:script
@@ -485,6 +579,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .route("/api/testnet/analytics",             get(ps_analytics))
+        .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))
         .with_state(ps)
 }

@@ -35,7 +35,7 @@ pub struct LabelEntry {
 // Khớp theo tiền tố Base58Check address.
 // Tuple: (address_prefix, label, category, verified)
 
-static PRESETS: &[(&str, &str, &str, bool)] = &[
+pub static PRESETS: &[(&str, &str, &str, bool)] = &[
     // PKT Network Steward — treasury/burn address (mainnet)
     ("pSEHPyBk", "PKT Network Steward", "system",   true),
     // PacketCrypt v1 mining pool (mainnet)

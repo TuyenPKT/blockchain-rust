@@ -344,74 +344,72 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
 });
 
+let _searchTimer = null;
+
 function doSearch(query) {
-  const q = query.trim().toLowerCase();
   const el = document.getElementById('searchResults');
+  const q  = query.trim();
   if (!q) {
     el.innerHTML = '<div class="search-empty">Type to search blocks, transactions, or addresses</div>';
+    clearTimeout(_searchTimer);
     return;
   }
-  let results = [];
-  // match blocks by height
-  blocks.forEach(b => {
-    if (String(b.height).includes(q) || b.hash.startsWith(q)) {
-      results.push({ type: 'block', label: `Block #${b.height.toLocaleString()}`, value: b.hash, data: b });
+  el.innerHTML = '<div class="search-empty">Searching…</div>';
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => _doSearchApi(q), 280);
+}
+
+async function _doSearchApi(q) {
+  const el = document.getElementById('searchResults');
+  try {
+    const d = await fetch(`${API_BASE}/api/testnet/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+    const results = d.results || [];
+    el._results = results;
+    if (!results.length) {
+      el.innerHTML = '<div class="search-empty">No results found</div>';
+      return;
     }
-  });
-  // match txs
-  txs.forEach(tx => {
-    if (tx.txid.startsWith(q)) {
-      results.push({ type: 'tx', label: 'Transaction', value: tx.txid, data: tx });
-    }
-  });
-  // address match từ cached txs
-  const addrs = new Set([...txs.map(t => t.from), ...txs.map(t => t.to)].filter(Boolean));
-  addrs.forEach(addr => {
-    if (addr.toLowerCase().includes(q)) {
-      results.push({ type: 'address', label: 'Address', value: addr, data: null });
-    }
-  });
-  results = results.slice(0, 6);
-  if (!results.length) {
-    el.innerHTML = '<div class="search-empty">No results found</div>';
-    return;
+    const typeIcon = { block: '📦', tx: '💸', address: '👤', label: '🏷' };
+    const typeCls  = { block: 'item-icon-block', tx: 'item-icon-tx', address: '', label: '' };
+    el.innerHTML = results.map((r, i) => {
+      const icon  = typeIcon[r.type] || '🔍';
+      const cls   = typeCls[r.type] || '';
+      const sub   = r.type === 'block'   ? `Height ${r.value}` :
+                    r.type === 'address' ? `${((r.meta?.balance_pkt)||0).toFixed(2)} PKT` :
+                    r.type === 'label'   ? (r.meta?.category || '') :
+                    r.meta?.in_mempool   ? 'mempool' : 'tx';
+      return `<div class="search-result-item" onclick="selectResult(${i})">
+        <div class="search-result-icon ${cls}" style="font-size:14px">${icon}</div>
+        <div class="search-result-main">
+          <div class="search-result-type">${r.label}</div>
+          <div class="search-result-value">${r.value.length > 40 ? r.value.slice(0,18)+'…'+r.value.slice(-10) : r.value}${sub ? ' · '+sub : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (_) {
+    el.innerHTML = '<div class="search-empty">Search unavailable</div>';
   }
-  el.innerHTML = results.map((r, i) => {
-    const icon = r.type === 'block' ? '📦' : r.type === 'tx' ? '💸' : '👤';
-    const cls  = r.type === 'block' ? 'icon-block' : r.type === 'tx' ? 'icon-tx' : 'icon-addr';
-    return `<div class="search-result-item" onclick="selectResult(${i})">
-      <div class="search-result-icon ${cls}">${icon}</div>
-      <div class="search-result-main">
-        <div class="search-result-type">${r.type}</div>
-        <div class="search-result-value">${r.value}</div>
-      </div>
-    </div>`;
-  }).join('');
-  el._results = results;
 }
 
 function selectResult(i) {
-  const results = document.getElementById('searchResults')._results;
+  const el      = document.getElementById('searchResults');
+  const results = el._results;
   if (!results) return;
   const r = results[i];
   closeSearch();
-  if (r.type === 'block') showBlockDetail(r.data);
-  else if (r.type === 'tx') showTxDetail(r.data);
+  if (r.type === 'block') {
+    showBlockDetail({ height: parseInt(r.value) });
+  } else if (r.type === 'tx') {
+    window.location.href = `${API_BASE}/rx/${encodeURIComponent(r.value)}`;
+  } else if (r.type === 'address' || r.type === 'label') {
+    window.location.href = `${API_BASE}/address/${encodeURIComponent(r.value)}`;
+  }
 }
 
 async function heroSearch() {
   const q = document.getElementById('heroInput').value.trim();
   if (!q) return;
-  // try block height
-  const height = parseInt(q);
-  if (!isNaN(height) && String(height) === q) {
-    showBlockDetail({ height });
-    return;
-  }
-  // try tx hash prefix in local cache
-  const tx = txs.find(x => x.txid.startsWith(q.toLowerCase()));
-  if (tx) { showTxDetail(tx); return; }
-  // fallback: open search modal
+  // delegate to search modal — API handles type detection
   document.getElementById('searchInput').value = q;
   openSearch();
   doSearch(q);
