@@ -118,6 +118,7 @@ mod web_charts;
 mod block_detail;
 mod address_detail;
 mod ws_live;
+mod web_serve;
 mod devnet;
 mod docs_gen;
 mod integration_test;
