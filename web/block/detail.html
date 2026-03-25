@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Block — PKTScan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css">
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/blockchain-rust/">
+    <div class="nav-logo-icon">P</div>
+    <span class="nav-logo-text">PKT<span>Scan</span></span>
+  </a>
+  <div class="nav-right">
+    <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
+    <a class="nav-link" href="/blockchain-rust/">Home</a>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+  </div>
+</nav>
+
+<div class="main-wrap">
+  <div id="block-content">
+    <div style="padding:40px 0;text-align:center;color:var(--muted);font-style:italic">Loading…</div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
+      PKTScan
+    </div>
+    <span>PKT Blockchain Explorer — built with <a href="https://github.com/TuyenPKT/blockchain-rust">blockchain-rust</a></span>
+    <span>© 2026 PKTScan</span>
+  </div>
+</footer>
+
+<script src="/blockchain-rust/web/js/shared.js"></script>
+<script src="/blockchain-rust/web/js/block-detail.js"></script>
+</body>
+</html>
