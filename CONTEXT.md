@@ -200,7 +200,7 @@ _Mục tiêu: PKTScan trở thành explorer production-ready — charts thật, 
 - [ ] v18.4 — **Block Detail Enhanced**: `web/js/block-detail.js` nâng cấp — danh sách TX trong block (paginated), tổng fee, tổng output, coinbase reward breakdown (miner + steward); link miner address
 - [ ] v18.5 — **Pagination Cursor**: tất cả list APIs dùng cursor-based thay offset (ổn định hơn khi chain tăng); `web/js/` dùng `?cursor=LAST_ID` thay `?offset=N`
 - [ ] v18.6 — **Mobile API**: `GET /api/testnet/summary` — single endpoint trả tất cả thông tin trang chủ (height/hashrate/mempool/rich_top5) trong 1 request; giảm round-trip cho mobile/low-bandwidth
-- [ ] v18.7 — **Mainnet Switch**: `src/pkt_network_config.rs` — `NetworkConfig::testnet()/mainnet()` chọn magic/port/peers/db_path; `--mainnet` flag cho `cargo run -- sync/serve`; explorer tự hiển thị badge "Testnet"/"Mainnet"
+- [ ] v18.7 — ~~**Mainnet Switch**~~ — _hoãn vô thời hạn_
 - [ ] v18.8 — **Health & Uptime**: `src/pkt_health.rs` — `HealthDb` track: last_block_age, sync_lag, peer_count, db_size; `GET /api/health/detailed`; status page `web/health.html` với auto-refresh 10s; alert nếu block_age > 10 phút
 - [ ] v18.9 — **Data Export**: `GET /api/testnet/address/:s/export.csv` — tx history dưới dạng CSV; `GET /api/testnet/blocks/export.csv?from=H&to=H`; streaming response (không buffer toàn bộ vào RAM)
 

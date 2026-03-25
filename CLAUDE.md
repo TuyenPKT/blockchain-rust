@@ -370,7 +370,7 @@ v18.3 — TX Detail Page: inputs/outputs table, fee rate, confirmations
 v18.4 — Block Detail Enhanced: TX list, fee total, miner breakdown
 v18.5 — Pagination Cursor: cursor-based thay offset
 v18.6 — Mobile API: /api/testnet/summary single-request
-v18.7 — Mainnet Switch: --mainnet flag, NetworkConfig, badge UI
+~~v18.7 — Mainnet Switch~~ — hoãn vô thời hạn
 v18.8 — Health & Uptime: HealthDb, /api/health/detailed, status page
 v18.9 — Data Export: CSV streaming cho address/blocks
 
