@@ -246,6 +246,33 @@ async fn ps_addr_by_base58(
     Json(json!({"address": addr, "balance": balance, "txs": txs, "count": count})).into_response()
 }
 
+// ── Analytics handler ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AnalyticsParams {
+    metric: Option<String>,
+    window: Option<usize>,
+}
+
+/// GET /api/testnet/analytics?metric=hashrate|block_time|difficulty&window=N
+async fn ps_analytics(
+    State(ps):     State<PathState>,
+    Query(params): Query<AnalyticsParams>,
+) -> impl IntoResponse {
+    let sdb = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"sync db not ready"}))).into_response(),
+        Some(d) => d,
+    };
+    let metric = params.metric.as_deref().unwrap_or("hashrate");
+    let window = params.window.unwrap_or(100);
+    match crate::pkt_analytics::analytics(metric, &sdb, window) {
+        Ok(series) => Json(serde_json::to_value(&series).unwrap_or_default()).into_response(),
+        Err(e)     => (StatusCode::BAD_REQUEST,
+                       Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 #[derive(Deserialize)]
 struct RichListParams {
     limit: Option<usize>,
@@ -405,6 +432,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/rich-list", get(ps_rich_list))
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
+        .route("/api/testnet/analytics",             get(ps_analytics))
         .with_state(ps)
 }
 

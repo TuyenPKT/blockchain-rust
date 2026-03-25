@@ -418,6 +418,8 @@
     refreshTestnet();
     if (tnTimer) clearInterval(tnTimer);
     tnTimer = setInterval(refreshTestnet, 15000);
+    // Khởi analytics charts khi vào testnet page
+    if (typeof window.pktChartsInit === 'function') window.pktChartsInit();
   };
 
   // Stop auto-refresh when any other nav link is clicked
@@ -428,6 +430,7 @@
     if (!onclick.includes('showTestnet') && tnTimer) {
       clearInterval(tnTimer);
       tnTimer = null;
+      if (typeof window.pktChartsStop === 'function') window.pktChartsStop();
     }
   });
 
