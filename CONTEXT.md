@@ -204,15 +204,20 @@ _Mục tiêu: PKTScan trở thành explorer production-ready — charts thật, 
 - [ ] v18.8 — **Health & Uptime**: `src/pkt_health.rs` — `HealthDb` track: last_block_age, sync_lag, peer_count, db_size; `GET /api/health/detailed`; status page `web/health.html` với auto-refresh 10s; alert nếu block_age > 10 phút
 - [ ] v18.9 — **Data Export**: `GET /api/testnet/address/:s/export.csv` — tx history dưới dạng CSV; `GET /api/testnet/blocks/export.csv?from=H&to=H`; streaming response (không buffer toàn bộ vào RAM)
 
-### Era 26 — PKTCore Production (v19.x)
+### Era 26 — PKTCore Production + Dev Layer (v19.x)
 
-_Mục tiêu: nâng cấp node lên production-grade — workspace, libp2p, JSON-RPC, flat file storage, cross-compile._
+_Mục tiêu: nâng cấp node production-grade + dev layer cho ecosystem — workspace, libp2p, JSON-RPC, flat file storage, JS/TS SDK, CLI tool, API playground._
 
 - [ ] v19.0 — **Cargo Workspace**: tách `blockchain-rust` thành 3 crate: `pkt-core` (node binary), `pkt-sdk` (library, publish crates.io), `pkt-api` (REST server riêng); `Cargo.toml` workspace root; giữ nguyên toàn bộ code hiện tại, chỉ restructure
 - [ ] v19.1 — **Flat File Block Storage**: `src/storage/block_files.rs` — `blk00000.dat` format (giống Bitcoin), append-only, mỗi file ~128MB; magic bytes prefix; `BlockFileIndex` RocksDB → file offset; tích hợp vào chain storage thay `Vec<Block>` in-memory
 - [ ] v19.2 — **JSON-RPC Bitcoin-compatible**: `src/rpc/server.rs` — JSON-RPC 2.0 over HTTP; methods: `getblock`, `getblockcount`, `getblockhash`, `getrawtransaction`, `sendrawtransaction`, `getmininginfo`, `getnetworkinfo`; port 8332 (mainnet) / 18332 (testnet)
 - [ ] v19.3 — **libp2p Transport**: `src/network/transport.rs` — thay raw TCP bằng `libp2p` (TCP + Noise encryption + Yamux multiplexing); giữ nguyên wire protocol PKT; `PeerManager` scoring + ban list; mDNS local discovery
 - [ ] v19.4 — **Cross-Compile Workflow**: `scripts/build-linux.sh` — `cargo build --release --target x86_64-unknown-linux-musl` trên macOS; static binary không cần glibc; `scripts/deploy.sh` scp binary lên VPS + restart service; `Makefile` targets: `make build`, `make deploy`, `make logs`
+- [ ] v19.5 — **JS/TS SDK** (`pkt-sdk-js`): npm package `@pktcore/sdk`; TypeScript types cho Block/TX/Address; `PktClient(url)` với methods: `getBlock`, `getTx`, `getAddress`, `getMempool`, `subscribe(event, cb)`; publish lên npmjs.com
+- [ ] v19.6 — **PKT CLI tool** (`pkt-cli`): binary `pkt` độc lập; commands: `pkt block <height>`, `pkt tx <txid>`, `pkt address <addr>`, `pkt mempool`, `pkt sync-status`; output JSON hoặc pretty table; config file `~/.pkt/cli.toml` (node URL)
+- [ ] v19.7 — **API Playground**: `web/playground/index.html` — interactive docs; dropdown chọn endpoint; input params; "Run" button gọi API thật; syntax-highlighted JSON response; chia sẻ URL với params; thay thế Swagger UI tĩnh
+- [ ] v19.8 — **Webhook Management UI**: `web/webhooks/index.html` — list/create/delete webhooks qua UI; test webhook với payload mẫu; log delivery history; auth bằng API key
+- [ ] v19.9 — **Developer Portal**: `web/dev/index.html` — landing page cho developers: quickstart guide, SDK install, API reference link, rate limit info, API key generator UI; target: third-party devs build app trên PKTScan
 
 ### Era 27 — PKTScan Desktop App (v20.x)
 

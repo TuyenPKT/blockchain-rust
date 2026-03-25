@@ -372,13 +372,18 @@ v18.5 — Pagination Cursor: cursor-based thay offset
 v18.6 — Mobile API: /api/testnet/summary single-request
 ~~v18.7 — Mainnet Switch~~ — hoãn vô thời hạn
 
-## Era 26 — PKTCore Production (v19.x)
+## Era 26 — PKTCore Production + Dev Layer (v19.x)
 
 v19.0 — Cargo Workspace: pkt-core / pkt-sdk / pkt-api
 v19.1 — Flat File Block Storage: blk00000.dat format
 v19.2 — JSON-RPC Bitcoin-compatible: getblock/sendrawtransaction...
 v19.3 — libp2p Transport: Noise + Yamux thay raw TCP
 v19.4 — Cross-Compile Workflow: macOS → Linux static binary + deploy script
+v19.5 — JS/TS SDK: @pktcore/sdk npm package
+v19.6 — PKT CLI tool: pkt block/tx/address/mempool
+v19.7 — API Playground: interactive docs, Run button
+v19.8 — Webhook Management UI
+v19.9 — Developer Portal: quickstart, API key generator
 
 ## Era 27 — PKTScan Desktop App (v20.x)
 
