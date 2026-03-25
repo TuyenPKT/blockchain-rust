@@ -371,6 +371,14 @@ v18.4 — Block Detail Enhanced: TX list, fee total, miner breakdown
 v18.5 — Pagination Cursor: cursor-based thay offset
 v18.6 — Mobile API: /api/testnet/summary single-request
 ~~v18.7 — Mainnet Switch~~ — hoãn vô thời hạn
+
+## Era 26 — PKTCore Production (v19.x)
+
+v19.0 — Cargo Workspace: pkt-core / pkt-sdk / pkt-api
+v19.1 — Flat File Block Storage: blk00000.dat format
+v19.2 — JSON-RPC Bitcoin-compatible: getblock/sendrawtransaction...
+v19.3 — libp2p Transport: Noise + Yamux thay raw TCP
+v19.4 — Cross-Compile Workflow: macOS → Linux static binary + deploy script
 v18.8 — Health & Uptime: HealthDb, /api/health/detailed, status page
 v18.9 — Data Export: CSV streaming cho address/blocks
 
