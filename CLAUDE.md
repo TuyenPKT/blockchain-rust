@@ -379,6 +379,19 @@ v19.1 — Flat File Block Storage: blk00000.dat format
 v19.2 — JSON-RPC Bitcoin-compatible: getblock/sendrawtransaction...
 v19.3 — libp2p Transport: Noise + Yamux thay raw TCP
 v19.4 — Cross-Compile Workflow: macOS → Linux static binary + deploy script
+
+## Era 27 — PKTScan Desktop App (v20.x)
+
+v20.0 — Tauri Setup: Rust backend + React frontend, IPC bridge
+v20.1 — React UI Foundation: Vite + React + TailwindCSS, routing
+v20.2 — Live Dashboard: stats bar, latest blocks/txs realtime
+v20.3 — Charts & Analytics: Recharts hashrate/tx/fee
+v20.4 — Search & Navigation: Cmd+K global search
+v20.5 — Address Detail UI: balance, TX history, QR code
+v20.6 — Block & TX Detail UI: inputs/outputs flow
+v20.7 — Rich List & Mempool UI: leaderboard, fee histogram
+v20.8 — Settings & Preferences: node URL, theme, language
+v20.9 — Build & Release: .dmg + .msi + .AppImage/.deb, CI 3 platform
 v18.8 — Health & Uptime: HealthDb, /api/health/detailed, status page
 v18.9 — Data Export: CSV streaming cho address/blocks
 

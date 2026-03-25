@@ -214,6 +214,21 @@ _Mục tiêu: nâng cấp node lên production-grade — workspace, libp2p, JSON
 - [ ] v19.3 — **libp2p Transport**: `src/network/transport.rs` — thay raw TCP bằng `libp2p` (TCP + Noise encryption + Yamux multiplexing); giữ nguyên wire protocol PKT; `PeerManager` scoring + ban list; mDNS local discovery
 - [ ] v19.4 — **Cross-Compile Workflow**: `scripts/build-linux.sh` — `cargo build --release --target x86_64-unknown-linux-musl` trên macOS; static binary không cần glibc; `scripts/deploy.sh` scp binary lên VPS + restart service; `Makefile` targets: `make build`, `make deploy`, `make logs`
 
+### Era 27 — PKTScan Desktop App (v20.x)
+
+_Mục tiêu: PKTScan thành native desktop app macOS + Windows dùng Tauri (Rust backend + React frontend)._
+
+- [ ] v20.0 — **Tauri Setup**: tích hợp `tauri` vào workspace; `src-tauri/` cho Rust backend; `src/` cho React frontend; build ra `.app` (macOS) + `.exe` (Windows); IPC bridge giữa React ↔ Rust
+- [ ] v20.1 — **React UI Foundation**: setup Vite + React + TailwindCSS; component library: Block, TX, Address cards; dark/light theme; router (React Router) cho `/`, `/block/:h`, `/rx/:txid`, `/address/:addr`
+- [ ] v20.2 — **Live Dashboard**: trang chủ React — stats bar realtime, Latest Blocks + Transactions live feed qua Tauri IPC hoặc WebSocket; auto-refresh; animated số tăng
+- [ ] v20.3 — **Charts & Analytics**: tích hợp Chart.js hoặc Recharts — hashrate 7 ngày, tx volume, fee histogram, block time; data fetch từ `/api/testnet/analytics`
+- [ ] v20.4 — **Search & Navigation**: search bar toàn cục (block/tx/address); keyboard shortcut `Cmd+K` / `Ctrl+K`; recent searches history; result preview dropdown
+- [ ] v20.5 — **Address Detail UI**: balance hero, TX history table paginated, UTXO list, copy address button, QR code popup
+- [ ] v20.6 — **Block & TX Detail UI**: block detail với TX list, TX detail với inputs/outputs flow diagram, fee rate badge, confirmation count
+- [ ] v20.7 — **Rich List & Mempool UI**: top holders leaderboard với avatar placeholder, mempool fee histogram bar chart, pending TX table
+- [ ] v20.8 — **Settings & Preferences**: chọn node URL (local/VPS), theme, currency display (PKT/USD), language (EN/VI); lưu vào Tauri store
+- [ ] v20.9 — **Build & Release**: `tauri build` → `.dmg` (macOS) + `.msi`/`.exe` (Windows) + `.AppImage`/`.deb` (Linux); GitHub Actions CI build cả 3 platform; auto-updater
+
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 
