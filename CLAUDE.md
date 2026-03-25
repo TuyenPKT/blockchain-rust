@@ -353,14 +353,26 @@ index.html               ← Home page entry point (embedded via include_bytes! 
 ~~v16.2 — Integration Test Harness [DX]~~ ✅
 ~~v16.3 — Hot Reload Dev Mode [DX]~~ ✅
 
-## Era 22 — PKT Testnet Integration (v15.x)
+## Era 22 — PKT Testnet Integration (v15.x) ✅
 
-v15.0 — PKT Wire Protocol: `src/pkt_wire.rs` — pktd P2P message format, handshake testnet
-v15.1 — Testnet Peer Connect: `src/pkt_peer.rs` — kết nối bootstrap peers, ping/pong keepalive
-v15.2 — Block Download: `src/pkt_sync.rs` — GetHeaders → GetData → validate → RocksDB
-v15.3 — UTXO Sync: apply blocks vào UtxoSet, resume từ last height
-v15.4 — Explorer Live Data: pktscan_api dùng testnet chain thật
-v15.5 — Sync Status UI: progress bar trong TUI + web frontend
+~~v15.0~~ ~~v15.1~~ ~~v15.2~~ ~~v15.3~~ ~~v15.4~~ ~~v15.5~~ ~~v15.6~~ ~~v15.8~~ ✅
+
+## Era 24 — PKT Explorer Pro (v17.x) ✅
+
+~~v17.0 — Address Index~~ ~~v17.1 — Reorg Handle~~ ~~v17.2 — Mempool Realtime~~ ✅
+
+## Era 25 — PKT Explorer Analytics & Polish (v18.x)
+
+v18.0 — Analytics Charts Web: Chart.js realtime, hashrate/tx/fees
+v18.1 — Address Labels: LabelDb, preset miners/exchanges, hiển thị trong UI
+v18.2 — Search Pro: detect type, fuzzy label, unified result
+v18.3 — TX Detail Page: inputs/outputs table, fee rate, confirmations
+v18.4 — Block Detail Enhanced: TX list, fee total, miner breakdown
+v18.5 — Pagination Cursor: cursor-based thay offset
+v18.6 — Mobile API: /api/testnet/summary single-request
+v18.7 — Mainnet Switch: --mainnet flag, NetworkConfig, badge UI
+v18.8 — Health & Uptime: HealthDb, /api/health/detailed, status page
+v18.9 — Data Export: CSV streaming cho address/blocks
 
 ## Era 23 — Developer Experience (v16.x)
 
