@@ -56,7 +56,8 @@
   // ── Address detail ─────────────────────────────────────────────────────────
 
   async function showAddress(addr) {
-    // Hide block/tx detail pages if active
+    // Hide home page + all other pages
+    if (typeof hideAll === 'function') hideAll();
     document.querySelectorAll('.detail-page.active').forEach(el => el.classList.remove('active'));
 
     showLoading(truncAddr(addr));
@@ -297,7 +298,7 @@
     document.head.appendChild(s);
   }
 
-  // expose truncAddr cho external use (e.g. app.js links)
   window.pktTruncAddr = truncAddr;
+  window.pktHideAddrPanel = hidePanel;
 
 })();

@@ -1134,6 +1134,8 @@ function hideAll() {
 }
 function showHome() {
   hideAll();
+  if (window.pktHideAddrPanel) window.pktHideAddrPanel();
+  history.replaceState(null, '', location.pathname + location.search);
   document.getElementById('home-page').style.display = 'block';
   renderHome();
 }
