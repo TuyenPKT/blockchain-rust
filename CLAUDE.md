@@ -231,6 +231,7 @@ ratatui = "0.26"                         # v14.0: Terminal UI dashboard
 crossterm = "0.27"                       # v14.0: Terminal input/output
 qrcode = "0.14"                          # v14.3: QR code render (pure Rust)
 proptest = { version = "1.4", optional = true }  # v5.6: fuzz/property tests
+tower-http = { version = "0.5", features = ["fs"] }  # web_serve: ServeDir runtime assets
 # Optional features:
 # ocl = "0.19"   (--features opencl) v6.5: OpenCL GPU mining
 # cust = "0.3"   (--features cuda)   v6.6: CUDA GPU mining
@@ -296,17 +297,27 @@ src/
 ├── web_charts.rs        ← sparkline engine (▁▂▃▄▅▆▇█), charts_router() (v14.5)
 ├── block_detail.rs      ← BlockDetailView, TxDetailView, detail_router() (v14.6)
 ├── address_detail.rs    ← TxDirection, AddressDetailView, address_router() (v14.7)
-└── ws_live.rs           ← WsEventType, ToastLevel, LiveEvent, ConnectionState, live_router() (v14.8)
+├── ws_live.rs           ← WsEventType, ToastLevel, LiveEvent, ConnectionState, live_router() (v14.8)
+└── web_serve.rs         ← ServeDir runtime assets + page routes (/address/:a /block/:h /rx/:id)
 
-frontend/
-├── app.js               ← Vanilla JS SPA: fetch API, auto-refresh, theme toggle
-├── charts.js            ← Chart.js sparkline + web charts (v14.5)
-├── detail.js            ← hash-router #block/N + #tx/ID (v14.6)
-├── address.js           ← hash-router #addr/ADDRESS, IN/OUT badges (v14.7)
-├── live.js              ← WebSocket live feed, toast notifications, reconnect (v14.8)
-└── style.css            ← Dark theme CSS, stat cards, data tables
+web/
+├── css/style.css        ← Dark/light theme, stat cards, panels — served via ServeDir (no rebuild)
+├── js/shared.js         ← toggleTheme, shortHash, shortAddr, fetchJson, addrLink
+├── js/app.js            ← Home page SPA: stats, latest blocks/txs, search
+├── js/testnet.js        ← Testnet page: sync status, headers, rich list, mempool
+├── js/address.js        ← Hash-router #addr/ADDRESS (legacy, index.html only)
+├── js/address-page.js   ← Standalone /address/:addr page
+├── js/block-list.js     ← /block/ list page
+├── js/block-detail.js   ← /block/:height detail page
+├── js/rx-list.js        ← /rx/ list page
+├── js/rx-detail.js      ← /rx/:txid detail page
+├── address/index.html   ← Address detail standalone page
+├── block/index.html     ← All Blocks list page
+├── block/detail.html    ← Block detail standalone page
+├── rx/index.html        ← All Transactions list page
+└── rx/detail.html       ← TX detail standalone page
 
-index.html               ← Entry point (embedded via include_bytes!)
+index.html               ← Home page entry point (embedded via include_bytes! — rebuild khi sửa)
 ```
 
 ## Lưu ý kỹ thuật quan trọng
@@ -324,6 +335,7 @@ index.html               ← Entry point (embedded via include_bytes!)
 - `SyncDb::open_temp()` / `UtxoSyncDb::open_temp()` dùng `SystemTime` hash — race condition khi nhiều tests chạy song song → dùng `static Mutex<()>` để serialize (áp dụng cho bất kỳ test module nào gọi `open_temp()` song song)
 - `testnet_web_router()` opens DBs tại `~/.pkt/syncdb` + `~/.pkt/utxodb` — cần chạy `cargo run -- sync` trước; nếu chưa có DB thì server vẫn khởi động (graceful degradation: js-only)
 - `web_frontend`: `static_router()` chỉ mount `/static/*`, merge vào `pktscan_api::serve()`
+- `tower-http = 0.5`: `ServeDir::new("web")` serve từ CWD/web/ — binary phải chạy từ project root (~/blockchain-rust/); CSS/JS thay đổi không cần rebuild
 - QR width = `17 + 4×N` (QR spec) — test: `(w - 17) % 4 == 0`
 
 ## Thứ tự version tiếp theo (Era 21 còn lại — UI)
