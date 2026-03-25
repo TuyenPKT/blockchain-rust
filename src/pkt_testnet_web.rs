@@ -32,6 +32,7 @@ use serde_json::{json, Value};
 
 use crate::pkt_addr_index::AddrIndexDb;
 use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
+use crate::pkt_labels::LabelDb;
 use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_sync::SyncDb;
 use crate::pkt_sync_ui::{sync_status_router, SyncProgress, SyncUiState};
@@ -83,6 +84,7 @@ struct PathState {
     utxo_path:    PathBuf,
     addr_path:    PathBuf,
     mempool_path: PathBuf,
+    label_path:   PathBuf,
 }
 
 impl PathState {
@@ -98,6 +100,10 @@ impl PathState {
 
     fn open_mempool(&self) -> Option<MempoolDb> {
         MempoolDb::open_read_only(&self.mempool_path).ok()
+    }
+
+    fn open_label(&self) -> Option<LabelDb> {
+        LabelDb::open_read_only(&self.label_path).ok()
     }
 }
 
@@ -288,17 +294,22 @@ async fn ps_rich_list(
                            Json(json!({"error":"address index not ready"}))).into_response(),
         Some(d) => d,
     };
+    let ldb = ps.open_label();
     let limit = params.limit.unwrap_or(100).min(1000);
     match adb.get_rich_list(limit) {
         Ok(list) => {
             // PAKLETS_PER_PKT = 2^30 = 1_073_741_824
             let holders: Vec<_> = list.iter().map(|(script, bal)| {
                 let address = script_hex_to_address(script);
+                let label = ldb.as_ref().and_then(|db| {
+                    db.get_label_for(script, address.as_deref())
+                });
                 json!({
                     "script":      script,
                     "address":     address,
                     "balance":     bal,
                     "balance_pkt": (*bal as f64) / 1_073_741_824.0,
+                    "label":       label,
                 })
             }).collect();
             let count = holders.len();
@@ -360,6 +371,46 @@ async fn ps_mempool_histogram(State(ps): State<PathState>) -> impl IntoResponse 
     }
 }
 
+// ── Label handler ──────────────────────────────────────────────────────────────
+
+/// GET /api/testnet/label/:script
+/// :script có thể là script_hex hoặc Base58Check address.
+async fn ps_label(
+    State(ps):    State<PathState>,
+    Path(script): Path<String>,
+) -> impl IntoResponse {
+    // Thử preset trước (không cần DB)
+    let preset = crate::pkt_labels::preset_by_address(&script);
+    if let Some(e) = preset {
+        return Json(json!({
+            "key":      script,
+            "label":    e.label,
+            "category": e.category,
+            "verified": e.verified,
+            "source":   "preset",
+        })).into_response();
+    }
+    // Thử DB (graceful: nếu DB chưa có thì 404)
+    match ps.open_label() {
+        None => (StatusCode::NOT_FOUND, Json(json!({"error":"label not found"}))).into_response(),
+        Some(ldb) => {
+            let entry = ldb.get_label(&script)
+                .or_else(|| ldb.get_label_by_address(&script));
+            match entry {
+                Some(e) => Json(json!({
+                    "key":      script,
+                    "label":    e.label,
+                    "category": e.category,
+                    "verified": e.verified,
+                    "source":   "db",
+                })).into_response(),
+                None => (StatusCode::NOT_FOUND,
+                         Json(json!({"error":"label not found"}))).into_response(),
+            }
+        }
+    }
+}
+
 // ── Path helpers ───────────────────────────────────────────────────────────────
 
 /// Build a path under $HOME (falls back to "." if HOME/USERPROFILE unset).
@@ -418,6 +469,7 @@ pub fn testnet_web_router() -> Router {
         utxo_path:    default_utxo_db_path(),
         addr_path:    crate::pkt_addr_index::default_addr_db_path(),
         mempool_path: crate::pkt_mempool_sync::default_mempool_db_path(),
+        label_path:   crate::pkt_labels::default_label_db_path(),
     };
     Router::new()
         .route("/static/testnet.js", get(serve_testnet_js))
@@ -433,6 +485,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .route("/api/testnet/analytics",             get(ps_analytics))
+        .route("/api/testnet/label/:script",         get(ps_label))
         .with_state(ps)
 }
 

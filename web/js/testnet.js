@@ -332,11 +332,22 @@
         var addr    = h.address || h.script || '';
         var display = addr.length > 24 ? addr.slice(0, 12) + '…' + addr.slice(-8) : addr;
         var escaped = addr.replace(/'/g, "\\'");
+        var lbl     = h.label;
+        var labelHtml = '';
+        if (lbl) {
+          var catColor = {
+            miner: '#4ecdc4', exchange: '#a29bfe', burn: '#ff6b6b',
+            system: '#f7a133', other: 'var(--muted)'
+          }[lbl.category] || 'var(--muted)';
+          labelHtml = '<span style="font-size:.7rem;padding:1px 6px;border-radius:3px;' +
+            'background:' + catColor + '22;color:' + catColor + ';border:1px solid ' + catColor + '44;' +
+            'margin-left:6px;vertical-align:middle">' + lbl.label + '</span>';
+        }
         return '<div class="list-item" style="cursor:pointer" onclick="window.location.href=\'/blockchain-rust/address/\'+encodeURIComponent(\'' + escaped + '\')" title="Click to view address">' +
           '<div class="item-icon" style="background:rgba(255,215,0,.1);color:#ffd700;' +
           'border:1px solid rgba(255,215,0,.25);font-size:.78rem;font-weight:700">' + (i + 1) + '</div>' +
           '<div class="item-main">' +
-            '<div class="item-primary mono" style="font-size:.85rem">' + display + '</div>' +
+            '<div class="item-primary mono" style="font-size:.85rem">' + display + labelHtml + '</div>' +
             '<div class="item-secondary">' + (h.balance || 0).toLocaleString() + ' paklets</div>' +
           '</div>' +
           '<div class="item-right">' +
