@@ -12,13 +12,7 @@ function addrLink(addr) {
   return '<span class="addr-clickable" title="Click to look up address" onclick="gotoAddress(\'' + safe + '\')">' + addr + '</span>';
 }
 function gotoAddress(addr) {
-  var hash = '#addr/' + encodeURIComponent(addr);
-  if (window.location.hash === hash) {
-    // Hash unchanged → hashchange won't fire → dispatch manually
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  } else {
-    window.location.hash = hash;
-  }
+  window.location.href = '/blockchain-rust/address/' + encodeURIComponent(addr);
 }
 function ago(secs) {
   if (secs < 60) return secs + 's ago';
