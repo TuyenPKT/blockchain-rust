@@ -6,8 +6,8 @@
 //!
 //! Assets được nhúng:
 //!   - `index.html`            → GET /
-//!   - `frontend/app.js`       → GET /static/app.js
-//!   - `frontend/style.css`    → GET /static/style.css
+//!   - `web/js/app.js`         → GET /static/app.js
+//!   - `web/css/style.css`     → GET /static/style.css
 //!
 //! Router tích hợp vào axum hiện có qua `frontend_router()`.
 
@@ -22,8 +22,8 @@ use axum::{
 
 /// Bytes nhúng compile-time — lỗi nếu file không tồn tại
 static INDEX_HTML: &[u8] = include_bytes!("../index.html");
-static APP_JS:     &[u8] = include_bytes!("../frontend/app.js");
-static STYLE_CSS:  &[u8] = include_bytes!("../frontend/style.css");
+static APP_JS:     &[u8] = include_bytes!("../web/js/app.js");
+static STYLE_CSS:  &[u8] = include_bytes!("../web/css/style.css");
 
 // ── Asset registry ───────────────────────────────────────────────────────────
 

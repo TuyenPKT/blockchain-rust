@@ -182,7 +182,7 @@ async fn ps_utxos(
 }
 
 /// Embedded testnet panel JS — served at /static/testnet.js.
-const TESTNET_JS: &str = include_str!("../frontend/testnet.js");
+const TESTNET_JS: &str = include_str!("../web/js/testnet.js");
 
 // ── Address index handlers ─────────────────────────────────────────────────────
 
