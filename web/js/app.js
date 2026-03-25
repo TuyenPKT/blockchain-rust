@@ -209,6 +209,7 @@ function showHome() {
 }
 function showBlocks() {
   hideAll();
+  history.replaceState(null, '', '#blocks');
   document.getElementById('blocks-page').classList.add('active');
   const el = document.getElementById('allBlocks');
   el.innerHTML = '';
@@ -216,6 +217,7 @@ function showBlocks() {
 }
 function showTxs() {
   hideAll();
+  history.replaceState(null, '', '#txs');
   document.getElementById('txs-page').classList.add('active');
   const el = document.getElementById('allTxs');
   el.innerHTML = '';
@@ -223,6 +225,7 @@ function showTxs() {
 }
 function showStats() {
   hideAll();
+  history.replaceState(null, '', '#stats');
   document.getElementById('stats-page').classList.add('active');
   const el = document.getElementById('statsContent');
   const s  = stats;
@@ -415,6 +418,16 @@ async function heroSearch() {
 }
 
 /* ── INIT ────────────────────────────────────────────────────── */
+function routeFromHash() {
+  const hash = location.hash;
+  if (hash === '#blocks')  showBlocks();
+  else if (hash === '#txs')     showTxs();
+  else if (hash === '#stats')   showStats();
+  else if (hash === '#testnet' && window.showTestnet) window.showTestnet();
+  else renderHome();
+}
+
 buildTicker({});
-refreshAll().then(() => renderHome());
+refreshAll().then(() => routeFromHash());
+window.addEventListener('hashchange', () => routeFromHash());
 setInterval(refreshAll, 15000); // refresh từ API mỗi 15s

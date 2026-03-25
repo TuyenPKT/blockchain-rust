@@ -424,6 +424,7 @@
 
   window.showTestnet = function () {
     if (typeof hideAll === 'function') hideAll();
+    history.replaceState(null, '', '#testnet');
     var page = document.getElementById('testnet-page');
     if (page) page.classList.add('active');
     refreshTestnet();
