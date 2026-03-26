@@ -193,9 +193,9 @@ mempool_db/
 
 _Mục tiêu: PKTScan trở thành explorer production-ready — charts thật, search nâng cao, labels, mobile-friendly._
 
-- [ ] v18.0 — **Analytics Charts Web**: `src/pkt_analytics.rs` — fetch data từ addrdb/syncdb, tổng hợp: hashrate 7 ngày, tx/block, fee histogram; `GET /api/testnet/analytics?metric=hashrate|tx_volume|fees&window=N`; `web/js/charts-live.js` dùng Chart.js render line/bar chart realtime; thay sparkline cũ
-- [ ] v18.1 — **Address Labels**: `src/pkt_labels.rs` — `LabelDb` (~/.pkt/labeldb); label preset (miners, exchanges, burn address); `GET /api/testnet/label/:script` → {label, category, verified}; `POST /api/testnet/label` (admin role); hiển thị label trong address page + rich list thay hex
-- [ ] v18.2 — **Search Pro**: nâng cấp `GET /api/testnet/search?q=` — detect type (height/txid/address/label); fuzzy match label; unified result {type, data}; search bar trong `index.html` + các trang detail
+- [x] v18.0 — **Analytics Charts Web**: `src/pkt_analytics.rs` — fetch data từ addrdb/syncdb, tổng hợp: hashrate 7 ngày, tx/block, fee histogram; `GET /api/testnet/analytics?metric=hashrate|tx_volume|fees&window=N`; `web/js/charts-live.js` dùng Chart.js render line/bar chart realtime; thay sparkline cũ
+- [x] v18.1 — **Address Labels**: `src/pkt_labels.rs` — `LabelDb` (~/.pkt/labeldb); label preset (miners, exchanges, burn address); `GET /api/testnet/label/:script` → {label, category, verified}; `POST /api/testnet/label` (admin role); hiển thị label trong address page + rich list thay hex
+- [x] v18.2 — **Search Pro**: nâng cấp `GET /api/testnet/search?q=` — detect type (height/txid/address/label); fuzzy match label; unified result {type, data}; search bar trong `index.html` + các trang detail
 - [ ] v18.3 — **TX Detail Page**: `web/js/rx-detail.js` nâng cấp — hiển thị đầy đủ inputs/outputs table, số confirmations, fee rate (sat/vB), link từng input sang address page; dữ liệu từ UTXO db
 - [ ] v18.4 — **Block Detail Enhanced**: `web/js/block-detail.js` nâng cấp — danh sách TX trong block (paginated), tổng fee, tổng output, coinbase reward breakdown (miner + steward); link miner address
 - [ ] v18.5 — **Pagination Cursor**: tất cả list APIs dùng cursor-based thay offset (ổn định hơn khi chain tăng); `web/js/` dùng `?cursor=LAST_ID` thay `?offset=N`
