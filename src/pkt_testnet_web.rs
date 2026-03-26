@@ -371,6 +371,126 @@ async fn ps_mempool_histogram(State(ps): State<PathState>) -> impl IntoResponse 
     }
 }
 
+// ── TX detail handler ──────────────────────────────────────────────────────────
+
+/// GET /api/testnet/tx/:txid
+/// Tra cứu transaction từ mempool (full parse) hoặc UTXO db (unspent outputs only).
+async fn ps_tx_detail(
+    State(ps):    State<PathState>,
+    Path(txid):   Path<String>,
+) -> impl IntoResponse {
+    use crate::pkt_block_sync::read_tx_s;
+    use crate::pkt_utxo_sync::WireTxIn;
+    use std::io::Cursor;
+
+    let txid_lc = txid.trim().to_lowercase();
+
+    // ── 1. Mempool (raw bytes available → full parse) ────────────────────────
+    if let Some(mdb) = ps.open_mempool() {
+        if let Some((raw, fee_rate_msat, ts_ns)) = mdb.get_tx_raw(&txid_lc) {
+            let mut cur = Cursor::new(&raw);
+            if let Ok(wtx) = read_tx_s(&mut cur) {
+                let is_coinbase = wtx.is_coinbase();
+                let size        = raw.len() as u64;
+
+                let inputs: Vec<Value> = wtx.inputs.iter().map(|i: &WireTxIn| {
+                    if i.is_coinbase() {
+                        json!({"type": "coinbase"})
+                    } else {
+                        json!({
+                            "prev_txid": hex::encode(i.prev_txid),
+                            "prev_vout": i.prev_vout,
+                        })
+                    }
+                }).collect();
+
+                // Look up prev UTXOs to get input values
+                let mut inputs_rich: Vec<Value> = Vec::with_capacity(inputs.len());
+                let udb = ps.open().map(|(_, u)| u);
+                for i in &wtx.inputs {
+                    if i.is_coinbase() {
+                        inputs_rich.push(json!({"type": "coinbase"}));
+                        continue;
+                    }
+                    let utxo = udb.as_ref()
+                        .and_then(|u| u.get_utxo(&i.prev_txid, i.prev_vout).ok().flatten());
+                    let address = utxo.as_ref()
+                        .and_then(|u| script_hex_to_address(&hex::encode(&u.script_pubkey)));
+                    inputs_rich.push(json!({
+                        "prev_txid": hex::encode(i.prev_txid),
+                        "prev_vout": i.prev_vout,
+                        "value":     utxo.as_ref().map(|u| u.value),
+                        "address":   address,
+                    }));
+                }
+
+                let outputs: Vec<Value> = wtx.outputs.iter().enumerate().map(|(idx, o)| {
+                    let address = script_hex_to_address(&hex::encode(&o.script_pubkey));
+                    json!({
+                        "vout":    idx,
+                        "value":   o.value,
+                        "value_pkt": (o.value as f64) / 1_073_741_824.0,
+                        "address": address,
+                    })
+                }).collect();
+
+                let total_out: u64 = wtx.outputs.iter().map(|o| o.value).sum();
+                let ts_secs = ts_ns / 1_000_000_000;
+
+                return Json(json!({
+                    "txid":          txid_lc,
+                    "status":        "mempool",
+                    "is_coinbase":   is_coinbase,
+                    "size":          size,
+                    "fee_rate_msat_vb": fee_rate_msat,
+                    "timestamp":     if ts_secs > 0 { Value::Number(ts_secs.into()) } else { Value::Null },
+                    "inputs":        inputs_rich,
+                    "outputs":       outputs,
+                    "total_out":     total_out,
+                    "total_out_pkt": (total_out as f64) / 1_073_741_824.0,
+                    "block_height":  Value::Null,
+                    "confirmations": 0,
+                })).into_response();
+            }
+        }
+    }
+
+    // ── 2. UTXO scan (confirmed tx — unspent outputs only) ──────────────────
+    if let Some((_sdb, udb)) = ps.open() {
+        let utxos = udb.scan_tx_outputs(&txid_lc);
+        if !utxos.is_empty() {
+            let outputs: Vec<Value> = utxos.iter().map(|u| {
+                let address = script_hex_to_address(&hex::encode(&u.script_pubkey));
+                json!({
+                    "vout":      u.vout,
+                    "value":     u.value,
+                    "value_pkt": (u.value as f64) / 1_073_741_824.0,
+                    "address":   address,
+                    "spent":     false,
+                })
+            }).collect();
+            let total_out: u64 = utxos.iter().map(|u| u.value).sum();
+            return Json(json!({
+                "txid":          txid_lc,
+                "status":        "confirmed",
+                "is_coinbase":   null,
+                "size":          null,
+                "fee_rate_msat_vb": null,
+                "timestamp":     null,
+                "inputs":        [],
+                "outputs":       outputs,
+                "total_out":     total_out,
+                "total_out_pkt": (total_out as f64) / 1_073_741_824.0,
+                "block_height":  null,
+                "confirmations": null,
+                "note":          "confirmed tx — showing unspent outputs only",
+            })).into_response();
+        }
+    }
+
+    (StatusCode::NOT_FOUND, Json(json!({"error": "transaction not found"}))).into_response()
+}
+
 // ── Search handler ─────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -579,6 +699,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .route("/api/testnet/analytics",             get(ps_analytics))
+        .route("/api/testnet/tx/:txid",              get(ps_tx_detail))
         .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))
         .with_state(ps)

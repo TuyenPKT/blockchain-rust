@@ -128,6 +128,22 @@ impl MempoolDb {
         Ok(())
     }
 
+    /// Lấy raw bytes + fee_rate + ts_ns của một tx trong mempool.
+    /// Returns None nếu txid không tồn tại.
+    pub fn get_tx_raw(&self, txid_hex: &str) -> Option<(Vec<u8>, u64, u64)> {
+        let tx_key = format!("tx:{}", txid_hex);
+        let raw    = self.db.get(tx_key.as_bytes()).ok()??;
+        let ts_key = format!("ts:{}", txid_hex);
+        let (ts_ns, fee_rate) = match self.db.get(ts_key.as_bytes()).ok().flatten() {
+            Some(v) if v.len() == 16 => (
+                u64::from_le_bytes(v[..8].try_into().unwrap()),
+                u64::from_le_bytes(v[8..].try_into().unwrap()),
+            ),
+            _ => (0, 0),
+        };
+        Some((raw.to_vec(), fee_rate, ts_ns))
+    }
+
     /// Delete confirmed transactions (called when a block is applied).
     pub fn evict_confirmed(&self, txids: &[[u8; 32]]) -> Result<(), SyncError> {
         for txid in txids {

@@ -414,6 +414,23 @@ impl UtxoSyncDb {
 
     pub fn path(&self) -> &Path { &self.path }
 
+    /// Scan tất cả unspent outputs của một txid.
+    /// Key prefix: "utxo:{txid_hex}:"
+    pub fn scan_tx_outputs(&self, txid_hex: &str) -> Vec<UtxoEntry> {
+        use rocksdb::{Direction, IteratorMode};
+        let prefix = format!("utxo:{}:", txid_hex);
+        let iter   = self.db.iterator(IteratorMode::From(prefix.as_bytes(), Direction::Forward));
+        let mut out = Vec::new();
+        for item in iter {
+            let Ok((k, v)) = item else { continue };
+            if !k.starts_with(prefix.as_bytes()) { break; }
+            if let Ok(entry) = serde_json::from_slice::<UtxoEntry>(&v) {
+                out.push(entry);
+            }
+        }
+        out
+    }
+
     /// Raw DB access for iteration (used by explorer queries in pkt_explorer_api).
     pub fn raw_db(&self) -> &rocksdb::DB { &self.db }
 }
