@@ -75,6 +75,12 @@ impl AddrIndexDb {
         format!("atx:{}:{:016x}:{}", script_hex, height, txid_hex)
     }
 
+    /// Secondary index: height → txid (one key per tx per block, deduped by RocksDB).
+    /// Key: "htx:{height:016x}:{txid_hex}" → ""
+    fn htx_key(height: u64, txid_hex: &str) -> String {
+        format!("htx:{:016x}:{}", height, txid_hex)
+    }
+
     /// Rich list key: lower `u64::MAX - balance` sorts before higher values,
     /// so scanning prefix "rich:" from start gives highest-balance entries first.
     fn rich_key(balance: u64, script_hex: &str) -> String {
@@ -156,6 +162,9 @@ impl AddrIndexDb {
         height:  u64,
     ) -> Result<(), SyncError> {
         let txid_hex = hex::encode(txid);
+        // htx: secondary index — one write per tx (idempotent)
+        self.db.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
+            .map_err(|e| SyncError::Db(e.to_string()))?;
         for inp in &tx.inputs {
             if inp.is_coinbase() { continue; }
             if let Ok(Some(entry)) = utxo_db.get_utxo(&inp.prev_txid, inp.prev_vout) {
@@ -179,6 +188,9 @@ impl AddrIndexDb {
         height: u64,
     ) -> Result<(), SyncError> {
         let txid_hex = hex::encode(txid);
+        // htx: secondary index — one write per tx (idempotent)
+        self.db.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
+            .map_err(|e| SyncError::Db(e.to_string()))?;
         for out in &tx.outputs {
             if out.script_pubkey.is_empty() { continue; }
             let script = hex::encode(&out.script_pubkey);
@@ -188,6 +200,22 @@ impl AddrIndexDb {
             self.add_to_balance(&script, out.value)?;
         }
         Ok(())
+    }
+
+    /// TxIDs ở block height cụ thể, từ index htx: (O(log n + results)).
+    /// Trả empty Vec nếu htx: chưa được index (data cũ trước v18.4).
+    pub fn get_txids_at_height(&self, height: u64, limit: usize) -> Vec<String> {
+        let prefix = format!("htx:{:016x}:", height);
+        let mode   = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
+        let mut out = Vec::new();
+        for item in self.db.iterator(mode) {
+            if out.len() >= limit { break; }
+            let Ok((k, _)) = item else { continue };
+            let key = std::str::from_utf8(&k).unwrap_or("");
+            if !key.starts_with(&prefix) { break; }
+            out.push(key[prefix.len()..].to_string());
+        }
+        out
     }
 
     // ── Queries ────────────────────────────────────────────────────────────────

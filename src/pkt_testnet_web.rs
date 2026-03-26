@@ -371,6 +371,73 @@ async fn ps_mempool_histogram(State(ps): State<PathState>) -> impl IntoResponse 
     }
 }
 
+// ── Block detail handler ───────────────────────────────────────────────────────
+
+/// GET /api/testnet/block/:height
+/// Header đầy đủ + block_time + difficulty + hashrate + tx list từ htx: index.
+async fn ps_block_detail(
+    State(ps):      State<PathState>,
+    Path(height):   Path<u64>,
+) -> impl IntoResponse {
+    use crate::pkt_explorer_api::format_header_json;
+    use crate::pkt_wire::WireBlockHeader;
+    use crate::pkt_analytics::{bits_to_difficulty, estimate_hashrate_from};
+
+    let sdb = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           Json(json!({"error":"sync db not ready"}))).into_response(),
+        Some(d) => d,
+    };
+
+    // Load this block's header
+    let raw = match sdb.load_header(height) {
+        Ok(Some(r)) => r,
+        Ok(None)    => return (StatusCode::NOT_FOUND,
+                               Json(json!({"error":"block not found"}))).into_response(),
+        Err(e)      => return (StatusCode::INTERNAL_SERVER_ERROR,
+                               Json(json!({"error": e.to_string()}))).into_response(),
+    };
+    let hdr = match WireBlockHeader::from_bytes(&raw) {
+        Ok(h)  => h,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR,
+                          Json(json!({"error": format!("corrupt header: {:?}", e)}))).into_response(),
+    };
+
+    let mut block_json = format_header_json(&hdr, height);
+
+    // Block time vs previous block
+    let block_time_secs: Option<f64> = if height > 0 {
+        sdb.load_header(height - 1).ok().flatten()
+            .and_then(|r| WireBlockHeader::from_bytes(&r).ok())
+            .map(|prev| (hdr.timestamp as i64 - prev.timestamp as i64).max(0) as f64)
+    } else {
+        None
+    };
+
+    let difficulty = bits_to_difficulty(hdr.bits);
+    let hashrate   = block_time_secs.map(|bt| estimate_hashrate_from(difficulty, bt));
+
+    // TX list from htx: secondary index
+    let txids: Vec<String> = ps.open_addr()
+        .map(|adb| adb.get_txids_at_height(height, 200))
+        .unwrap_or_default();
+
+    // Tip height for confirmations
+    let tip = sdb.get_sync_height().ok().flatten().unwrap_or(height);
+    let confirmations = tip.saturating_sub(height) + 1;
+
+    if let Some(obj) = block_json.as_object_mut() {
+        obj.insert("block_time_secs".into(), block_time_secs.map(|v| json!(v)).unwrap_or(Value::Null));
+        obj.insert("difficulty".into(),      json!(difficulty));
+        obj.insert("hashrate".into(),        hashrate.map(|v| json!(v)).unwrap_or(Value::Null));
+        obj.insert("confirmations".into(),   json!(confirmations));
+        obj.insert("txids".into(),           json!(txids));
+        obj.insert("tx_count".into(),        json!(txids.len()));
+    }
+
+    Json(block_json).into_response()
+}
+
 // ── TX detail handler ──────────────────────────────────────────────────────────
 
 /// GET /api/testnet/tx/:txid
@@ -699,6 +766,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .route("/api/testnet/analytics",             get(ps_analytics))
+        .route("/api/testnet/block/:height",         get(ps_block_detail))
         .route("/api/testnet/tx/:txid",              get(ps_tx_detail))
         .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))
