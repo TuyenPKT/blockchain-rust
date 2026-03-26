@@ -14,7 +14,7 @@
 //!   GET /api/testnet/search?q=<query>
 //!   Response: {"query": "...", "results": [{type, label, value, meta}]}
 
-use crate::pkt_labels::{preset_by_address, LabelDb};
+use crate::pkt_labels::LabelDb;
 
 // ── Query kind ────────────────────────────────────────────────────────────────
 
