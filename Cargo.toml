@@ -3,6 +3,7 @@ members = [
     ".",
     "crates/pkt-sdk",
     "crates/pkt-api",
+    "crates/pkt-cli",
 ]
 resolver = "2"
 

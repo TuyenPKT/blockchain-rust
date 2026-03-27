@@ -4,6 +4,27 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v19.6 — PKT CLI (2026-03-27)
+
+### Added
+- Binary `pkt` — CLI tool query PKTScan từ terminal
+- Commands: `block <height>`, `tx <txid>`, `address <addr>`, `mempool`, `sync-status`
+- Command `config show` / `config set-node <url>`
+- Flag `--json` output raw JSON; mặc định pretty table
+- Flag `--node <url>` override node URL per-invocation
+- Config `~/.pkt/cli.toml` — lưu `node_url`, tự tạo nếu chưa có
+
+### Files
+- `crates/pkt-cli/Cargo.toml` — clap 4, reqwest 0.12 blocking, toml 0.8
+- `crates/pkt-cli/src/main.rs` — CLI dispatch, pretty-print, tests
+- `crates/pkt-cli/src/config.rs` — CliConfig, load/save, config_path
+- `Cargo.toml` — thêm `crates/pkt-cli` vào workspace
+
+### Tests
+- +14 tests (config × 4, CLI parse × 5, conversion × 2, print smoke × 3)
+
+---
+
 ## v19.5.1 — JS/TS SDK (2026-03-27)
 
 ### Added
