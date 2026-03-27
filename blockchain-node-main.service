@@ -1,5 +1,5 @@
 [Unit]
-Description=Blockchain Rust P2P Node (Mainnet)
+Description=OCEIF P2P Node (Mainnet)
 After=network.target
 Wants=network-online.target
 

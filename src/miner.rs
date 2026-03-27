@@ -259,7 +259,7 @@ impl Miner {
     pub fn run(&mut self) {
         println!();
         println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║              ⛏   Blockchain Rust Miner                      ║");
+        println!("║              ⛏   OCEIF Miner                                ║");
         println!("╚══════════════════════════════════════════════════════════════╝");
         println!();
         println!("  Reward address : {}", self.cfg.address);

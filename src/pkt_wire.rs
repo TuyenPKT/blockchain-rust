@@ -35,7 +35,84 @@ pub const HEADER_LEN:       usize = 24;   // magic(4) + cmd(12) + len(4) + check
 pub const MAX_PAYLOAD:      usize = 32 * 1024 * 1024;  // 32 MiB limit
 
 /// User-agent string gửi trong Version message.
-pub const USER_AGENT: &str = "/blockchain-rust:16.3/";
+pub const USER_AGENT: &str = "/blockchain-rust:19.3/";
+
+/// Maximum number of addresses in a single `addr` message.
+pub const MAX_ADDR_PER_MSG: usize = 1_000;
+
+// ── NetAddr ───────────────────────────────────────────────────────────────────
+
+/// Peer network address (Bitcoin/PKT `addr` message entry).
+///
+/// Wire layout per entry: `[timestamp 4 LE][services 8 LE][ip 16][port 2 BE]` = 30 bytes.
+/// The `ip` field is IPv4-mapped IPv6: `[0]*10 + [0xff, 0xff] + [a,b,c,d]` for IPv4.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetAddr {
+    /// Unix timestamp (seconds, when peer was last seen).
+    pub timestamp: u32,
+    /// Service bitmask (NODE_NETWORK = 1).
+    pub services:  u64,
+    /// IPv4-mapped-IPv6 address (16 bytes).
+    pub ip:        [u8; 16],
+    /// Port number — big-endian on the wire.
+    pub port:      u16,
+}
+
+impl NetAddr {
+    /// Parse from "1.2.3.4:8333" string (IPv4 only).
+    pub fn from_addr_str(s: &str) -> Option<Self> {
+        let (host, port_str) = s.rsplit_once(':')?;
+        let port: u16 = port_str.parse().ok()?;
+        let ip = ipv4_to_mapped(host)?;
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as u32)
+            .unwrap_or(0);
+        Some(NetAddr { timestamp, services: SERVICES_NODE, ip, port })
+    }
+
+    /// Format as "1.2.3.4:8333" (IPv4-mapped only; returns None for pure IPv6).
+    pub fn to_addr_string(&self) -> Option<String> {
+        // IPv4-mapped: [0]*10 + [0xff, 0xff] + [a,b,c,d]
+        if self.ip[..10] == [0u8; 10] && self.ip[10] == 0xff && self.ip[11] == 0xff {
+            let [a, b, c, d] = [self.ip[12], self.ip[13], self.ip[14], self.ip[15]];
+            Some(format!("{}.{}.{}.{}:{}", a, b, c, d, self.port))
+        } else {
+            None
+        }
+    }
+}
+
+/// Parse IPv4 dotted-decimal to IPv4-mapped IPv6 bytes.
+fn ipv4_to_mapped(host: &str) -> Option<[u8; 16]> {
+    let parts: Vec<u8> = host.split('.').filter_map(|p| p.parse().ok()).collect();
+    if parts.len() != 4 { return None; }
+    let mut ip = [0u8; 16];
+    ip[10] = 0xff;
+    ip[11] = 0xff;
+    ip[12..16].copy_from_slice(&parts);
+    Some(ip)
+}
+
+/// Write discovered peers to `~/.pkt/peers.txt` (one "ip:port" per line).
+pub fn save_peers(path: &std::path::Path, peers: &[NetAddr]) -> std::io::Result<()> {
+    let mut content = String::new();
+    for p in peers {
+        if let Some(s) = p.to_addr_string() {
+            content.push_str(&s);
+            content.push('\n');
+        }
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, content)
+}
+
+/// Default path for the peer list file.
+pub fn default_peers_path() -> std::path::PathBuf {
+    crate::pkt_testnet_web::home_path(".pkt/peers.txt")
+}
 
 // ── Inventory types ───────────────────────────────────────────────────────────
 
@@ -325,6 +402,8 @@ pub enum PktMsg {
         hash_stop:      [u8; 32],
     },
     Headers { headers: Vec<WireBlockHeader> },
+    GetAddr,
+    Addr { peers: Vec<NetAddr> },
     Unknown { command: [u8; COMMAND_LEN], payload: Vec<u8> },
 }
 
@@ -339,6 +418,8 @@ impl PktMsg {
             Self::GetData { .. }=> "getdata",
             Self::GetHeaders { .. } => "getheaders",
             Self::Headers { .. }=> "headers",
+            Self::GetAddr       => "getaddr",
+            Self::Addr { .. }   => "addr",
             Self::Unknown { .. }=> "unknown",
         }
     }
@@ -367,6 +448,8 @@ fn encode_payload(msg: &PktMsg) -> (&'static str, Vec<u8>) {
         PktMsg::GetHeaders { version, locator_hashes, hash_stop } =>
             ("getheaders", encode_getheaders_payload(*version, locator_hashes, hash_stop)),
         PktMsg::Headers { headers } => ("headers", encode_headers_payload(headers)),
+        PktMsg::GetAddr             => ("getaddr", vec![]),
+        PktMsg::Addr { peers }      => ("addr",    encode_addr_payload(peers)),
         PktMsg::Unknown { command, payload } => {
             let name = command_name(command);
             // SAFETY: returning a &'static str is a lie here, but name from command bytes is fine
@@ -458,6 +541,8 @@ pub fn decode_message(data: &[u8]) -> Result<(PktMsg, usize), WireError> {
         "getdata"    => decode_inv(payload, true)?,
         "getheaders" => decode_getheaders(payload)?,
         "headers"    => decode_headers(payload)?,
+        "getaddr"    => PktMsg::GetAddr,
+        "addr"       => decode_addr(payload)?,
         _            => PktMsg::Unknown {
             command: header.command,
             payload: payload.to_vec(),
@@ -531,6 +616,37 @@ fn decode_getheaders(data: &[u8]) -> Result<PktMsg, WireError> {
         data[off..off+32].try_into().unwrap()
     } else { [0u8; 32] };
     Ok(PktMsg::GetHeaders { version, locator_hashes, hash_stop })
+}
+
+fn encode_addr_payload(peers: &[NetAddr]) -> Vec<u8> {
+    let count = peers.len().min(MAX_ADDR_PER_MSG);
+    let mut buf = encode_varint(count as u64);
+    for p in &peers[..count] {
+        buf.extend_from_slice(&p.timestamp.to_le_bytes());
+        buf.extend_from_slice(&p.services.to_le_bytes());
+        buf.extend_from_slice(&p.ip);
+        buf.extend_from_slice(&p.port.to_be_bytes()); // port is big-endian on wire
+    }
+    buf
+}
+
+fn decode_addr(data: &[u8]) -> Result<PktMsg, WireError> {
+    let (count, mut off) = decode_varint(data)?;
+    let count = (count as usize).min(MAX_ADDR_PER_MSG);
+    let mut peers = Vec::with_capacity(count);
+    for _ in 0..count {
+        // Each entry: 4 + 8 + 16 + 2 = 30 bytes
+        if data.len() < off + 30 {
+            return Err(WireError::NotEnoughData { need: off + 30, have: data.len() });
+        }
+        let timestamp = u32::from_le_bytes(data[off..off+4].try_into().unwrap());
+        let services  = u64::from_le_bytes(data[off+4..off+12].try_into().unwrap());
+        let ip: [u8; 16] = data[off+12..off+28].try_into().unwrap();
+        let port      = u16::from_be_bytes(data[off+28..off+30].try_into().unwrap());
+        peers.push(NetAddr { timestamp, services, ip, port });
+        off += 30;
+    }
+    Ok(PktMsg::Addr { peers })
 }
 
 fn decode_headers(data: &[u8]) -> Result<PktMsg, WireError> {
@@ -978,6 +1094,109 @@ mod tests {
         if let PktMsg::GetHeaders { hash_stop, .. } = msg {
             assert_eq!(hash_stop, [0u8; 32]);
         } else { panic!(); }
+    }
+
+    // ── NetAddr ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn netaddr_from_addr_str_valid_ipv4() {
+        let na = NetAddr::from_addr_str("1.2.3.4:8333").unwrap();
+        assert_eq!(na.port, 8333);
+        assert_eq!(na.ip[10], 0xff);
+        assert_eq!(na.ip[11], 0xff);
+        assert_eq!(&na.ip[12..16], &[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn netaddr_from_addr_str_invalid() {
+        assert!(NetAddr::from_addr_str("notanaddr").is_none());
+        assert!(NetAddr::from_addr_str("300.1.2.3:8333").is_none());
+        assert!(NetAddr::from_addr_str(":8333").is_none());
+    }
+
+    #[test]
+    fn netaddr_to_addr_string_roundtrip() {
+        let s = "192.168.1.100:9000";
+        let na = NetAddr::from_addr_str(s).unwrap();
+        assert_eq!(na.to_addr_string().unwrap(), s);
+    }
+
+    #[test]
+    fn netaddr_to_addr_string_non_mapped_returns_none() {
+        let na = NetAddr {
+            timestamp: 0,
+            services:  1,
+            ip:        [0x20, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // ::1
+            port:      8333,
+        };
+        assert!(na.to_addr_string().is_none());
+    }
+
+    #[test]
+    fn roundtrip_getaddr() {
+        let bytes = encode_message(&PktMsg::GetAddr, &TESTNET_MAGIC);
+        let (msg, consumed) = decode_message(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert!(matches!(msg, PktMsg::GetAddr));
+    }
+
+    #[test]
+    fn roundtrip_addr_empty() {
+        let bytes = encode_message(&PktMsg::Addr { peers: vec![] }, &TESTNET_MAGIC);
+        let (msg, _) = decode_message(&bytes).unwrap();
+        if let PktMsg::Addr { peers } = msg { assert!(peers.is_empty()); } else { panic!(); }
+    }
+
+    #[test]
+    fn roundtrip_addr_two_peers() {
+        let peers = vec![
+            NetAddr::from_addr_str("10.0.0.1:8333").unwrap(),
+            NetAddr::from_addr_str("10.0.0.2:9000").unwrap(),
+        ];
+        let bytes = encode_message(&PktMsg::Addr { peers: peers.clone() }, &TESTNET_MAGIC);
+        let (msg, _) = decode_message(&bytes).unwrap();
+        if let PktMsg::Addr { peers: decoded } = msg {
+            assert_eq!(decoded.len(), 2);
+            assert_eq!(decoded[0].port, 8333);
+            assert_eq!(decoded[1].port, 9000);
+            assert_eq!(decoded[0].to_addr_string().unwrap(), "10.0.0.1:8333");
+            assert_eq!(decoded[1].to_addr_string().unwrap(), "10.0.0.2:9000");
+        } else { panic!(); }
+    }
+
+    #[test]
+    fn addr_port_is_big_endian_on_wire() {
+        // port 8333 = 0x208D; big-endian bytes = [0x20, 0x8D]
+        let na = NetAddr::from_addr_str("1.2.3.4:8333").unwrap();
+        let payload = encode_addr_payload(&[na]);
+        // payload: varint(1) + 30 bytes; port is at offset 1 + 4 + 8 + 16 = 29..31
+        let port_bytes = &payload[29..31];
+        assert_eq!(port_bytes, &8333u16.to_be_bytes());
+    }
+
+    #[test]
+    fn save_peers_writes_correct_lines() {
+        let dir = std::env::temp_dir().join(format!(
+            "pkt_wire_save_peers_test_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("peers.txt");
+        let peers = vec![
+            NetAddr::from_addr_str("1.1.1.1:8333").unwrap(),
+            NetAddr::from_addr_str("2.2.2.2:9000").unwrap(),
+        ];
+        save_peers(&path, &peers).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("1.1.1.1:8333"));
+        assert!(content.contains("2.2.2.2:9000"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn pkt_msg_getaddr_command_str() {
+        assert_eq!(PktMsg::GetAddr.command_str(), "getaddr");
+        assert_eq!((PktMsg::Addr { peers: vec![] }).command_str(), "addr");
     }
 
     #[test]

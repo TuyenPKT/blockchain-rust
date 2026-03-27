@@ -692,6 +692,26 @@ pub fn cmd_sync(args: &[String]) {
 
     println!("[sync] ✅  connected: agent=\"{}\" height={}", info.user_agent, info.start_height);
 
+    // Gửi GetAddr để discover thêm peers, lưu vào ~/.pkt/peers.txt
+    {
+        let peers_path = pkt_wire::default_peers_path();
+        if send_msg(&mut stream, PktMsg::GetAddr, cfg.magic).is_ok() {
+            let prev_timeout = stream.read_timeout().ok().flatten();
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+            if let Ok(PktMsg::Addr { peers }) = recv_msg(&mut stream, cfg.magic) {
+                match pkt_wire::save_peers(&peers_path, &peers) {
+                    Ok(()) => println!("[sync] 📡 discovered {} peers → {}", peers.len(), peers_path.display()),
+                    Err(e) => eprintln!("[sync] save_peers thất bại: {}", e),
+                }
+            }
+            if let Some(t) = prev_timeout {
+                let _ = stream.set_read_timeout(Some(t));
+            } else {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(cfg.recv_timeout_secs)));
+            }
+        }
+    }
+
     // Mở SyncDb, lấy start point
     let db = match SyncDb::open(&cfg.db_path) {
         Ok(d) => d,

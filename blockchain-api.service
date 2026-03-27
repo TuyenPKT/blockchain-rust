@@ -1,5 +1,5 @@
 [Unit]
-Description=Blockchain Rust REST API
+Description=OCEIF REST API
 After=network.target blockchain-node.service
 Wants=blockchain-node.service
 

@@ -1,6 +1,6 @@
-# CLAUDE.md — Blockchain Rust Project
+# CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v19.0 ✅**
+**Version hiện tại: v19.5.1 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt

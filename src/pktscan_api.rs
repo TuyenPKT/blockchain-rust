@@ -916,6 +916,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::address_detail::address_router()) // v14.7: embedded /static/address.js
         .merge(crate::ws_live::live_router())          // v14.8: embedded /static/live.js
         .merge(crate::pkt_testnet_web::testnet_web_router()) // v15.6: /api/testnet/* + /static/testnet.js
+        .merge(crate::pkt_rpc::rpc_router())               // v19.2: POST /rpc JSON-RPC 2.0
         .merge(crate::web_serve::web_router())             // web/: ServeDir /web/** + /address/:a + /block/:h + /rx/:id
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),

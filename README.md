@@ -1,6 +1,6 @@
-# 🦀 Blockchain Rust — 2009 → 2037+
+# Open Consensus Execution Interface Framework
 
-> Xây dựng một blockchain hoàn chỉnh từ Bitcoin 0.1 đến PKT Native Chain bằng Rust thuần — không dùng bất kỳ blockchain framework nào.
+> Xây dựng một blockchain hoàn chỉnh bằng Rust thuần — không dùng bất kỳ blockchain framework nào.
 
 **v15.8 ✅ · 130+ versions · 22 eras · 2023 tests · 0 warnings**
 
@@ -8,31 +8,31 @@
 
 ## Tổng quan
 
-Mỗi version build trực tiếp trên version trước, không viết lại từ đầu. Đọc code theo thứ tự là đọc lịch sử blockchain từ 2009 đến 2037+.
+Mỗi version build trực tiếp trên version trước, không viết lại từ đầu.
 
 ```
-Era 1  (2009)       — Bitcoin Genesis: Block, SHA-256, PoW, UTXO                          ✅
-Era 2  (2010–2013)  — Security & Wallets: ECDSA, P2P Node, Mempool, HD Wallet             ✅
-Era 3  (2014–2021)  — Scale & Script: SegWit, Lightning, Taproot, Multisig                ✅
-Era 4  (2018–2020)  — Layer 2 & Privacy: CTV, Confidential TX, CoinJoin, Atomic Swap      ✅
-Era 5  (2021)       — Advanced Consensus: ZK-SNARK, GHOST, BFT, Sharding                  ✅
-Era 6  (2022–2023)  — ZK & Rollup: ZK-Rollup, Optimistic, Recursive ZK, zkEVM            ✅
-Era 7  (2023–2025)  — AI & Programmable: WASM Contracts, Oracle, Governance, AI Agent    ✅
-Era 8  (2025–2027)  — Post-Quantum: Dilithium, SPHINCS+, ML-KEM, Hybrid Sigs             ✅
-Era 9  (2027–2030)  — Autonomous Chain: IBC, DID, FHE, Sovereign Rollup                  ✅
-Era 10 (2031+)      — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Metrics       ✅
-Era 11 (2032–2035)  — Optimization & Security: fee market, WAL, fuzz, monitoring          ✅
-Era 12 (2036+)      — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD            ✅
-Era 13 (2037+)      — Token Economy: ERC-20, EVM-lite, DeFi AMM, Staking, Economics       ✅
-Era 14              — PKTScan & API Integration: Block Explorer, WS, Search, Analytics    ✅
-Era 15              — Read-Only APIs + Zero-Trust: OpenAPI, GraphQL, SDK, CORS            ✅
-Era 16              — Auth Layer: API Key, Audit Log, EVM fix, Webhooks, GraphQL          ✅
-Era 17              — Write APIs + Production: TX/Token/Contract write, Deploy Config     ✅
-Era 18              — HD Wallet & UX: BIP39 restore, Ed25519 SLIP-0010                   ✅
-Era 19              — PKT Core: PacketCrypt chuẩn, Network Steward, PKT Address, Genesis  ✅
-Era 21              — UX & Frontend: TUI Dashboard, Wallet TUI, Web Frontend, QR Code     ✅
-Era 22              — PKT Testnet Integration: Wire Protocol, Sync, Explorer, PKT Node    ✅ v15.8
-Era 23              — Developer Experience: Devnet, Docs, E2E Tests, Hot Reload           ✅
+Era 1  — Bitcoin Genesis: Block, SHA-256, PoW, UTXO                          ✅
+Era 2  — Security & Wallets: ECDSA, P2P Node, Mempool, HD Wallet             ✅
+Era 3  — Scale & Script: SegWit, Lightning, Taproot, Multisig                ✅
+Era 4  — Layer 2 & Privacy: CTV, Confidential TX, CoinJoin, Atomic Swap      ✅
+Era 5  — Advanced Consensus: ZK-SNARK, GHOST, BFT, Sharding                  ✅
+Era 6  — ZK & Rollup: ZK-Rollup, Optimistic, Recursive ZK, zkEVM            ✅
+Era 7  — AI & Programmable: WASM Contracts, Oracle, Governance, AI Agent    ✅
+Era 8  — Post-Quantum: Dilithium, SPHINCS+, ML-KEM, Hybrid Sigs             ✅
+Era 9  — Autonomous Chain: IBC, DID, FHE, Sovereign Rollup                  ✅
+Era 10 — PKT Native Chain: PacketCrypt PoW, RocksDB, REST API, Metrics       ✅
+Era 11 — Optimization & Security: fee market, WAL, fuzz, monitoring          ✅
+Era 12 — Multi-threading & GPU: BLAKE3, rayon, OpenCL, CUDA, SIMD            ✅
+Era 13 — Token Economy: ERC-20, EVM-lite, DeFi AMM, Staking, Economics       ✅
+Era 14 — PKTScan & API Integration: Block Explorer, WS, Search, Analytics    ✅
+Era 15 — Read-Only APIs + Zero-Trust: OpenAPI, GraphQL, SDK, CORS            ✅
+Era 16 — Auth Layer: API Key, Audit Log, EVM fix, Webhooks, GraphQL          ✅
+Era 17 — Write APIs + Production: TX/Token/Contract write, Deploy Config     ✅
+Era 18 — HD Wallet & UX: BIP39 restore, Ed25519 SLIP-0010                   ✅
+Era 19 — PKT Core: PacketCrypt chuẩn, Network Steward, PKT Address, Genesis  ✅
+Era 21 — UX & Frontend: TUI Dashboard, Wallet TUI, Web Frontend, QR Code     ✅
+Era 22 — PKT Testnet Integration: Wire Protocol, Sync, Explorer, PKT Node    ✅ v15.8
+Era 23 — Developer Experience: Devnet, Docs, E2E Tests, Hot Reload           ✅
 ```
 
 ---

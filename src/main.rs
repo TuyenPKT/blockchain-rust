@@ -134,6 +134,9 @@ mod pkt_mempool_sync;
 mod pkt_analytics;
 mod pkt_health;
 mod pkt_export;
+mod block_storage;
+mod pkt_rpc;
+mod pkt_libp2p;
 mod pkt_labels;
 mod pkt_search;
 mod pkt_explorer_api;
@@ -335,8 +338,8 @@ fn print_help() {
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║              ⛓   Blockchain Rust  v6.3                     ║");
-    println!("║         Bitcoin 2009 → PKT Native Chain 2036+               ║");
+    println!("║   Open Consensus Execution Interface Framework               ║");
+    println!("║                    PKT Native Chain                         ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
     println!("  Commands:");

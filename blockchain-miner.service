@@ -1,5 +1,5 @@
 [Unit]
-Description=Blockchain Rust Miner
+Description=OCEIF Miner
 After=network.target blockchain-node.service
 Wants=blockchain-node.service
 

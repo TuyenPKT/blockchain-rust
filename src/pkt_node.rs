@@ -347,6 +347,24 @@ fn handle_peer(
                         }
                     }
                 }
+                PktMsg::GetAddr => {
+                    // Respond with Addr containing currently connected peers
+                    let peer_addrs: Vec<crate::pkt_wire::NetAddr> = {
+                        let locked = peers.lock().unwrap();
+                        locked.iter()
+                            .filter_map(|p| crate::pkt_wire::NetAddr::from_addr_str(&p.addr))
+                            .collect()
+                    };
+                    let count = peer_addrs.len();
+                    if let Err(e) = send_msg(&mut stream, PktMsg::Addr { peers: peer_addrs }, magic) {
+                        println!("[pkt-node] send addr failed {}: {}", addr, e);
+                        break;
+                    }
+                    println!("[pkt-node] → Addr({}) to {}", count, addr);
+                }
+                PktMsg::Addr { peers: received } => {
+                    println!("[pkt-node] addr from {}: {} entries", addr, received.len());
+                }
                 PktMsg::Inv { items } => {
                     println!("[pkt-node] inv from {}: {} items", addr, items.len());
                 }

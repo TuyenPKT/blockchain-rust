@@ -1,6 +1,6 @@
-# 🦀 Blockchain Rust — CONTEXT
+# Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v15.8 ✅ — 2023 tests (+ 24 integration) pass, 0 errors, 0 warnings**
+**Version hiện tại: v19.5.1 ✅ — 0 errors, 0 warnings**
 
 ---
 
@@ -209,12 +209,12 @@ _Mục tiêu: PKTScan trở thành explorer production-ready — charts thật, 
 _Mục tiêu: nâng cấp node production-grade + dev layer cho ecosystem — workspace, libp2p, JSON-RPC, flat file storage, JS/TS SDK, CLI tool, API playground._
 
 - [x] v19.0 — **Cargo Workspace**: `[workspace]` trong root `Cargo.toml`; `crates/pkt-sdk` (library: types, convert, error — 15+4 tests); `crates/pkt-api` (binary stub); toàn bộ code cũ giữ nguyên
-- [ ] v19.1 — **Flat File Block Storage**: `src/storage/block_files.rs` — `blk00000.dat` format (giống Bitcoin), append-only, mỗi file ~128MB; magic bytes prefix; `BlockFileIndex` RocksDB → file offset; tích hợp vào chain storage thay `Vec<Block>` in-memory
-- [ ] v19.2 — **JSON-RPC Bitcoin-compatible**: `src/rpc/server.rs` — JSON-RPC 2.0 over HTTP; methods: `getblock`, `getblockcount`, `getblockhash`, `getrawtransaction`, `sendrawtransaction`, `getmininginfo`, `getnetworkinfo`; port 8332 (mainnet) / 18332 (testnet)
-- [ ] v19.3 — **P2P Peer Discovery (GetAddr/Addr)**: `pkt_wire.rs` thêm `GetAddr` + `Addr { peers: Vec<NetAddr> }` vào `PktMsg`; `pkt_node.rs` respond `GetAddr` bằng danh sách `ConnectedPeer` hiện tại; `pkt_sync.rs` sau handshake gửi `GetAddr`, lưu peers vào `~/.pkt/peers.txt`; seed node `oceif.com:8333` trả IP clients cho node mới
-- [ ] v19.4 — **libp2p Transport**: `src/network/transport.rs` — thay raw TCP bằng `libp2p` (TCP + Noise encryption + Yamux multiplexing); giữ nguyên wire protocol PKT; `PeerManager` scoring + ban list; mDNS local discovery
-- [ ] v19.4 — **Cross-Compile Workflow**: `scripts/build-linux.sh` — `cargo build --release --target x86_64-unknown-linux-musl` trên macOS; static binary không cần glibc; `scripts/deploy.sh` scp binary lên VPS + restart service; `Makefile` targets: `make build`, `make deploy`, `make logs`
-- [ ] v19.5 — **JS/TS SDK** (`pkt-sdk-js`): npm package `@pktcore/sdk`; TypeScript types cho Block/TX/Address; `PktClient(url)` với methods: `getBlock`, `getTx`, `getAddress`, `getMempool`, `subscribe(event, cb)`; publish lên npmjs.com
+- [x] v19.1 — **Flat File Block Storage**: `src/block_storage.rs` — `blk00000.dat` format, magic `"PKT!"`, append-only, file mới khi đạt 128MB; `BlockStorage::append/get/read_at`; RocksDB index `blk:{height}` → `BlockLocation`; `BlockStorageError`; 17 tests
+- [x] v19.2 — **JSON-RPC Bitcoin-compatible**: `src/pkt_rpc.rs` — JSON-RPC 2.0 over HTTP `POST /rpc`; methods: `getblockcount`, `getblockhash`, `getblock` (by height hoặc hash), `getrawtransaction`, `getmininginfo`, `getnetworkinfo`, `sendrawtransaction` (stub); error codes Bitcoin-compatible (`-32601`, `-32602`, `-5`, `-32`); 19 tests
+- [x] v19.3 — **P2P Peer Discovery (GetAddr/Addr)**: `pkt_wire.rs` thêm `NetAddr`, `GetAddr`, `Addr { peers: Vec<NetAddr> }` vào `PktMsg`; encode 30 bytes/entry (port BE); `save_peers(~/.pkt/peers.txt)`; `pkt_node.rs` respond `GetAddr` bằng danh sách `ConnectedPeer` hiện tại; `pkt_sync.rs` sau handshake gửi `GetAddr`, nhận `Addr`, lưu peers; 10 tests mới
+- [x] v19.4 — **Cross-Compile Workflow**: `scripts/build-linux.sh` (musl static, ưu tiên `cross` → `musl-cross`); `scripts/deploy.sh` (2 mode: `--source` rsync+build-on-server, `--binary` scp-prebuilt); `Makefile` 16 targets: `build`, `build-linux`, `test`, `deploy`, `deploy-binary`, `logs`, `logs-api`, `status`, `sync-restart`, ...; config qua env `PKT_SERVER`, `PKT_USER`, `PKT_REMOTE`
+- [x] v19.5 — **libp2p Transport**: `src/pkt_libp2p.rs` — `PktP2pNode` (TCP + Noise + Yamux + mDNS + Identify + Ping via libp2p 0.53); `PeerManager` (score-based reputation, auto ban < threshold); `ScoreEvent`; optional feature `libp2p-transport` (không kéo libp2p vào build mặc định); 15 tests
+- [x] v19.5.1 — **JS/TS SDK** (`sdk-js/`): npm package `@pktcore/sdk v0.1.0`; `PktClient` — REST wrapper (getBlock, getTx, getAddress, getUtxos, getAddressTxs, getSummary, getMempool, getAnalytics, getRichList, search, exportCsvUrl); JSON-RPC methods (getBlockCount, getBlockHash, getMiningInfo, rpc()); WebSocket subscribe (block/tx/mempool, auto-reconnect 3s); `types.ts` — Block/Tx/AddressInfo/Utxo/NetworkSummary/...; `utils.ts` — pakletsToPkt, fmtHashrate, shortHash, timeAgo; TypeScript strict, builds to `dist/`
 - [ ] v19.6 — **PKT CLI tool** (`pkt-cli`): binary `pkt` độc lập; commands: `pkt block <height>`, `pkt tx <txid>`, `pkt address <addr>`, `pkt mempool`, `pkt sync-status`; output JSON hoặc pretty table; config file `~/.pkt/cli.toml` (node URL)
 - [ ] v19.7 — **API Playground**: `web/playground/index.html` — interactive docs; dropdown chọn endpoint; input params; "Run" button gọi API thật; syntax-highlighted JSON response; chia sẻ URL với params; thay thế Swagger UI tĩnh
 - [ ] v19.8 — **Webhook Management UI**: `web/webhooks/index.html` — list/create/delete webhooks qua UI; test webhook với payload mẫu; log delivery history; auth bằng API key

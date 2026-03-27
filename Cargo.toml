@@ -61,6 +61,9 @@ crossterm = "0.27"
 qrcode = "0.14"
 # v16.3: Hot Reload Dev Mode — filesystem watcher
 notify = "6"
+# v19.5: libp2p P2P transport (TCP + Noise + Yamux + mDNS)
+libp2p = { version = "0.53", features = ["tcp", "noise", "yamux", "mdns", "tokio", "identify", "ping", "macros"] }
+futures = "0.3"
 
 [features]
 default = []

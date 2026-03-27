@@ -1,6 +1,171 @@
-# CHANGELOG — Blockchain Rust
+# CHANGELOG — Open Consensus Execution Interface Framework
 
 Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotcha.
+
+---
+
+## v19.5.1 — JS/TS SDK (2026-03-27)
+
+### Added
+- `sdk-js/` — npm package `@pktcore/sdk v0.1.0` (TypeScript strict):
+  - `PktClient(baseUrl)` — REST + RPC + WebSocket client:
+    - Block: `getBlock(height)`, `getBlocks(page, limit)`
+    - TX: `getTx(txid)`, `getRecentTxs()`
+    - Address: `getAddress()`, `getUtxos()`, `getAddressTxs()`, `exportAddressCsvUrl()`
+    - Network: `getSummary()`, `getSyncStatus()`, `getMempool()`, `getFeeHistogram()`, `getAnalytics()`, `getRichList()`, `getLabel()`, `getHealth()`, `search()`
+    - JSON-RPC: `rpc(method, params)`, `getBlockCount()`, `getBlockHash()`, `getMiningInfo()`
+    - WebSocket: `subscribe(event, cb)` → `Unsubscribe`; auto-reconnect 3s
+  - `types.ts` — Block, Tx, TxInput, TxOutput, AddressInfo, Utxo, NetworkSummary, SyncStatus, MempoolTx, HealthStatus, RpcRequest/Response, WsEvent, ...
+  - `utils.ts` — `pakletsToPkt`, `pktToPaklets`, `fmtPkt`, `fmtHashrate`, `shortHash`, `shortAddr`, `timeAgo`
+  - `PktApiError(status, message)` — typed error class
+  - Build: `npm run build` → `dist/` (JS + `.d.ts` + sourcemaps)
+
+### Files
+- `sdk-js/src/index.ts` — re-export all
+- `sdk-js/src/client.ts` — PktClient
+- `sdk-js/src/types.ts` — TypeScript interfaces
+- `sdk-js/src/utils.ts` — utility functions
+- `sdk-js/package.json` + `tsconfig.json`
+
+---
+
+## v19.5 — libp2p Transport (2026-03-27)
+
+### Added
+- `src/pkt_libp2p.rs` — libp2p P2P transport layer (song song với pkt_node/pkt_sync):
+  - `PktP2pNode` — Swarm với TCP + Noise (X25519) + Yamux + mDNS + Identify + Ping
+  - `PeerManager` — score-based reputation: auto ban khi score < −100 (1h)
+  - `ScoreEvent` — +10 ValidBlock, +5 Connected, −10 Timeout, −20 Spam, −50 InvalidData
+  - `PeerInfo { addr, score, banned_until, first_seen }`
+- `Cargo.toml` — thêm `libp2p = "0.53"` + `futures = "0.3"`
+
+### Files
+- `src/pkt_libp2p.rs` — file mới
+- `src/main.rs` — thêm `mod pkt_libp2p;`
+- `Cargo.toml` — thêm libp2p + futures
+
+### Tests
+- +15 tests: score deltas, add/remove/count, auto-ban, active_peers, cumulative events
+
+---
+
+## v19.4 — Cross-Compile Workflow (2026-03-27)
+
+### Added
+- `scripts/build-linux.sh` — cross-compile static Linux x86_64 binary (musl):
+  - Ưu tiên `cross` (Docker-based) → fallback `native musl target + musl-cross linker`
+  - Hướng dẫn cài đặt rõ ràng khi thiếu toolchain
+  - In SHA256 + size sau khi build thành công
+- `scripts/deploy.sh` — deploy lên VPS oceif.com:
+  - `--source` (default): rsync source → `cargo build --release` trên server → restart services
+  - `--binary`: gọi `build-linux.sh` → `scp` binary → restart services
+  - Config qua env: `PKT_SERVER`, `PKT_USER`, `PKT_REMOTE`
+  - Auto-detect và restart `pkt-sync`, `blockchain-api` nếu enabled
+- `Makefile` — 16 targets:
+  - `build` / `release` / `build-linux` / `test`
+  - `deploy` / `deploy-binary`
+  - `logs` / `logs-api` / `logs-node`
+  - `status` / `sync-start` / `sync-stop` / `sync-restart`
+  - `api-start` / `api-stop` / `api-restart`
+  - `help` (default target — màu, auto-generated từ `## comments`)
+- `deploy.sh` (root) giữ nguyên để backward-compat
+
+### Files
+- `scripts/build-linux.sh` — file mới (chmod +x)
+- `scripts/deploy.sh` — file mới (chmod +x)
+- `Makefile` — file mới
+
+### Gotcha
+- Tránh dùng `USER` làm Makefile variable (bị override bởi shell env) — dùng `PKT_USER`
+
+---
+
+## v19.3 — P2P Peer Discovery (GetAddr/Addr) (2026-03-27)
+
+### Added
+- **`pkt_wire.rs`** — `NetAddr`, `GetAddr`, `Addr` types:
+  - `NetAddr { timestamp, services, ip: [u8;16], port }` — IPv4-mapped IPv6 format
+  - `NetAddr::from_addr_str("1.2.3.4:8333")` / `to_addr_string()`
+  - `PktMsg::GetAddr` (empty payload) + `PktMsg::Addr { peers: Vec<NetAddr> }`
+  - Encode: `[varint count][timestamp 4 LE][services 8 LE][ip 16][port 2 BE]` × N = 30 bytes/entry
+  - Decode: validate min 30 bytes/entry, cap tối đa `MAX_ADDR_PER_MSG = 1000`
+  - `save_peers(path, peers)` — ghi "ip:port\n" vào file, tạo parent dir nếu chưa có
+  - `default_peers_path()` → `~/.pkt/peers.txt`
+  - `USER_AGENT` cập nhật: `/blockchain-rust:19.3/`
+- **`pkt_node.rs`** — respond `GetAddr`:
+  - `handle_peer()` xử lý `PktMsg::GetAddr`: collect tất cả `ConnectedPeer.addr` → convert → gửi `Addr`
+  - Log `[pkt-node] → Addr(N) to <addr>`
+  - Nhận `Addr` từ peer: log entry count
+- **`pkt_sync.rs`** — discover peers sau handshake:
+  - Sau handshake thành công, gửi `GetAddr` ngay lập tức
+  - Set read timeout 5 giây, đợi `Addr` response
+  - Nếu nhận được: `save_peers(~/.pkt/peers.txt, peers)`, log count
+  - Restore timeout về `cfg.recv_timeout_secs` sau đó
+
+### Files
+- `src/pkt_wire.rs` — thêm NetAddr, GetAddr/Addr encode/decode, save_peers, default_peers_path
+- `src/pkt_node.rs` — handle GetAddr trong message loop
+- `src/pkt_sync.rs` — send GetAddr + save peers sau handshake
+
+### Tests
+- +10 tests trong pkt_wire: netaddr_from_addr_str, netaddr_to_addr_string, roundtrip_getaddr, roundtrip_addr_empty, roundtrip_addr_two_peers, addr_port_is_big_endian, save_peers_writes_correct_lines, pkt_msg_getaddr_command_str, netaddr_invalid, netaddr_non_mapped
+
+---
+
+## v19.2 — JSON-RPC 2.0 Bitcoin-compatible (2026-03-27)
+
+### Added
+- `src/pkt_rpc.rs` — JSON-RPC 2.0 endpoint `POST /rpc`:
+  - `getblockcount` → tip height
+  - `getblockhash [height]` → block hash hex
+  - `getblock [hash, verbosity?]` — accept hash string hoặc height number; verbosity=0 trả hex, verbosity=1/2 trả JSON
+  - `getrawtransaction [txid]` — tìm trong mempool, trả JSON
+  - `getmininginfo` → `{ blocks, difficulty, networkhashps, chain }`
+  - `getnetworkinfo` → `{ version, subversion, protocolversion, connections, relayfee }`
+  - `sendrawtransaction` → ERR_UNSUPPORTED stub (−32)
+  - Error codes Bitcoin-compatible: `−32700` parse, `−32601` method not found, `−32602` invalid params, `−32603` internal, `−5` block not found, `−32` unsupported
+  - `RpcState { sync_path, mempool_path }` — dùng default paths từ `pkt_testnet_web` + `pkt_mempool_sync`
+- Route `POST /rpc` đăng ký trong `pktscan_api.rs`
+
+### Files
+- `src/pkt_rpc.rs` — file mới
+- `src/main.rs` — thêm `mod pkt_rpc;`
+- `src/pktscan_api.rs` — thêm `.merge(crate::pkt_rpc::rpc_router())`
+
+### Tests
+- +19 tests: error codes, getblockcount (empty + data), getblockhash, getblock (height/hash/hex/verbosity/not_found), getrawtransaction, getmininginfo, getnetworkinfo, sendrawtransaction, unknown method
+
+---
+
+## v19.1 — Flat File Block Storage (2026-03-27)
+
+### Added
+- `src/block_storage.rs` — append-only flat file storage cho `Block`:
+  - Format: `[magic:"PKT!" 4B][block_size 4B LE][block_json]` mỗi record
+  - Files: `blk00000.dat`, `blk00001.dat`... tạo file mới khi đạt `MAX_FILE_SIZE` (128 MB)
+  - `BlockStorage::open(dir)` / `open_with_max(dir, max)` — mở hoặc tạo storage
+  - `append(block)` → `BlockLocation` — ghi block, cập nhật index + tip
+  - `get(height)` → `Option<Block>` — đọc qua index
+  - `read_at(loc)` — đọc trực tiếp theo vị trí, validate magic
+  - `get_location(height)` → `Option<BlockLocation>`
+  - `get_tip_height()`, `count()`
+  - `BlockLocation { file_num, offset, size }` — serialize 16 bytes
+  - `BlockStorageError` — Io/Db/Json/Corrupt/NotFound
+- RocksDB index (`{data_dir}/index`):
+  - `blk:{height:016x}` → 16 bytes location
+  - `meta:tip`, `meta:cur_file`, `meta:cur_offset`
+
+### Files
+- `src/block_storage.rs` — file mới
+- `src/main.rs` — thêm `mod block_storage;`
+
+### Tests
+- +17 tests: location roundtrip, empty storage, append/read, file split, magic validation, error display
+
+### Gotcha
+- `append()` dùng `Mutex<()>` nội bộ — thread-safe cho concurrent writes
+- `open_with_max(dir, 50)` để test file split với kích thước nhỏ
+- Chưa tích hợp vào `chain.rs` (giữ `Vec<Block>` in-memory như cũ) — migration là bước riêng
 
 ---
 
