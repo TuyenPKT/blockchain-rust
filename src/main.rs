@@ -132,6 +132,8 @@ mod pkt_addr_index;
 mod pkt_reorg;
 mod pkt_mempool_sync;
 mod pkt_analytics;
+mod pkt_health;
+mod pkt_export;
 mod pkt_labels;
 mod pkt_search;
 mod pkt_explorer_api;

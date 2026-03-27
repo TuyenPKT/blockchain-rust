@@ -1,11 +1,11 @@
 # CLAUDE.md — Blockchain Rust Project
 
-**Version hiện tại: v18.0 ✅**
+**Version hiện tại: v19.0 ✅**
 
 ## Quy tắc cốt lõi
-
+- Bắt buộc dùng Tiếng Việt
 - Không sửa code cũ, chỉ extend. Mỗi version = 1 file mới + update `main.rs`
-- Build sạch: `cargo build/test` không warnings
+- Build sạch: `cargo build/test` không warnings, là sửa lỗi, không được phép xoá warnings
 - Cập nhật `CONTEXT.md` + `CHANGELOG.md` sau mỗi version
 - Không `unwrap()` / `panic` trong production
 - Không hardcode secret, không raw SQL, validate tại API boundary
@@ -145,6 +145,7 @@ index.html                  ← embedded via include_bytes! — rebuild khi sử
 ### Era 25 — Analytics & Polish (v18.x) ← ĐANG LÀM
 
 ~~v18.0 — Analytics Charts Web~~ ✅
+~~v18.1 — v18.6, v18.8~~ ✅
 v18.1 — Address Labels: LabelDb, preset miners/exchanges
 v18.2 — Search Pro: detect type, fuzzy label
 v18.3 — TX Detail Page: inputs/outputs, fee rate, confirmations
@@ -154,11 +155,12 @@ v18.6 — Mobile API: /api/testnet/summary
 v18.8 — Health & Uptime: /api/health/detailed
 v18.9 — Data Export: CSV streaming
 ~~v18.7 — Mainnet Switch~~ — hoãn vô thời hạn
+~~v18.9 — Data Export~~ ✅
 
 ### Era 26 — PKTCore Production + Dev Layer (v19.x)
 
-v19.0 Cargo Workspace · v19.1 Flat File Storage · v19.2 JSON-RPC · v19.3 libp2p
-v19.4 Cross-Compile · v19.5 JS/TS SDK · v19.6 PKT CLI · v19.7 API Playground
+v19.0 Cargo Workspace · v19.1 Flat File Storage · v19.2 JSON-RPC · v19.3 GetAddr/Addr
+v19.4 libp2p · v19.5 JS/TS SDK · v19.6 PKT CLI · v19.7 API Playground
 v19.8 Webhook UI · v19.9 Developer Portal
 
 ### Era 27 — PKTScan Desktop App (v20.x)

@@ -196,22 +196,23 @@ _Mục tiêu: PKTScan trở thành explorer production-ready — charts thật, 
 - [x] v18.0 — **Analytics Charts Web**: `src/pkt_analytics.rs` — fetch data từ addrdb/syncdb, tổng hợp: hashrate 7 ngày, tx/block, fee histogram; `GET /api/testnet/analytics?metric=hashrate|tx_volume|fees&window=N`; `web/js/charts-live.js` dùng Chart.js render line/bar chart realtime; thay sparkline cũ
 - [x] v18.1 — **Address Labels**: `src/pkt_labels.rs` — `LabelDb` (~/.pkt/labeldb); label preset (miners, exchanges, burn address); `GET /api/testnet/label/:script` → {label, category, verified}; `POST /api/testnet/label` (admin role); hiển thị label trong address page + rich list thay hex
 - [x] v18.2 — **Search Pro**: nâng cấp `GET /api/testnet/search?q=` — detect type (height/txid/address/label); fuzzy match label; unified result {type, data}; search bar trong `index.html` + các trang detail
-- [ ] v18.3 — **TX Detail Page**: `web/js/rx-detail.js` nâng cấp — hiển thị đầy đủ inputs/outputs table, số confirmations, fee rate (sat/vB), link từng input sang address page; dữ liệu từ UTXO db
-- [ ] v18.4 — **Block Detail Enhanced**: `web/js/block-detail.js` nâng cấp — danh sách TX trong block (paginated), tổng fee, tổng output, coinbase reward breakdown (miner + steward); link miner address
-- [ ] v18.5 — **Pagination Cursor**: tất cả list APIs dùng cursor-based thay offset (ổn định hơn khi chain tăng); `web/js/` dùng `?cursor=LAST_ID` thay `?offset=N`
-- [ ] v18.6 — **Mobile API**: `GET /api/testnet/summary` — single endpoint trả tất cả thông tin trang chủ (height/hashrate/mempool/rich_top5) trong 1 request; giảm round-trip cho mobile/low-bandwidth
+- [x] v18.3 — **TX Detail Page**: `web/js/rx-detail.js` nâng cấp — hiển thị đầy đủ inputs/outputs table, số confirmations, fee rate (sat/vB), link từng input sang address page; dữ liệu từ UTXO db
+- [x] v18.4 — **Block Detail Enhanced**: `web/js/block-detail.js` nâng cấp — danh sách TX trong block (paginated), tổng fee, tổng output, coinbase reward breakdown (miner + steward); link miner address
+- [x] v18.5 — **Pagination Cursor**: tất cả list APIs dùng cursor-based thay offset (ổn định hơn khi chain tăng); `web/js/` dùng `?cursor=LAST_ID` thay `?offset=N`
+- [x] v18.6 — **Mobile API**: `GET /api/testnet/summary` — single endpoint trả tất cả thông tin trang chủ (height/hashrate/mempool/rich_top5) trong 1 request; giảm round-trip cho mobile/low-bandwidth
 - [ ] v18.7 — ~~**Mainnet Switch**~~ — _hoãn vô thời hạn_
-- [ ] v18.8 — **Health & Uptime**: `src/pkt_health.rs` — `HealthDb` track: last_block_age, sync_lag, peer_count, db_size; `GET /api/health/detailed`; status page `web/health.html` với auto-refresh 10s; alert nếu block_age > 10 phút
-- [ ] v18.9 — **Data Export**: `GET /api/testnet/address/:s/export.csv` — tx history dưới dạng CSV; `GET /api/testnet/blocks/export.csv?from=H&to=H`; streaming response (không buffer toàn bộ vào RAM)
+- [x] v18.8 — **Health & Uptime**: `src/pkt_health.rs` — `HealthDb` track: last_block_age, sync_lag, peer_count, db_size; `GET /api/health/detailed`; status page `web/health.html` với auto-refresh 10s; alert nếu block_age > 10 phút
+- [x] v18.9 — **Data Export**: `GET /api/testnet/address/:s/export.csv` — tx history dưới dạng CSV; `GET /api/testnet/blocks/export.csv?from=H&to=H`; streaming response (không buffer toàn bộ vào RAM)
 
 ### Era 26 — PKTCore Production + Dev Layer (v19.x)
 
 _Mục tiêu: nâng cấp node production-grade + dev layer cho ecosystem — workspace, libp2p, JSON-RPC, flat file storage, JS/TS SDK, CLI tool, API playground._
 
-- [ ] v19.0 — **Cargo Workspace**: tách `blockchain-rust` thành 3 crate: `pkt-core` (node binary), `pkt-sdk` (library, publish crates.io), `pkt-api` (REST server riêng); `Cargo.toml` workspace root; giữ nguyên toàn bộ code hiện tại, chỉ restructure
+- [x] v19.0 — **Cargo Workspace**: `[workspace]` trong root `Cargo.toml`; `crates/pkt-sdk` (library: types, convert, error — 15+4 tests); `crates/pkt-api` (binary stub); toàn bộ code cũ giữ nguyên
 - [ ] v19.1 — **Flat File Block Storage**: `src/storage/block_files.rs` — `blk00000.dat` format (giống Bitcoin), append-only, mỗi file ~128MB; magic bytes prefix; `BlockFileIndex` RocksDB → file offset; tích hợp vào chain storage thay `Vec<Block>` in-memory
 - [ ] v19.2 — **JSON-RPC Bitcoin-compatible**: `src/rpc/server.rs` — JSON-RPC 2.0 over HTTP; methods: `getblock`, `getblockcount`, `getblockhash`, `getrawtransaction`, `sendrawtransaction`, `getmininginfo`, `getnetworkinfo`; port 8332 (mainnet) / 18332 (testnet)
-- [ ] v19.3 — **libp2p Transport**: `src/network/transport.rs` — thay raw TCP bằng `libp2p` (TCP + Noise encryption + Yamux multiplexing); giữ nguyên wire protocol PKT; `PeerManager` scoring + ban list; mDNS local discovery
+- [ ] v19.3 — **P2P Peer Discovery (GetAddr/Addr)**: `pkt_wire.rs` thêm `GetAddr` + `Addr { peers: Vec<NetAddr> }` vào `PktMsg`; `pkt_node.rs` respond `GetAddr` bằng danh sách `ConnectedPeer` hiện tại; `pkt_sync.rs` sau handshake gửi `GetAddr`, lưu peers vào `~/.pkt/peers.txt`; seed node `oceif.com:8333` trả IP clients cho node mới
+- [ ] v19.4 — **libp2p Transport**: `src/network/transport.rs` — thay raw TCP bằng `libp2p` (TCP + Noise encryption + Yamux multiplexing); giữ nguyên wire protocol PKT; `PeerManager` scoring + ban list; mDNS local discovery
 - [ ] v19.4 — **Cross-Compile Workflow**: `scripts/build-linux.sh` — `cargo build --release --target x86_64-unknown-linux-musl` trên macOS; static binary không cần glibc; `scripts/deploy.sh` scp binary lên VPS + restart service; `Makefile` targets: `make build`, `make deploy`, `make logs`
 - [ ] v19.5 — **JS/TS SDK** (`pkt-sdk-js`): npm package `@pktcore/sdk`; TypeScript types cho Block/TX/Address; `PktClient(url)` với methods: `getBlock`, `getTx`, `getAddress`, `getMempool`, `subscribe(event, cb)`; publish lên npmjs.com
 - [ ] v19.6 — **PKT CLI tool** (`pkt-cli`): binary `pkt` độc lập; commands: `pkt block <height>`, `pkt tx <txid>`, `pkt address <addr>`, `pkt mempool`, `pkt sync-status`; output JSON hoặc pretty table; config file `~/.pkt/cli.toml` (node URL)

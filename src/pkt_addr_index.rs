@@ -218,6 +218,33 @@ impl AddrIndexDb {
         out
     }
 
+    /// TxIDs gần nhất, newest-first. Dùng cho list API cursor-based (v18.5).
+    /// `before_height`: None = từ tip, Some(h) = chỉ lấy blocks < h (cursor exclusive).
+    pub fn get_recent_txids(&self, before_height: Option<u64>, limit: usize) -> Vec<(u64, String)> {
+        let seek_buf = match before_height {
+            None    => b"htx:\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff".to_vec(),
+            Some(h) => format!("htx:{:016x}:", h).into_bytes(),
+        };
+        let iter = self.db.iterator(IteratorMode::From(&seek_buf, Direction::Reverse));
+        let mut out = Vec::new();
+        for item in iter {
+            if out.len() >= limit { break; }
+            let Ok((k, _)) = item else { continue };
+            let key = std::str::from_utf8(&k).unwrap_or("");
+            if !key.starts_with("htx:") { break; }
+            let mut parts = key.splitn(3, ':');
+            let _ = parts.next();
+            let h = match parts.next().and_then(|s| u64::from_str_radix(s, 16).ok()) {
+                Some(h) => h, None => continue,
+            };
+            let txid = match parts.next() {
+                Some(t) => t.to_string(), None => continue,
+            };
+            out.push((h, txid));
+        }
+        out
+    }
+
     // ── Queries ────────────────────────────────────────────────────────────────
 
     /// Tx history for one address (oldest-first).

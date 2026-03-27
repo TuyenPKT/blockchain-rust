@@ -31,7 +31,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::pkt_addr_index::AddrIndexDb;
-use crate::pkt_explorer_api::{testnet_router, HeaderListParams, TestnetState};
+use crate::pkt_explorer_api::{testnet_router, HeaderCursorParams, TestnetState};
 use crate::pkt_labels::LabelDb;
 use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_sync::SyncDb;
@@ -131,15 +131,22 @@ async fn ps_stats(State(ps): State<PathState>) -> impl IntoResponse {
 
 async fn ps_headers(
     State(ps): State<PathState>,
-    Query(params): Query<HeaderListParams>,
+    Query(params): Query<HeaderCursorParams>,
 ) -> impl IntoResponse {
     match ps.open() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
         Some((sdb, _udb)) => {
             match crate::pkt_explorer_api::query_headers(
-                &sdb, params.limit.min(100), params.offset,
+                &sdb, params.limit.min(100), params.cursor,
             ) {
-                Ok((headers, tip)) => Json(json!({"headers": headers, "tip": tip})).into_response(),
+                Ok((headers, tip)) => {
+                    let next_cursor = headers.last().and_then(|h| h["height"].as_u64());
+                    Json(json!({
+                        "headers":     headers,
+                        "tip":         tip,
+                        "next_cursor": next_cursor,
+                    })).into_response()
+                }
                 Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
             }
         }
@@ -692,6 +699,223 @@ async fn ps_label(
     }
 }
 
+// ── Health handler (v18.8) ─────────────────────────────────────────────────────
+
+/// GET /api/health/detailed
+async fn ps_health(State(ps): State<PathState>) -> impl IntoResponse {
+    let status = crate::pkt_health::query_health(
+        &ps.sync_path,
+        &ps.utxo_path,
+        &ps.addr_path,
+        &ps.mempool_path,
+    );
+    let code = if status.ok {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (code, Json(serde_json::to_value(status).unwrap_or_default())).into_response()
+}
+
+// ── Summary handler (v18.6) ────────────────────────────────────────────────────
+
+/// GET /api/testnet/summary
+/// Single-request home page data: height + hashrate + mempool + rich top 5.
+/// Optimised for mobile/low-bandwidth (1 round-trip instead of 5+).
+async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
+    use crate::pkt_analytics::{load_recent_headers, bits_to_difficulty, estimate_hashrate_from};
+
+    // ── Chain stats ────────────────────────────────────────────────────────────
+    let (height, tip_hash, synced, utxo_count, total_value_sat) =
+        match (SyncDb::open_read_only(&ps.sync_path).ok(), ps.open()) {
+            (Some(sdb), Some((_, udb))) => {
+                let h      = sdb.get_sync_height().ok().flatten().unwrap_or(0);
+                let tip    = sdb.get_tip_hash().ok().flatten()
+                    .map(hex::encode)
+                    .unwrap_or_else(|| "0".repeat(64));
+                let synced = h > 0;
+                let cnt    = udb.count_utxos().unwrap_or(0);
+                let val    = udb.total_value().unwrap_or(0);
+                (h, tip, synced, cnt, val)
+            }
+            _ => (0u64, "0".repeat(64), false, 0u64, 0u64),
+        };
+
+    // ── Hashrate & block_time avg (last 10 blocks) ─────────────────────────────
+    let (hashrate, block_time_avg) = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        None => (0.0f64, 0.0f64),
+        Some(sdb) => {
+            let headers = load_recent_headers(&sdb, 11).unwrap_or_default();
+            if headers.len() < 2 {
+                (0.0, 0.0)
+            } else {
+                let mut total_hr = 0.0f64;
+                let mut total_bt = 0.0f64;
+                let n = (headers.len() - 1) as f64;
+                for i in 1..headers.len() {
+                    let (_, ref cur)  = headers[i];
+                    let (_, ref prev) = headers[i - 1];
+                    let dt   = (cur.timestamp as i64 - prev.timestamp as i64).max(1) as f64;
+                    let diff = bits_to_difficulty(cur.bits);
+                    total_hr += estimate_hashrate_from(diff, dt);
+                    total_bt += dt;
+                }
+                (total_hr / n, total_bt / n)
+            }
+        }
+    };
+
+    // ── Mempool ────────────────────────────────────────────────────────────────
+    let (mempool_count, mempool_top_fee_msat_vb) = match ps.open_mempool() {
+        None => (0u64, 0u64),
+        Some(mdb) => {
+            let cnt = mdb.count().unwrap_or(0) as u64;
+            let top = mdb.get_pending(1).ok()
+                .and_then(|txs| txs.into_iter().next().map(|t| t.fee_rate_msat_vb))
+                .unwrap_or(0);
+            (cnt, top)
+        }
+    };
+
+    // ── Rich top 5 ─────────────────────────────────────────────────────────────
+    let rich_top5: Vec<Value> = match ps.open_addr() {
+        None => vec![],
+        Some(adb) => {
+            let ldb = ps.open_label();
+            adb.get_rich_list(5).unwrap_or_default().into_iter()
+                .map(|(script, bal)| {
+                    let address = script_hex_to_address(&script);
+                    let label   = ldb.as_ref().and_then(|db| {
+                        db.get_label_for(&script, address.as_deref())
+                    });
+                    json!({
+                        "script":      script,
+                        "address":     address,
+                        "balance":     bal,
+                        "balance_pkt": (bal as f64) / 1_073_741_824.0,
+                        "label":       label,
+                    })
+                })
+                .collect()
+        }
+    };
+
+    Json(json!({
+        "height":                  height,
+        "tip_hash":                tip_hash,
+        "synced":                  synced,
+        "utxo_count":              utxo_count,
+        "total_value_sat":         total_value_sat,
+        "total_value_pkt":         (total_value_sat as f64) / 1_073_741_824.0,
+        "hashrate":                hashrate,
+        "block_time_avg":          block_time_avg,
+        "mempool_count":           mempool_count,
+        "mempool_top_fee_msat_vb": mempool_top_fee_msat_vb,
+        "rich_top5":               rich_top5,
+    })).into_response()
+}
+
+// ── TX list handler (v18.5) ────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct TxsListParams {
+    cursor: Option<u64>,
+    #[serde(default = "default_txs_limit")]
+    limit: usize,
+}
+fn default_txs_limit() -> usize { 50 }
+
+/// GET /api/testnet/txs?cursor=HEIGHT&limit=N
+/// Newest TXs first, cursor-based pagination. cursor = last seen height (exclusive).
+async fn ps_txs_list(
+    State(ps):     State<PathState>,
+    Query(params): Query<TxsListParams>,
+) -> impl IntoResponse {
+    use crate::pkt_wire::WireBlockHeader;
+
+    let sdb = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        Some(db) => db,
+        None => return (StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({"error":"not synced"}))).into_response(),
+    };
+    let adb = match ps.open_addr() {
+        Some(db) => db,
+        None => return (StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({"error":"not synced"}))).into_response(),
+    };
+
+    let limit = params.limit.min(100);
+    let raw   = adb.get_recent_txids(params.cursor, limit);
+    let next_cursor = raw.last().map(|(h, _)| *h);
+
+    let mut txs: Vec<Value> = Vec::new();
+    for (h, txid) in &raw {
+        let ts = sdb.load_header(*h).ok().flatten()
+            .and_then(|b| WireBlockHeader::from_bytes(&b).ok())
+            .map(|hdr| hdr.timestamp as u64)
+            .unwrap_or(0);
+        txs.push(json!({ "txid": txid, "height": h, "timestamp": ts }));
+    }
+
+    Json(json!({ "txs": txs, "next_cursor": next_cursor })).into_response()
+}
+
+// ── Export handlers (v18.9) ────────────────────────────────────────────────────
+
+/// GET /api/testnet/address/:s/export.csv
+/// TX history của address dưới dạng CSV (height,txid).
+async fn ps_export_address(
+    State(ps):    State<PathState>,
+    Path(script): Path<String>,
+) -> impl IntoResponse {
+    let adb = match ps.open_addr() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           [(header::CONTENT_TYPE, "text/plain")],
+                           "address index not ready".to_string()).into_response(),
+        Some(d) => d,
+    };
+    let csv = tokio::task::spawn_blocking(move || {
+        crate::pkt_export::generate_address_csv(&adb, &script, crate::pkt_export::MAX_ADDR_EXPORT_ROWS)
+    }).await.unwrap_or_default();
+    (
+        [(header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+         (header::CONTENT_DISPOSITION, "attachment; filename=\"transactions.csv\"")],
+        csv,
+    ).into_response()
+}
+
+#[derive(Deserialize)]
+struct BlocksExportParams {
+    from: Option<u64>,
+    to:   Option<u64>,
+}
+
+/// GET /api/testnet/blocks/export.csv?from=H&to=H
+/// Blocks trong khoảng [from, to] dưới dạng CSV.
+/// Tối đa 10_000 blocks (MAX_EXPORT_BLOCKS). Nếu thiếu from/to dùng 0 / tip.
+async fn ps_export_blocks(
+    State(ps):     State<PathState>,
+    Query(params): Query<BlocksExportParams>,
+) -> impl IntoResponse {
+    let sdb = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        None    => return (StatusCode::SERVICE_UNAVAILABLE,
+                           [(header::CONTENT_TYPE, "text/plain")],
+                           "sync db not ready".to_string()).into_response(),
+        Some(d) => d,
+    };
+    let tip  = sdb.get_sync_height().ok().flatten().unwrap_or(0);
+    let from = params.from.unwrap_or(0);
+    let to   = params.to.unwrap_or(tip);
+    let csv = tokio::task::spawn_blocking(move || {
+        crate::pkt_export::generate_blocks_csv(&sdb, from, to)
+    }).await.unwrap_or_default();
+    (
+        [(header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+         (header::CONTENT_DISPOSITION, "attachment; filename=\"blocks.csv\"")],
+        csv,
+    ).into_response()
+}
+
 // ── Path helpers ───────────────────────────────────────────────────────────────
 
 /// Build a path under $HOME (falls back to "." if HOME/USERPROFILE unset).
@@ -765,11 +989,16 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/rich-list", get(ps_rich_list))
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
+        .route("/api/health/detailed",               get(ps_health))
+        .route("/api/testnet/summary",               get(ps_summary))
         .route("/api/testnet/analytics",             get(ps_analytics))
         .route("/api/testnet/block/:height",         get(ps_block_detail))
         .route("/api/testnet/tx/:txid",              get(ps_tx_detail))
+        .route("/api/testnet/txs",                   get(ps_txs_list))
         .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))
+        .route("/api/testnet/address/:s/export.csv", get(ps_export_address))
+        .route("/api/testnet/blocks/export.csv",     get(ps_export_blocks))
         .with_state(ps)
 }
 

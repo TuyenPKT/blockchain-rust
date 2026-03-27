@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Transactions — PKTScan</title>
+  <title>Health — PKTScan</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
-  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=18.5">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=18.8">
 </head>
 <body>
 
@@ -18,19 +18,16 @@
   </a>
   <div class="nav-right">
     <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
-    <a class="nav-link" href="/blockchain-rust/rx" style="color:var(--text)">Transactions</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
     <a class="nav-link" href="/blockchain-rust/">Home</a>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
   </div>
 </nav>
 
 <div class="main-wrap">
-  <div class="detail-title">💸 All Transactions</div>
-  <div class="panel" id="tx-list">
-    <div style="padding:24px;color:var(--muted);font-style:italic">Loading…</div>
-  </div>
-  <div id="load-more" style="text-align:center;margin-top:16px;display:none">
-    <button onclick="loadMore()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 24px;border-radius:8px;cursor:pointer;font-size:.85rem">Load more</button>
+  <div class="detail-title">🩺 Node Health</div>
+  <div id="health-content">
+    <div style="padding:40px 0;text-align:center;color:var(--muted);font-style:italic">Loading…</div>
   </div>
 </div>
 
@@ -45,7 +42,7 @@
   </div>
 </footer>
 
-<script src="/blockchain-rust/web/js/shared.js?v=18.5"></script>
-<script src="/blockchain-rust/web/js/rx-list.js?v=18.5"></script>
+<script src="/blockchain-rust/web/js/shared.js?v=18.8"></script>
+<script src="/blockchain-rust/web/js/health.js?v=18.8"></script>
 </body>
 </html>

@@ -4,6 +4,55 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v19.0 — Cargo Workspace (2026-03-27)
+
+### Added
+- `[workspace]` trong root `Cargo.toml` — resolver = "2", members: `.`, `crates/pkt-sdk`, `crates/pkt-api`
+- `crates/pkt-sdk/` — library crate cho third-party developers:
+  - `types.rs`: `BlockHeader`, `BlockPage`, `TxRef`, `TxPage`, `AddressInfo`, `AddressBalance`, `Utxo`, `SyncStatus`, `NetworkSummary`
+  - `convert.rs`: `paklets_to_pkt`, `pkt_to_paklets`, `short_hash`, `short_addr`, `ago`, `secs_ago`, `fmt_hashrate`
+  - `error.rs`: `PktError`, `PktResult<T>`
+  - Constants: `PAKLETS_PER_PKT`, `TESTNET_PORT`, `MAINNET_PORT`, `API_PORT`, `SDK_VERSION`
+- `crates/pkt-api/` — binary stub, sẽ chứa standalone REST server từ v19.2+
+- Toàn bộ code cũ giữ nguyên, chỉ thêm workspace layer
+
+### Files
+- `Cargo.toml` — thêm `[workspace]` section
+- `crates/pkt-sdk/Cargo.toml` + `src/{lib,types,convert,error}.rs` — SDK library (file mới)
+- `crates/pkt-api/Cargo.toml` + `src/main.rs` — API binary stub (file mới)
+
+### Tests
+- +15 unit tests + 4 doc-tests (pkt-sdk: convert + error)
+
+### Gotcha
+- `cargo build -p blockchain-rust` vẫn hoạt động như trước
+- `cargo run -p pkt-api` in roadmap, chưa chạy server thật
+- `'…'` là 3 bytes UTF-8 → dùng `.chars().count()` thay `.len()` khi đếm ký tự
+
+---
+
+## v18.9 — Data Export (2026-03-27)
+
+### Added
+- `GET /api/testnet/address/:s/export.csv` — TX history của address dưới dạng CSV (`height,txid`)
+- `GET /api/testnet/blocks/export.csv?from=H&to=H` — Block range dưới dạng CSV (`height,hash,prev_hash,timestamp,bits,nonce,version`)
+- Giới hạn: tối đa `MAX_ADDR_EXPORT_ROWS = 100_000` rows cho address; `MAX_EXPORT_BLOCKS = 10_000` cho blocks
+- `from > to` tự động swap; `from`/`to` thiếu → dùng `0` / tip height
+- Response header: `Content-Disposition: attachment; filename="*.csv"` để browser tự download
+
+### Files
+- `src/pkt_export.rs` — logic generate CSV (file mới)
+- `src/pkt_testnet_web.rs` — thêm handlers `ps_export_address`, `ps_export_blocks` + 2 routes
+- `src/main.rs` — thêm `mod pkt_export;`
+
+### Tests
+- +9 tests (pkt_export: header row, empty DB, single block, from>to swap, cap at max, columns count, address empty, address header, max_rows=0)
+
+### Gotcha
+- Dùng `tokio::task::spawn_blocking` cho RocksDB read để không block async runtime
+
+---
+
 ## v15.8 — Single Chain Architecture + PKTScan Live Data (2026-03-21)
 
 ### Added

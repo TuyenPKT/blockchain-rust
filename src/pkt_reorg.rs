@@ -426,7 +426,7 @@ mod tests {
         let sdb  = crate::pkt_sync::SyncDb::open_temp().unwrap();
         let hash = [0xAA; 32];
         // Save checkpoint and matching header
-        let mut delta = BlockDelta::new(hash);
+        let delta = BlockDelta::new(hash);
         rdb.save_delta(7, &delta).unwrap();
         sdb.save_header(7, &[0u8; 80]).unwrap(); // raw header → hash != 0xAA, will mismatch
         // Different hashes → reorg detected

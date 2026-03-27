@@ -1,3 +1,11 @@
+[workspace]
+members = [
+    ".",
+    "crates/pkt-sdk",
+    "crates/pkt-api",
+]
+resolver = "2"
+
 [package]
 name = "blockchain-rust"
 version = "0.1.0"

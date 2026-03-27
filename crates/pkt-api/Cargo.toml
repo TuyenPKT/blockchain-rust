@@ -1,0 +1,8 @@
+[package]
+name = "pkt-api"
+version = "0.1.0"
+edition = "2021"
+description = "PKT blockchain REST API server (standalone binary)"
+
+[dependencies]
+pkt-sdk = { path = "../pkt-sdk" }

@@ -1,12 +1,14 @@
-// rx-list.js — /blockchain-rust/rx  (All Transactions page)
+// rx-list.js — v18.5 Cursor-based pagination
 'use strict';
 
-let offset = 0;
+let cursor = null;   // null = first page; number = next_cursor from last response
 const LIMIT = 50;
 
 async function loadTxs(reset) {
-  if (reset) { offset = 0; }
-  const data = await fetchJson(`${API_BASE}/api/txs?limit=${LIMIT}&offset=${offset}`);
+  if (reset) { cursor = null; }
+  let url = `${API_BASE}/api/testnet/txs?limit=${LIMIT}`;
+  if (cursor !== null) url += `&cursor=${cursor}`;
+  const data = await fetchJson(url);
   const list = document.getElementById('tx-list');
 
   if (!data) {
@@ -14,15 +16,7 @@ async function loadTxs(reset) {
     return;
   }
 
-  const txs = (data.txs ?? data ?? []).map(t => ({
-    txid:       t.tx_id ?? t.txid ?? '',
-    blockHeight: t.block_height ?? t.block_index ?? 0,
-    timestamp:  (t.block_timestamp ?? t.timestamp ?? 0) * 1000,
-    from:       t.from ?? (t.is_coinbase ? 'coinbase' : ''),
-    to:         t.to ?? t.outputs?.[0]?.address ?? '',
-    amount:     (t.output_total ?? t.amount ?? t.total_out ?? 0) / 1e9,
-    isCoinbase: t.is_coinbase ?? false,
-  }));
+  const txs = data.txs ?? [];
 
   if (reset) list.innerHTML = '';
 
@@ -33,26 +27,16 @@ async function loadTxs(reset) {
   }
 
   txs.forEach(tx => {
-    const secsAgo = Math.floor((Date.now() - tx.timestamp) / 1000);
+    const secsAgo = Math.floor((Date.now() - (tx.timestamp ?? 0) * 1000) / 1000);
     const row = document.createElement('div');
     row.className = 'list-item tx-item';
     row.style.cursor = 'pointer';
     row.innerHTML = `
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-          <span class="item-primary">${shortHash(tx.txid)}</span>
-          <span class="badge ${tx.isCoinbase ? 'badge-coinbase' : 'badge-tx'}">
-            ${tx.isCoinbase ? 'coinbase' : 'transfer'}
-          </span>
-        </div>
-        <div class="tx-from-to item-secondary">
-          <span class="addr-short">${tx.isCoinbase ? 'coinbase' : shortAddr(tx.from)}</span>
-          <span class="arrow">→</span>
-          <span class="addr-short">${shortAddr(tx.to)}</span>
-        </div>
+      <div class="item-main">
+        <div class="item-primary mono" style="font-size:.85rem">${shortHash(tx.txid ?? '')}</div>
+        <div class="item-secondary">Block #${(tx.height ?? 0).toLocaleString()}</div>
       </div>
       <div class="item-right">
-        <div class="item-amount">${tx.amount.toFixed(4)} PKT</div>
         <div class="item-age">${ago(secsAgo)}</div>
       </div>
     `;
@@ -62,7 +46,7 @@ async function loadTxs(reset) {
     list.appendChild(row);
   });
 
-  offset += txs.length;
+  if (data.next_cursor != null) cursor = data.next_cursor;
   document.getElementById('load-more').style.display =
     txs.length === LIMIT ? 'block' : 'none';
 }

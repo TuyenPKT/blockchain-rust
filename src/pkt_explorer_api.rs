@@ -57,8 +57,13 @@ impl TestnetState {
 pub struct HeaderListParams {
     #[serde(default = "default_limit")]
     pub limit: usize,
-    #[serde(default)]
-    pub offset: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HeaderCursorParams {
+    pub cursor: Option<u64>,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
 }
 fn default_limit() -> usize { 20 }
 
@@ -84,11 +89,12 @@ pub fn format_header_json(header: &WireBlockHeader, height: u64) -> Value {
 
 /// Fetch the latest N headers from SyncDb, newest first.
 ///
+/// `cursor`: None = from tip; Some(h) = start from h-1 (exclusive cursor for next-page).
 /// Returns `(headers_json, total_synced_height)`.
 pub fn query_headers(
     sync_db: &SyncDb,
     limit:   usize,
-    offset:  usize,
+    cursor:  Option<u64>,
 ) -> Result<(Vec<Value>, u64), String> {
     let tip = sync_db.get_sync_height()
         .map_err(|e| e.to_string())?
@@ -98,9 +104,12 @@ pub fn query_headers(
         return Ok((vec![], 0));
     }
 
-    let start    = tip.saturating_sub(offset as u64);
-    let mut out  = Vec::new();
-    let mut h    = start;
+    let start   = match cursor {
+        None    => tip,
+        Some(h) => h.saturating_sub(1),
+    };
+    let mut out = Vec::new();
+    let mut h   = start;
 
     while out.len() < limit && h >= 1 {
         match sync_db.load_header(h) {
@@ -207,16 +216,19 @@ async fn handle_stats(State(s): State<TestnetState>) -> Json<Value> {
 
 async fn handle_headers(
     State(s): State<TestnetState>,
-    Query(p): Query<HeaderListParams>,
+    Query(p): Query<HeaderCursorParams>,
 ) -> impl IntoResponse {
-    let limit  = p.limit.min(100);
-    match query_headers(&s.sync_db, limit, p.offset) {
-        Ok((headers, total)) => Json(json!({
-            "headers": headers,
-            "total":   total,
-            "limit":   limit,
-            "offset":  p.offset,
-        })).into_response(),
+    let limit = p.limit.min(100);
+    match query_headers(&s.sync_db, limit, p.cursor) {
+        Ok((headers, total)) => {
+            let next_cursor = headers.last().and_then(|h| h["height"].as_u64());
+            Json(json!({
+                "headers":     headers,
+                "total":       total,
+                "limit":       limit,
+                "next_cursor": next_cursor,
+            })).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e })),
@@ -445,7 +457,7 @@ mod tests {
     #[test]
     fn test_query_headers_empty_db() {
         let db          = SyncDb::open_temp().unwrap();
-        let (hdrs, tip) = query_headers(&db, 10, 0).unwrap();
+        let (hdrs, tip) = query_headers(&db, 10, None).unwrap();
         assert_eq!(hdrs.len(), 0);
         assert_eq!(tip, 0);
     }
@@ -453,38 +465,38 @@ mod tests {
     #[test]
     fn test_query_headers_returns_tip_height() {
         let db          = populate_sync_db(5);
-        let (_, tip)    = query_headers(&db, 10, 0).unwrap();
+        let (_, tip)    = query_headers(&db, 10, None).unwrap();
         assert_eq!(tip, 5);
     }
 
     #[test]
     fn test_query_headers_count_limited() {
         let db         = populate_sync_db(10);
-        let (hdrs, _)  = query_headers(&db, 3, 0).unwrap();
+        let (hdrs, _)  = query_headers(&db, 3, None).unwrap();
         assert_eq!(hdrs.len(), 3);
     }
 
     #[test]
     fn test_query_headers_newest_first() {
         let db        = populate_sync_db(5);
-        let (hdrs, _) = query_headers(&db, 5, 0).unwrap();
+        let (hdrs, _) = query_headers(&db, 5, None).unwrap();
         // First entry should be height=5 (tip)
         assert_eq!(hdrs[0]["height"].as_u64(), Some(5));
         assert_eq!(hdrs[1]["height"].as_u64(), Some(4));
     }
 
     #[test]
-    fn test_query_headers_with_offset() {
+    fn test_query_headers_with_cursor() {
         let db        = populate_sync_db(10);
-        let (hdrs, _) = query_headers(&db, 3, 2).unwrap();
-        // offset=2 from tip (height=10) → starts at height=8
+        // cursor=9 → start from height 8 (exclusive: 9-1=8)
+        let (hdrs, _) = query_headers(&db, 3, Some(9)).unwrap();
         assert_eq!(hdrs[0]["height"].as_u64(), Some(8));
     }
 
     #[test]
     fn test_query_headers_all_have_hashes() {
         let db        = populate_sync_db(5);
-        let (hdrs, _) = query_headers(&db, 10, 0).unwrap();
+        let (hdrs, _) = query_headers(&db, 10, None).unwrap();
         for h in &hdrs {
             assert_eq!(h["hash"].as_str().unwrap().len(), 64);
         }
