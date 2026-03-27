@@ -1,9 +1,5 @@
 # Build artifacts
 target/
-target 2/
-target 3/
-target 4/
-target 5/
 
 # IDE / tools
 .claude/
@@ -19,6 +15,11 @@ Thumbs.db
 **/*.rs.bk
 Cargo.lock
 
+# JS/TS SDK
+sdk-js/node_modules/
+sdk-js/dist/
+sdk-js/*.tsbuildinfo
+
 # Local data / wallets / keys
 *.key
 *.pem
@@ -26,8 +27,7 @@ Cargo.lock
 .env.*
 *.secret
 
-# RocksDB data (local node/chain state)
-~/.pkt/
+# RocksDB / node data
 data/
 db/
 rocksdb/
