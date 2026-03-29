@@ -149,6 +149,7 @@ mod pkt_script;
 mod pkt_relay;
 mod pkt_peer_set;
 mod pkt_mempool;
+mod pkt_checkpoints;
 
 // ── Entry point ───────────────────────────────────────────────
 //

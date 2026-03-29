@@ -4,6 +4,32 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.5 — IBD Checkpoints (2026-03-29)
+
+### Added
+- `src/pkt_checkpoints.rs` — IBD checkpoint system:
+  - `Checkpoint { height, hash: [u8;32] }` với `const fn from_hex` — parse hex tại compile time, panic nếu sai
+  - `TESTNET_CHECKPOINTS` + `MAINNET_CHECKPOINTS` — hardcoded `&'static [Checkpoint]`
+  - `CheckpointSet`: `max_height()`, `get(height)`, `verify(height, header)`, `can_skip_validation(height)`, `last_before(height)`
+  - `ibd_action(set, height, header) → IbdBlockAction`: kết hợp verify + skip logic
+  - `IbdBlockAction` enum: `AcceptSkipValidation | AcceptFullValidation | Reject(CheckpointError)`
+  - `CheckpointError::HashMismatch { height, expected, got }` — `Display` impl với hex output
+  - Wire hash = SHA256d(80-byte header) — nhất quán với `pkt_wire::WireBlockHeader::block_hash()`
+
+### Files
+- `src/pkt_checkpoints.rs` — module mới
+- `src/main.rs` — thêm `mod pkt_checkpoints`
+
+### Tests
+- +17 tests (get existing/missing, max_height, can_skip, last_before, verify no-checkpoint, ibd_action variants, error display, hex_byte, from_hex genesis)
+
+### Breaking / Gotcha
+- `const fn from_hex` nhận `&[u8; 64]` (byte slice literal), không phải `&str` — dùng `b"..."` syntax
+- Testnet checkpoint hashes là placeholder — cần thay bằng hash thật khi chain dài hơn
+- `can_skip_validation(height)` dùng `<` strict — block tại `max_height` KHÔNG được skip
+
+---
+
 ## v23.4 — Mempool Full (2026-03-29)
 
 ### Added
