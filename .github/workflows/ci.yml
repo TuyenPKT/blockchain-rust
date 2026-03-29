@@ -1,0 +1,180 @@
+name: CI / Release
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  pull_request:
+    branches: [main, master]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Detect changed paths ────────────────────────────────────────────────────
+  # Bỏ qua khi push tag (release job tự handle)
+  changes:
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    outputs:
+      cli:     ${{ steps.filter.outputs.cli }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cli:
+              - 'src/**'
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            desktop:
+              - 'desktop/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+  # ── CLI: cargo test ─────────────────────────────────────────────────────────
+  # Chạy khi src/** hoặc crates/** thay đổi
+  test-cli:
+    needs: changes
+    if: "!startsWith(github.ref, 'refs/tags/') && needs.changes.outputs.cli == 'true'"
+    name: Rust tests (blockchain-rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+      - name: cargo test (CLI only)
+        run: cargo test --workspace --exclude pktscan-desktop
+
+  # ── Desktop: TypeScript check ────────────────────────────────────────────────
+  # Chạy khi desktop/** thay đổi
+  test-typescript:
+    needs: changes
+    if: "!startsWith(github.ref, 'refs/tags/') && needs.changes.outputs.desktop == 'true'"
+    name: TypeScript strict check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+        working-directory: desktop
+      - run: npx tsc --noEmit
+        working-directory: desktop
+
+  # ── Desktop: Rust build + test ───────────────────────────────────────────────
+  # Chạy khi desktop/** thay đổi
+  test-desktop:
+    needs: changes
+    if: "!startsWith(github.ref, 'refs/tags/') && needs.changes.outputs.desktop == 'true'"
+    name: Rust build (pktscan-desktop)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run build
+        working-directory: desktop
+      - run: cargo build -p pktscan-desktop
+      - run: cargo test -p pktscan-desktop
+
+  # ── Release: build Tauri app multi-platform ──────────────────────────────────
+  # Chỉ chạy khi push tag v*.*.*
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: windows-latest
+            args: "--target x86_64-pc-windows-msvc"
+            rust-targets: "x86_64-pc-windows-msvc"
+          - platform: ubuntu-22.04
+            args: "--target x86_64-unknown-linux-gnu"
+            rust-targets: "x86_64-unknown-linux-gnu"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./desktop/src-tauri -> target"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Linux system deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config
+      - run: npm ci
+        working-directory: desktop
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN:                 ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE:            ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:   ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:       ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                     ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:               ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName:      ${{ github.ref_name }}
+          releaseName:  "PKTScan ${{ github.ref_name }}"
+          releaseBody:  |
+            ## PKTScan Desktop ${{ github.ref_name }}
+
+            | Platform | File |
+            |----------|------|
+            | macOS    | `PKTScan_*.dmg` (Universal) |
+            | Windows  | `PKTScan_*.msi` |
+            | Linux    | `pktscan_*.AppImage` / `pktscan_*.deb` |
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          releaseDraft: false
+          prerelease:   false
+          projectPath:  desktop
+          args:         ${{ matrix.args }}
