@@ -932,12 +932,12 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         };
 
     // ── Hashrate & block_time avg (last 10 blocks) ─────────────────────────────
-    let (hashrate, block_time_avg) = match SyncDb::open_read_only(&ps.sync_path).ok() {
-        None => (0.0f64, 0.0f64),
+    let (hashrate, block_time_avg, difficulty) = match SyncDb::open_read_only(&ps.sync_path).ok() {
+        None => (0.0f64, 0.0f64, 0.0f64),
         Some(sdb) => {
             let headers = load_recent_headers(&sdb, 11).unwrap_or_default();
             if headers.len() < 2 {
-                (0.0, 0.0)
+                (0.0, 0.0, 0.0)
             } else {
                 let mut total_hr = 0.0f64;
                 let mut total_bt = 0.0f64;
@@ -950,7 +950,10 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
                     total_hr += estimate_hashrate_from(diff, dt);
                     total_bt += dt;
                 }
-                (total_hr / n, total_bt / n)
+                let tip_diff = headers.last()
+                    .map(|(_, h)| bits_to_difficulty(h.bits))
+                    .unwrap_or(0.0);
+                (total_hr / n, total_bt / n, tip_diff)
             }
         }
     };
@@ -999,6 +1002,7 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         "total_value_pkt":         (total_value_sat as f64) / 1_073_741_824.0,
         "hashrate":                hashrate,
         "block_time_avg":          block_time_avg,
+        "difficulty":              difficulty,
         "mempool_count":           mempool_count,
         "mempool_top_fee_msat_vb": mempool_top_fee_msat_vb,
         "rich_top5":               rich_top5,

@@ -4,6 +4,26 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v22.6 — Fix Stats Display (2026-03-29)
+
+### Added
+- `ps_summary` trả thêm field `difficulty` (từ `bits_to_difficulty` của block tip)
+- `Explorer.tsx` đọc `block_time_avg` fallback khi `avg_block_time_s` undefined
+- `Node.tsx` tương tự cho `avgTime`
+
+### Files
+- `src/pkt_testnet_web.rs` — `ps_summary` thêm `difficulty` field
+- `desktop/src/pages/Explorer.tsx` — fallback `avg_block_time_s ?? block_time_avg`
+- `desktop/src/pages/Node.tsx` — fallback `avg_block_time_s ?? block_time_avg`
+
+### Tests
+- +0
+
+### Breaking / Gotcha
+- `difficulty` là `f64` (không phải integer) — frontend hiển thị raw number
+
+---
+
 ## v22.5 — Wallet Send TX (2026-03-29)
 
 ### Added

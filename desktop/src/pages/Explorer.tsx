@@ -175,7 +175,7 @@ export function Explorer({ nodeUrl }: ExplorerProps) {
   const height    = summary.height     ?? 0;
   const hashrate  = summary.hashrate   ?? 0;
   const mempool   = summary.mempool_count ?? 0;
-  const blockTime = Math.round(summary.avg_block_time_s ?? 0);
+  const blockTime = Math.round((summary.avg_block_time_s ?? summary.block_time_avg) ?? 0);
 
   return (
     <div>

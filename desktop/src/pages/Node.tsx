@@ -59,7 +59,7 @@ export function Node({ nodeUrl }: NodeProps) {
   const utxos    = summary.utxo_count ?? 0;
   const hashrate = summary.hashrate ?? 0;
   const diff     = summary.difficulty ?? 0;
-  const avgTime  = summary.avg_block_time_s ?? 0;
+  const avgTime  = (summary.avg_block_time_s ?? summary.block_time_avg) ?? 0;
   const synced   = height > 0;
 
   // Extra fields returned by /api/testnet/summary

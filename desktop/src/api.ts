@@ -4,10 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 export interface NetworkSummary {
   height?:           number;
   hashrate?:         number;
-  avg_block_time_s?: number;
+  avg_block_time_s?: number;  // alias
+  block_time_avg?:   number;  // backend field name
   mempool_count?:    number;
   difficulty?:       number;
   utxo_count?:       number;
+  total_value_pkt?:  number;
+  total_value_sat?:  number;
   [key: string]: unknown;
 }
 
