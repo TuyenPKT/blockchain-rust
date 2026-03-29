@@ -1,6 +1,6 @@
 # CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v19.6 ✅**
+**Version hiện tại: v21.0 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt
@@ -9,6 +9,7 @@
 - Cập nhật `CONTEXT.md` + `CHANGELOG.md` sau mỗi version
 - Không `unwrap()` / `panic` trong production
 - Không hardcode secret, không raw SQL, validate tại API boundary
+* không fake/demo
 
 ## Làm việc với AI
 
@@ -163,8 +164,11 @@ v19.0 Cargo Workspace · v19.1 Flat File Storage · v19.2 JSON-RPC · v19.3 GetA
 v19.4 libp2p · v19.5 JS/TS SDK · v19.6 PKT CLI · v19.7 API Playground
 v19.8 Webhook UI · v19.9 Developer Portal
 
-### Era 27 — PKTScan Desktop App (v20.x)
+### Era 27 — PKTScan Desktop App (v20.x) ← HOÀN THÀNH ✅
 
-v20.0 Tauri Setup · v20.1 React UI · v20.2 Live Dashboard · v20.3 Charts
-v20.4 Search Cmd+K · v20.5 Address UI · v20.6 Block/TX UI · v20.7 Rich List
-v20.8 Settings · v20.9 Build & Release (.dmg + .msi + .AppImage)
+~~v20.0–v20.9~~ ✅ · ~~v20.9 Build & Release~~ ✅
+
+### Era 28 — PKTScan Desktop Nâng Cao (v21.x)
+
+~~v21.0 Real Miner IPC~~ ✅ · v21.1 Wallet Integration · v21.2 Node Manager
+v21.3 Offline Mode · v21.4 Notifications · v21.5 Auto-update
