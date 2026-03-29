@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Webhooks — PKTScan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=19.8">
+  <style>
+    /* ── Layout ─────────────────────────────────────────── */
+    .wh-header {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 22px 24px 4px;
+    }
+    .wh-header h1 { font-size: 1.45rem; font-weight: 700; margin-bottom: 4px; }
+    .wh-header p  { color: var(--muted); font-size: .88rem; }
+
+    .wh-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 18px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px 24px 48px;
+    }
+    @media (max-width: 780px) {
+      .wh-layout { grid-template-columns: 1fr; }
+    }
+
+    /* ── Panel ──────────────────────────────────────────── */
+    .wh-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    .wh-panel h3 {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 12px;
+    }
+
+    /* ── Form controls ──────────────────────────────────── */
+    .field-label {
+      display: block; font-size: .76rem; color: var(--muted);
+      font-weight: 600; margin: 12px 0 4px;
+    }
+    .field-input {
+      width: 100%;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: .85rem;
+      outline: none; transition: border-color .2s;
+      box-sizing: border-box;
+    }
+    .field-input:focus { border-color: var(--accent); }
+
+    /* ── API key row ─────────────────────────────────────── */
+    .key-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .key-row .field-input { flex: 1; }
+
+    /* ── Checkboxes ─────────────────────────────────────── */
+    .events-grid {
+      display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
+    }
+    .event-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 12px;
+      cursor: pointer; transition: border-color .2s;
+    }
+    .event-item:hover { border-color: var(--accent); }
+    .event-item input[type=checkbox] {
+      accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer;
+    }
+    .event-item label {
+      font-family: 'JetBrains Mono', monospace; font-size: .82rem;
+      cursor: pointer; flex: 1;
+    }
+    .event-item small { font-size: .72rem; color: var(--muted); }
+
+    /* ── Buttons ────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px; border: none; border-radius: 8px;
+      cursor: pointer; font-family: 'Sora', sans-serif;
+      font-weight: 600; transition: all .2s;
+    }
+    .btn-primary {
+      width: 100%; padding: 11px 18px; font-size: .92rem;
+      background: var(--accent); color: #000;
+    }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+    .btn-sm {
+      padding: 5px 11px; font-size: .74rem;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger {
+      padding: 5px 11px; font-size: .74rem;
+      background: rgba(240,96,96,.12); color: var(--red);
+      border: 1px solid rgba(240,96,96,.25);
+    }
+    .btn-danger:hover { background: rgba(240,96,96,.22); border-color: var(--red); }
+
+    /* ── Toast / alert ──────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 1000;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      font-size: .84rem; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      display: none; max-width: 360px;
+    }
+    .toast.show { display: block; animation: fadeIn .2s; }
+    .toast.ok  { border-left: 3px solid var(--green); }
+    .toast.err { border-left: 3px solid var(--red); }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ── Secret reveal box ──────────────────────────────── */
+    .secret-box {
+      background: rgba(62,207,110,.07); border: 1px solid rgba(62,207,110,.3);
+      border-radius: 10px; padding: 14px 16px; margin-top: 14px; display: none;
+    }
+    .secret-box h4 {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--green); margin-bottom: 8px;
+    }
+    .secret-value {
+      font-family: 'JetBrains Mono', monospace; font-size: .78rem;
+      color: var(--text); word-break: break-all; line-height: 1.5;
+    }
+    .secret-warn {
+      font-size: .72rem; color: var(--muted); margin-top: 6px;
+    }
+    .secret-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    /* ── Webhook list ───────────────────────────────────── */
+    .wh-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .wh-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .wh-card-header {
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .wh-card-id {
+      font-family: 'JetBrains Mono', monospace; font-size: .72rem;
+      color: var(--muted); margin-top: 2px; flex: 1;
+    }
+    .wh-card-url {
+      font-family: 'JetBrains Mono', monospace; font-size: .84rem;
+      color: var(--blue); word-break: break-all; margin: 6px 0 8px;
+    }
+    .wh-card-meta {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .tag {
+      font-family: 'JetBrains Mono', monospace; font-size: .69rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; padding: 2px 7px; color: var(--muted);
+    }
+    .tag-addr {
+      color: var(--accent); border-color: rgba(247,161,51,.3);
+      background: rgba(247,161,51,.07);
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); display: inline-block; margin-right: 3px;
+    }
+    .ts { font-size: .72rem; color: var(--muted); margin-left: auto; }
+
+    /* ── Empty state ────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 40px 20px;
+      color: var(--muted); font-size: .88rem;
+    }
+    .empty-state .empty-icon { font-size: 2rem; margin-bottom: 10px; }
+
+    /* ── Loading ─────────────────────────────────────────── */
+    .loading { text-align: center; color: var(--muted); padding: 24px; font-size: .84rem; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/blockchain-rust/">
+    <div class="nav-logo-icon">P</div>
+    <span class="nav-logo-text">PKT<span>Scan</span></span>
+  </a>
+  <div class="nav-right">
+    <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
+    <a class="nav-link" href="/blockchain-rust/">Home</a>
+    <a class="nav-link" href="/blockchain-rust/playground">API</a>
+    <a class="nav-link active" href="/blockchain-rust/webhooks" style="color:var(--accent)">Webhooks</a>
+    <a class="nav-link" href="/blockchain-rust/dev">Developers</a>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+  </div>
+</nav>
+
+<div class="wh-header">
+  <h1>🔔 Webhook Manager</h1>
+  <p>Đăng ký HTTP callbacks nhận thông báo real-time khi có sự kiện on-chain.
+     Yêu cầu API key có quyền <strong>write</strong>.</p>
+</div>
+
+<div class="wh-layout">
+
+  <!-- ── Left: register form ── -->
+  <div class="wh-left">
+
+    <!-- API Key -->
+    <div class="wh-panel">
+      <h3>API Key</h3>
+      <div class="key-row">
+        <input class="field-input" id="api-key" type="password"
+          placeholder="Nhập write API key..." autocomplete="off"
+          oninput="onKeyChange()" />
+        <button class="btn btn-sm" onclick="toggleKeyVisibility()">👁</button>
+      </div>
+      <div id="key-status" style="font-size:.72rem;color:var(--muted);margin-top:6px"></div>
+    </div>
+
+    <!-- Register form -->
+    <div class="wh-panel">
+      <h3>Đăng ký Webhook</h3>
+
+      <label class="field-label" for="wh-url">Endpoint URL</label>
+      <input class="field-input" id="wh-url" type="url"
+        placeholder="https://your-server.com/hook" />
+
+      <label class="field-label">Events</label>
+      <div class="events-grid">
+        <div class="event-item" onclick="toggleEvent(this)">
+          <input type="checkbox" id="ev-new_block" value="new_block" />
+          <label for="ev-new_block">new_block</label>
+          <small>Mỗi block mới</small>
+        </div>
+        <div class="event-item" onclick="toggleEvent(this)">
+          <input type="checkbox" id="ev-new_tx" value="new_tx" />
+          <label for="ev-new_tx">new_tx</label>
+          <small>TX vào mempool</small>
+        </div>
+        <div class="event-item" onclick="toggleEvent(this)">
+          <input type="checkbox" id="ev-address_activity" value="address_activity" />
+          <label for="ev-address_activity">address_activity</label>
+          <small>Giao dịch tại địa chỉ</small>
+        </div>
+      </div>
+
+      <label class="field-label" for="wh-addr">Address Filter <span style="color:var(--muted);font-weight:400">(tuỳ chọn)</span></label>
+      <input class="field-input" id="wh-addr" type="text"
+        placeholder="pkt1... (chỉ cho address_activity)" />
+
+      <div style="margin-top: 16px">
+        <button class="btn btn-primary" id="register-btn" onclick="registerWebhook()">
+          + Đăng ký Webhook
+        </button>
+      </div>
+
+      <!-- Secret reveal — hiển thị 1 lần -->
+      <div class="secret-box" id="secret-box">
+        <h4>Secret — lưu ngay, sẽ không hiển thị lại</h4>
+        <div class="secret-value" id="secret-value"></div>
+        <p class="secret-warn">Dùng để verify chữ ký HMAC-SHA256 trong header <code>X-PKT-Signature</code>.</p>
+        <div class="secret-actions">
+          <button class="btn btn-sm" onclick="copySecret()">Copy Secret</button>
+          <button class="btn btn-sm" onclick="dismissSecret()">Đã lưu ✓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signature guide -->
+    <div class="wh-panel">
+      <h3>Verify Signature</h3>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.75rem;line-height:1.8;color:var(--muted)">
+        <div><span style="color:var(--blue)">Header:</span> X-PKT-Signature</div>
+        <div><span style="color:var(--blue)">Algo:</span> HMAC-SHA256(secret, body)</div>
+        <div style="margin-top:8px;color:var(--text)">Node.js example:</div>
+        <pre style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;overflow:auto;font-size:.72rem">const sig = req.headers['x-pkt-signature'];
+const expected = crypto
+  .createHmac('sha256', SECRET)
+  .update(rawBody)
+  .digest('hex');
+if (sig !== expected) return res.status(401).end();</pre>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right: webhook list ── -->
+  <div class="wh-right">
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h2 style="font-size:1rem;font-weight:700;flex:1">Webhooks đang active</h2>
+      <button class="btn btn-sm" onclick="loadWebhooks()">↻ Refresh</button>
+    </div>
+
+    <div id="wh-list-container">
+      <div class="empty-state">
+        <div class="empty-icon">🔕</div>
+        <div>Nhập API key để xem danh sách webhooks</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
+      PKTScan
+    </div>
+    <span>PKT Blockchain Explorer</span>
+    <span>© 2026 PKTScan</span>
+  </div>
+</footer>
+
+<script src="/blockchain-rust/web/js/shared.js?v=19.8"></script>
+<script src="/blockchain-rust/web/js/webhooks.js?v=19.8"></script>
+</body>
+</html>

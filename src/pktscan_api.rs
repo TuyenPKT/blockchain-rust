@@ -880,6 +880,7 @@ pub async fn serve(state: ScanDb, port: u16) {
 
     // v10.0 — API auth store
     let auth_db = crate::api_auth::ApiKeyStore::load_default();
+    let auth_db_keys = Arc::clone(&auth_db); // v19.9: dùng cho key_api router
 
     // v10.1 — Audit log (daily rotation)
     let audit_db = crate::audit_log::AuditLogger::open_default();
@@ -917,6 +918,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::ws_live::live_router())          // v14.8: embedded /static/live.js
         .merge(crate::pkt_testnet_web::testnet_web_router()) // v15.6: /api/testnet/* + /static/testnet.js
         .merge(crate::pkt_rpc::rpc_router())               // v19.2: POST /rpc JSON-RPC 2.0
+        .merge(crate::key_api::key_router(auth_db_keys))  // v19.9: GET/POST/DELETE /api/keys
         .merge(crate::web_serve::web_router())             // web/: ServeDir /web/** + /address/:a + /block/:h + /rx/:id
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),

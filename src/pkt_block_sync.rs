@@ -446,7 +446,7 @@ fn apply_block_streaming<R: Read>(
             }
         }
 
-        apply_wire_tx(utxo_db, &tx, &txid)?;
+        apply_wire_tx(utxo_db, &tx, &txid, height)?;
 
         // Index outputs directly from WireTx (no utxo_db lookup needed)
         if let Some(adb) = addr_db {
@@ -552,6 +552,8 @@ pub fn sync_blocks(
         let r = sync_one_block(stream, magic, block_hash, height, utxo_db, block_db, addr_db, reorg_db, mempool_db, skip_merkle)?;
         applied += 1;
         final_h  = r.height;
+        // v22.2: lưu tx_count vào sync_db để block_detail có thể dùng ngay cả khi addr_db trống
+        let _ = sync_db.save_block_tx_count(r.height, r.tx_count);
 
         if applied % 10 == 0 || height == sync_height {
             println!(

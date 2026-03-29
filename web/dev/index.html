@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Developer Portal — PKTScan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=19.9">
+  <style>
+    /* ── Layout ─────────────────────────────────────────── */
+    .dev-hero {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 24px 32px;
+      text-align: center;
+    }
+    .dev-hero h1 { font-size: 2rem; font-weight: 700; margin-bottom: 10px; }
+    .dev-hero p  { color: var(--muted); font-size: .95rem; max-width: 520px; margin: 0 auto; }
+    .hero-badge {
+      display: inline-block; font-family: 'JetBrains Mono', monospace;
+      font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+      background: rgba(247,161,51,.12); color: var(--accent);
+      border: 1px solid rgba(247,161,51,.3); border-radius: 20px;
+      padding: 4px 14px; margin-bottom: 16px;
+    }
+    .hero-btns {
+      display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;
+    }
+    .btn-hero-primary {
+      padding: 11px 24px; background: var(--accent); color: #000;
+      border: none; border-radius: 8px; font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: .9rem; cursor: pointer; text-decoration: none;
+      transition: filter .2s;
+    }
+    .btn-hero-primary:hover { filter: brightness(1.1); }
+    .btn-hero-ghost {
+      padding: 11px 24px; background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'Sora', sans-serif; font-weight: 600; font-size: .9rem;
+      cursor: pointer; text-decoration: none; transition: border-color .2s;
+    }
+    .btn-hero-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Sections ───────────────────────────────────────── */
+    .dev-body {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .section-title {
+      font-size: .72rem; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+    }
+
+    /* ── Cards ──────────────────────────────────────────── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px;
+    }
+    .card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+    .card p  { font-size: .86rem; color: var(--muted); margin-bottom: 0; }
+
+    .grid-3 {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    }
+    @media (max-width: 680px) { .grid-3 { grid-template-columns: 1fr; } }
+
+    .feature-icon {
+      font-size: 1.4rem; margin-bottom: 10px;
+    }
+
+    /* ── Steps ──────────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: flex; gap: 20px; position: relative;
+    }
+    .step:not(:last-child)::before {
+      content: ''; position: absolute; left: 19px; top: 44px;
+      width: 2px; height: calc(100% - 4px);
+      background: var(--border);
+    }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(247,161,51,.12); border: 2px solid rgba(247,161,51,.4);
+      color: var(--accent); font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-body { flex: 1; padding-bottom: 28px; }
+    .step-body h4 { font-size: .95rem; font-weight: 700; margin-bottom: 6px; }
+    .step-body p  { font-size: .84rem; color: var(--muted); margin-bottom: 10px; }
+
+    /* ── Code blocks ─────────────────────────────────────── */
+    .code-wrap {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .code-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace; font-size: .72rem;
+      color: var(--muted);
+    }
+    .code-body {
+      padding: 16px 18px;
+      font-family: 'JetBrains Mono', monospace; font-size: .79rem;
+      line-height: 1.8; overflow-x: auto; white-space: pre;
+    }
+    .btn-copy {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 5px; padding: 3px 10px;
+      font-family: 'JetBrains Mono', monospace; font-size: .69rem;
+      cursor: pointer; transition: all .2s;
+    }
+    .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Syntax */
+    .c-comment { color: #546e7a; }
+    .c-str     { color: #a5d6a7; }
+    .c-key     { color: #79b8ff; }
+    .c-fn      { color: #ce93d8; }
+    .c-num     { color: #f9b55a; }
+    .c-kw      { color: #f97583; }
+
+    /* ── Endpoints table ─────────────────────────────────── */
+    .ep-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .ep-table th {
+      text-align: left; font-size: .69rem; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--muted); padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ep-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .ep-table tr:last-child td { border-bottom: none; }
+    .ep-table tr:hover td { background: var(--surface2); }
+    .method {
+      font-family: 'JetBrains Mono', monospace; font-size: .72rem;
+      font-weight: 700; padding: 2px 7px; border-radius: 4px;
+    }
+    .method-get  { background: rgba(62,207,110,.12); color: var(--green); }
+    .method-post { background: rgba(247,161,51,.12);  color: var(--accent); }
+    .ep-path {
+      font-family: 'JetBrains Mono', monospace; font-size: .79rem; color: var(--blue);
+    }
+    .ep-auth {
+      font-size: .72rem; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .ep-auth.write { color: var(--accent); }
+
+    /* ── Rate limit table ────────────────────────────────── */
+    .rl-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    }
+    @media (max-width: 600px) { .rl-grid { grid-template-columns: 1fr; } }
+    .rl-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px;
+      text-align: center;
+    }
+    .rl-card .rl-tier {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); margin-bottom: 8px; font-weight: 700;
+    }
+    .rl-card .rl-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.4rem; font-weight: 700; color: var(--text);
+    }
+    .rl-card .rl-unit { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+    .rl-card.rl-highlight { border-color: rgba(247,161,51,.4); }
+    .rl-card.rl-highlight .rl-val { color: var(--accent); }
+
+    /* ── API Key section ─────────────────────────────────── */
+    .key-info {
+      display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+    }
+    .key-info-text { flex: 1; min-width: 260px; }
+    .key-info-text h4 { font-size: .95rem; font-weight: 700; margin-bottom: 6px; }
+    .key-info-text p  { font-size: .84rem; color: var(--muted); }
+    .key-roles {
+      display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+    }
+    .key-role-item {
+      display: flex; gap: 10px; align-items: center;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+    }
+    .role-badge {
+      font-family: 'JetBrains Mono', monospace; font-size: .72rem;
+      font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap;
+    }
+    .role-read  { background: rgba(62,207,110,.12);  color: var(--green); }
+    .role-write { background: rgba(247,161,51,.12);  color: var(--accent); }
+    .role-admin { background: rgba(240,96,96,.12);   color: var(--red); }
+    .role-desc  { font-size: .8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/blockchain-rust/">
+    <div class="nav-logo-icon">P</div>
+    <span class="nav-logo-text">PKT<span>Scan</span></span>
+  </a>
+  <div class="nav-right">
+    <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
+    <a class="nav-link" href="/blockchain-rust/">Home</a>
+    <a class="nav-link" href="/blockchain-rust/playground">API</a>
+    <a class="nav-link" href="/blockchain-rust/webhooks">Webhooks</a>
+    <a class="nav-link active" href="/blockchain-rust/dev" style="color:var(--accent)">Developers</a>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<div class="dev-hero">
+  <div class="hero-badge">Developer Portal · v19.9</div>
+  <h1>Build on <span style="color:var(--accent)">PKT</span></h1>
+  <p>REST API, WebSocket, JS/TS SDK, và Webhooks — mọi thứ cần để xây dựng ứng dụng trên nền PKT blockchain.</p>
+  <div class="hero-btns">
+    <a class="btn-hero-primary" href="#quickstart">Quickstart</a>
+    <a class="btn-hero-ghost"   href="/blockchain-rust/playground">API Playground</a>
+    <a class="btn-hero-ghost"   href="/blockchain-rust/webhooks">Webhooks</a>
+  </div>
+</div>
+
+<div class="dev-body">
+
+  <!-- ── Features ── -->
+  <div>
+    <div class="section-title">Tính năng</div>
+    <div class="grid-3">
+      <div class="card">
+        <div class="feature-icon">⚡</div>
+        <h3>REST API</h3>
+        <p>Blocks, transactions, addresses, UTXOs, mempool — toàn bộ data on-chain qua HTTP JSON.</p>
+      </div>
+      <div class="card">
+        <div class="feature-icon">🔔</div>
+        <h3>Webhooks</h3>
+        <p>Push notification real-time khi có block mới, transaction, hoặc activity tại address cụ thể.</p>
+      </div>
+      <div class="card">
+        <div class="feature-icon">📦</div>
+        <h3>JS/TS SDK</h3>
+        <p>Package <code>@pktcore/sdk</code> — typed client cho REST, JSON-RPC, và WebSocket subscribe.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Quickstart ── -->
+  <div id="quickstart">
+    <div class="section-title">Quickstart</div>
+    <div class="card">
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Gọi API không cần auth</h4>
+            <p>Tất cả endpoint <code>GET /api/testnet/*</code> đều public — không cần API key.</p>
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body"><span class="c-comment"># Lấy block mới nhất</span>
+curl https://oceif.com/blockchain-rust/api/testnet/headers?limit=1
+
+<span class="c-comment"># Balance của một address</span>
+curl https://oceif.com/blockchain-rust/api/testnet/balance/pkt1q...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Cài JS/TS SDK</h4>
+            <p>SDK typed đầy đủ, hỗ trợ REST + JSON-RPC + WebSocket.</p>
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">npm install @pktcore/sdk</div>
+            </div>
+            <div style="margin-top:10px">
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>typescript</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body"><span class="c-kw">import</span> { <span class="c-fn">PktClient</span> } <span class="c-kw">from</span> <span class="c-str">'@pktcore/sdk'</span>;
+
+<span class="c-kw">const</span> client = <span class="c-kw">new</span> <span class="c-fn">PktClient</span>({
+  baseUrl: <span class="c-str">'https://oceif.com/blockchain-rust'</span>,
+});
+
+<span class="c-kw">const</span> summary = <span class="c-kw">await</span> client.<span class="c-fn">getSummary</span>();
+console.<span class="c-fn">log</span>(summary.height, summary.hashrate);</div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Subscribe real-time qua WebSocket</h4>
+            <p>Nhận block/tx mới không cần polling.</p>
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>typescript</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">client.<span class="c-fn">subscribe</span>(<span class="c-str">'block'</span>, (block) => {
+  console.<span class="c-fn">log</span>(<span class="c-str">'New block:'</span>, block.height, block.hash);
+});
+
+client.<span class="c-fn">subscribe</span>(<span class="c-str">'tx'</span>, (tx) => {
+  console.<span class="c-fn">log</span>(<span class="c-str">'New tx:'</span>, tx.tx_id, tx.fee);
+});</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <h4>Đăng ký Webhook (cần write API key)</h4>
+            <p>Nhận HTTP POST khi có event — không cần giữ WebSocket connection.</p>
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/api/webhooks \
+  -H <span class="c-str">"X-API-Key: your_write_key"</span> \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{"url":"https://your-app.com/hook","events":["new_block"]}'</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── API Endpoints ── -->
+  <div id="endpoints">
+    <div class="section-title">API Endpoints</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="ep-table">
+        <thead>
+          <tr>
+            <th style="width:60px">Method</th>
+            <th>Path</th>
+            <th>Mô tả</th>
+            <th style="width:80px">Auth</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/headers</td><td>Block headers (paginated)</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/block/:height</td><td>Block theo height</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/tx/:txid</td><td>Transaction theo txid</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/balance/:addr</td><td>Số dư PKT của address</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/utxos/:addr</td><td>UTXOs của address</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/address/:addr/txs</td><td>Lịch sử giao dịch (paginated)</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/summary</td><td>Network summary (hashrate, mempool…)</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/mempool</td><td>Pending transactions</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/analytics</td><td>Time-series hashrate/difficulty</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/rich-list</td><td>Top holders</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/search?q=</td><td>Tìm block/tx/address</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/health/detailed</td><td>Node health status</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/webhooks</td><td>Danh sách webhooks</td><td class="ep-auth write">write</td></tr>
+          <tr><td><span class="method method-post">POST</span></td><td class="ep-path">/api/webhooks</td><td>Đăng ký webhook mới</td><td class="ep-auth write">write</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/testnet/address/:addr/export.csv</td><td>Export lịch sử CSV</td><td class="ep-auth">—</td></tr>
+          <tr><td><span class="method method-get">GET</span></td><td class="ep-path">/api/keys</td><td>Liệt kê API keys</td><td class="ep-auth write" style="color:var(--red)">admin</td></tr>
+          <tr><td><span class="method method-post">POST</span></td><td class="ep-path">/api/keys</td><td>Tạo API key mới</td><td class="ep-auth write" style="color:var(--red)">admin</td></tr>
+          <tr><td><span class="method" style="background:rgba(240,96,96,.12);color:var(--red)">DEL</span></td><td class="ep-path">/api/keys/:key_id</td><td>Thu hồi API key</td><td class="ep-auth write" style="color:var(--red)">admin</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;text-align:right">
+      <a href="/blockchain-rust/playground" style="font-size:.82rem;color:var(--accent)">Thử nghiệm trong API Playground →</a>
+    </div>
+  </div>
+
+  <!-- ── Rate Limits ── -->
+  <div id="rate-limits">
+    <div class="section-title">Rate Limits</div>
+    <div class="rl-grid">
+      <div class="rl-card">
+        <div class="rl-tier">Anonymous</div>
+        <div class="rl-val">60</div>
+        <div class="rl-unit">requests / phút</div>
+      </div>
+      <div class="rl-card rl-highlight">
+        <div class="rl-tier">API Key (read)</div>
+        <div class="rl-val">600</div>
+        <div class="rl-unit">requests / phút</div>
+      </div>
+      <div class="rl-card">
+        <div class="rl-tier">API Key (write)</div>
+        <div class="rl-val">120</div>
+        <div class="rl-unit">requests / phút</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── API Key ── -->
+  <div id="api-key">
+    <div class="section-title">API Key</div>
+    <div class="card">
+      <div class="key-info">
+        <div class="key-info-text">
+          <h4>Lấy API Key</h4>
+          <p>API key được tạo server-side. Gửi email đến admin hoặc liên hệ qua GitHub để nhận key.<br><br>
+          Header xác thực: <code style="font-family:'JetBrains Mono',monospace;font-size:.82rem">X-API-Key: your_key_here</code></p>
+          <div style="margin-top:14px">
+            <a href="https://github.com/TuyenPKT/blockchain-rust/issues" target="_blank"
+               class="btn-hero-ghost" style="font-size:.82rem;padding:8px 18px;display:inline-block">
+              Request API Key →
+            </a>
+          </div>
+        </div>
+        <div class="key-roles">
+          <div class="key-role-item">
+            <span class="role-badge role-read">read</span>
+            <span class="role-desc">Đọc dữ liệu blockchain</span>
+          </div>
+          <div class="key-role-item">
+            <span class="role-badge role-write">write</span>
+            <span class="role-desc">read + quản lý webhooks</span>
+          </div>
+          <div class="key-role-item">
+            <span class="role-badge role-admin">admin</span>
+            <span class="role-desc">write + quản lý API keys</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Verify Webhook ── -->
+  <div>
+    <div class="section-title">Verify Webhook Signature</div>
+    <div class="card">
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:16px">
+        Mỗi request từ PKTScan có header <code>X-PKT-Signature</code> = HMAC-SHA256(secret, body).
+        Verify để đảm bảo request đến từ PKTScan.
+      </p>
+      <div class="code-wrap">
+        <div class="code-hdr">
+          <span>Node.js / Express</span>
+          <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+        </div>
+        <div class="code-body"><span class="c-kw">import</span> crypto <span class="c-kw">from</span> <span class="c-str">'crypto'</span>;
+
+app.<span class="c-fn">post</span>(<span class="c-str">'/hook'</span>, (req, res) => {
+  <span class="c-kw">const</span> sig      = req.headers[<span class="c-str">'x-pkt-signature'</span>];
+  <span class="c-kw">const</span> expected = crypto
+    .<span class="c-fn">createHmac</span>(<span class="c-str">'sha256'</span>, process.env.PKT_WEBHOOK_SECRET)
+    .<span class="c-fn">update</span>(req.rawBody)
+    .<span class="c-fn">digest</span>(<span class="c-str">'hex'</span>);
+
+  <span class="c-kw">if</span> (sig !== expected) <span class="c-kw">return</span> res.<span class="c-fn">status</span>(<span class="c-num">401</span>).<span class="c-fn">end</span>();
+
+  <span class="c-kw">const</span> { event, data } = req.body;
+  <span class="c-kw">if</span> (event === <span class="c-str">'new_block'</span>) console.<span class="c-fn">log</span>(<span class="c-str">'Block:'</span>, data.height);
+  res.<span class="c-fn">sendStatus</span>(<span class="c-num">200</span>);
+});</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /dev-body -->
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
+      PKTScan
+    </div>
+    <span>PKT Blockchain Explorer</span>
+    <span>© 2026 PKTScan</span>
+  </div>
+</footer>
+
+<script src="/blockchain-rust/web/js/shared.js?v=19.9"></script>
+<script>
+function copyCode(btn) {
+  const code = btn.closest('.code-wrap').querySelector('.code-body').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+</script>
+</body>
+</html>

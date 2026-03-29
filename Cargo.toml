@@ -4,6 +4,7 @@ members = [
     "crates/pkt-sdk",
     "crates/pkt-api",
     "crates/pkt-cli",
+    "desktop/src-tauri",
 ]
 resolver = "2"
 

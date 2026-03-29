@@ -1,0 +1,940 @@
+//! pktscan-desktop — Tauri backend (v21.0)
+//!
+//! IPC commands expose PKTScan REST API tới React frontend qua invoke().
+//!
+//! Commands:
+//!   get_summary(node_url)                    → NetworkSummary JSON
+//!   get_blocks(node_url, limit)              → block headers JSON
+//!   get_balance(node_url, address)           → balance JSON
+//!   search(node_url, query)                  → search results JSON
+//!   start_mine(address, node_addr, threads)  → spawn real blake3 PoW miner
+//!   stop_mine()                              → stop miner
+//!   mine_status()                            → bool
+
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use rayon::prelude::*;
+use tauri::Emitter;
+use sha2::Digest as _;
+use ripemd::Ripemd160;
+
+// ── Miner global state ────────────────────────────────────────────────────────
+
+static MINER_RUNNING: AtomicBool = AtomicBool::new(false);
+static MINER_STOP:    AtomicBool = AtomicBool::new(false);
+
+const TIMEOUT_SECS: u64 = 10;
+
+fn client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+async fn get_json(url: &str) -> Result<serde_json::Value, String> {
+    let resp = client()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn base(node_url: &str) -> String {
+    node_url.trim_end_matches('/').to_string()
+}
+
+// ── IPC Commands ──────────────────────────────────────────────────────────────
+
+/// Fetch network summary: height, hashrate, mempool, block time…
+#[tauri::command]
+async fn get_summary(node_url: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/summary", base(&node_url))).await
+}
+
+/// Fetch recent block headers (paginated).
+#[tauri::command]
+async fn get_blocks(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/headers?limit={}", base(&node_url), limit)).await
+}
+
+/// Fetch PKT balance for an address.
+#[tauri::command]
+async fn get_balance(node_url: String, address: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/balance/{}", base(&node_url), address)).await
+}
+
+/// Search: block height, txid, or address.
+#[tauri::command]
+async fn search(node_url: String, query: String) -> Result<serde_json::Value, String> {
+    let q = urlencoding::encode(&query);
+    get_json(&format!("{}/api/testnet/search?q={}", base(&node_url), q)).await
+}
+
+/// Fetch analytics time-series: metric = hashrate | block_time | difficulty
+#[tauri::command]
+async fn get_analytics(node_url: String, metric: String, window: u32) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/analytics?metric={}&window={}", base(&node_url), metric, window)).await
+}
+
+/// Fetch TX history for an address (paginated).
+#[tauri::command]
+async fn get_address_txs(node_url: String, address: String, page: u32, limit: u32) -> Result<serde_json::Value, String> {
+    let a = urlencoding::encode(&address);
+    get_json(&format!("{}/api/testnet/address/{}/txs?page={}&limit={}", base(&node_url), a, page, limit)).await
+}
+
+/// Fetch UTXO list for an address.
+#[tauri::command]
+async fn get_address_utxos(node_url: String, address: String) -> Result<serde_json::Value, String> {
+    let a = urlencoding::encode(&address);
+    get_json(&format!("{}/api/testnet/address/{}/utxos", base(&node_url), a)).await
+}
+
+/// Fetch top PKT holders (rich list).
+#[tauri::command]
+async fn get_rich_list(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/richlist?limit={}", base(&node_url), limit)).await
+}
+
+/// Fetch mempool pending transactions.
+#[tauri::command]
+async fn get_mempool(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/mempool?limit={}", base(&node_url), limit)).await
+}
+
+/// Fetch full block detail by height (includes TX list).
+#[tauri::command]
+async fn get_block_detail(node_url: String, height: u64) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/api/testnet/block/{}", base(&node_url), height)).await
+}
+
+/// Fetch full TX detail by txid (includes inputs + outputs).
+#[tauri::command]
+async fn get_tx_detail(node_url: String, txid: String) -> Result<serde_json::Value, String> {
+    let t = urlencoding::encode(&txid);
+    get_json(&format!("{}/api/testnet/tx/{}", base(&node_url), t)).await
+}
+
+/// POST raw hex transaction lên node để broadcast.
+#[tauri::command]
+async fn tx_broadcast(node_url: String, raw_hex: String) -> Result<serde_json::Value, String> {
+    let url = format!("{}/api/testnet/tx/broadcast", base(&node_url));
+    let client = reqwest::Client::new();
+    let resp = client.post(&url)
+        .json(&serde_json::json!({"raw_hex": raw_hex}))
+        .send().await
+        .map_err(|e| e.to_string())?;
+    resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+// ── Miner commands ────────────────────────────────────────────────────────────
+
+/// Bắt đầu mine: spawn background thread, emit "mine_log" + "mine_stats" events.
+#[tauri::command]
+async fn start_mine(
+    app: tauri::AppHandle,
+    address: String,
+    node_addr: String,
+    threads: usize,
+) -> Result<(), String> {
+    if MINER_RUNNING.load(Ordering::SeqCst) {
+        return Err("Miner đang chạy".to_string());
+    }
+    let pubkey_hash_bytes = parse_miner_address(&address)?;
+    let pubkey_hash_hex   = hex::encode(&pubkey_hash_bytes);
+    MINER_STOP.store(false, Ordering::SeqCst);
+    MINER_RUNNING.store(true, Ordering::SeqCst);
+    std::thread::spawn(move || {
+        miner_loop(app, pubkey_hash_hex, node_addr, threads.max(1));
+        MINER_RUNNING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+/// Dừng miner (set MINER_STOP flag, rayon workers thoát ≤50k hashes).
+#[tauri::command]
+fn stop_mine() {
+    MINER_STOP.store(true, Ordering::SeqCst);
+}
+
+/// Trả về true nếu miner đang chạy.
+#[tauri::command]
+fn mine_status() -> bool {
+    MINER_RUNNING.load(Ordering::SeqCst)
+}
+
+// ── Miner loop (sync, chạy trong std::thread) ─────────────────────────────────
+
+fn emit_log(app: &tauri::AppHandle, msg: &str) {
+    let _ = app.emit("mine_log", msg.to_string());
+}
+
+fn miner_loop(app: tauri::AppHandle, pubkey_hash_hex: String, node_addr: String, threads: usize) {
+    let total_hashes  = Arc::new(AtomicU64::new(0));
+    let blocks_mined  = Arc::new(AtomicU64::new(0));
+    let session_start = std::time::Instant::now();
+
+    // Progress reporter: emit mine_stats every 800ms
+    {
+        let app2    = app.clone();
+        let th      = Arc::clone(&total_hashes);
+        let bm      = Arc::clone(&blocks_mined);
+        std::thread::spawn(move || {
+            let mut last_h = 0u64;
+            let mut last_t = std::time::Instant::now();
+            loop {
+                std::thread::sleep(Duration::from_millis(800));
+                let h   = th.load(Ordering::Relaxed);
+                let dt  = last_t.elapsed().as_secs_f64().max(0.001);
+                let rate = ((h.saturating_sub(last_h)) as f64 / dt) as u64;
+                last_h  = h;
+                last_t  = std::time::Instant::now();
+                let _ = app2.emit("mine_stats", serde_json::json!({
+                    "hashrate":     rate,
+                    "total_hashes": h,
+                    "blocks_mined": bm.load(Ordering::Relaxed),
+                    "uptime_secs":  session_start.elapsed().as_secs(),
+                }));
+                if MINER_STOP.load(Ordering::Relaxed) && !MINER_RUNNING.load(Ordering::Relaxed) {
+                    break;
+                }
+            }
+        });
+    }
+
+    emit_log(&app, &format!("⛏ PKTScan Miner bắt đầu — node: {}", node_addr));
+    emit_log(&app, &format!("  Threads: {}  |  Reward: {}", threads, &pubkey_hash_hex[..8]));
+
+    loop {
+        if MINER_STOP.load(Ordering::Relaxed) { break; }
+
+        // ── 1. Lấy block template từ node ────────────────────────────────────
+        emit_log(&app, &format!("→ GetTemplate từ {}", node_addr));
+        let tmpl = match get_template_tcp(&node_addr) {
+            Ok(t)  => t,
+            Err(e) => {
+                emit_log(&app, &format!("⚠️ Node error: {} — thử lại 5s", e));
+                std::thread::sleep(Duration::from_secs(5));
+                continue;
+            }
+        };
+        emit_log(&app, &format!("  Template #{} diff={} txs={}",
+            tmpl.height, tmpl.difficulty, tmpl.txs.len()));
+
+        // ── 2. Build coinbase TX ──────────────────────────────────────────────
+        let fee: u64 = tmpl.txs.iter()
+            .map(|t| t["fee"].as_u64().unwrap_or(0))
+            .sum();
+        let era     = (tmpl.height / 210_000).min(63);
+        let subsidy = 50_000_000_000u64 >> era;
+        let amount  = subsidy + fee;
+
+        let cb_txid  = compute_coinbase_txid(tmpl.height, amount);
+        let cb_wtxid = compute_coinbase_wtxid(tmpl.height, amount);
+
+        // ── 3. Merkle roots ───────────────────────────────────────────────────
+        let mut tx_ids:  Vec<String> = vec![cb_txid.clone()];
+        let mut wtx_ids: Vec<String> = vec![cb_wtxid.clone()];
+        for tx in &tmpl.txs {
+            tx_ids.push(tx["tx_id"].as_str().unwrap_or("").to_string());
+            wtx_ids.push(tx["wtx_id"].as_str().unwrap_or("").to_string());
+        }
+        let txid_root    = merkle_root(tx_ids);
+        let witness_root = merkle_root(wtx_ids);
+
+        // ── 4. Mine PoW ───────────────────────────────────────────────────────
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let prefix = format!("{}|{}|{}|{}|{}|",
+            tmpl.height, timestamp, txid_root, witness_root, tmpl.prev_hash);
+        let target = "0".repeat(tmpl.difficulty);
+        let n      = threads;
+        let chunk  = u64::MAX / n as u64;
+
+        let round_hashes = Arc::new(AtomicU64::new(0));
+        let stop_flag    = Arc::new(AtomicBool::new(false));
+
+        // Watch MINER_STOP → stop_flag
+        {
+            let sf = Arc::clone(&stop_flag);
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_millis(50));
+                    if MINER_STOP.load(Ordering::Relaxed) {
+                        sf.store(true, Ordering::Relaxed);
+                        break;
+                    }
+                    if sf.load(Ordering::Relaxed) { break; }
+                }
+            });
+        }
+
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build();
+        let pool = match pool {
+            Ok(p)  => p,
+            Err(e) => { emit_log(&app, &format!("Pool error: {}", e)); break; }
+        };
+
+        let prefix2 = prefix.clone();
+        let target2 = target.clone();
+        let rh      = Arc::clone(&round_hashes);
+        let sf2     = Arc::clone(&stop_flag);
+
+        let found = pool.install(|| {
+            (0..n).into_par_iter().find_map_any(|tid| {
+                let start  = (tid as u64).saturating_mul(chunk);
+                let end    = if tid == n - 1 { u64::MAX } else { start.saturating_add(chunk) };
+                let mut local = 0u64;
+                for nonce in start..end {
+                    if sf2.load(Ordering::Relaxed) {
+                        rh.fetch_add(local, Ordering::Relaxed);
+                        return None;
+                    }
+                    let header = format!("{}{}", prefix2, nonce);
+                    let hash   = hex::encode(blake3::hash(header.as_bytes()).as_bytes());
+                    local += 1;
+                    if local % 50_000 == 0 {
+                        rh.fetch_add(50_000, Ordering::Relaxed);
+                        local = 0;
+                    }
+                    if hash.starts_with(&target2) {
+                        sf2.store(true, Ordering::Relaxed);
+                        rh.fetch_add(local, Ordering::Relaxed);
+                        return Some((nonce, hash));
+                    }
+                }
+                rh.fetch_add(local, Ordering::Relaxed);
+                None
+            })
+        });
+
+        // Accumulate hashes từ round này vào session total
+        let round_h = round_hashes.load(Ordering::Relaxed);
+        total_hashes.fetch_add(round_h, Ordering::Relaxed);
+
+        if MINER_STOP.load(Ordering::Relaxed) { break; }
+
+        // ── 5. Submit block ───────────────────────────────────────────────────
+        if let Some((nonce, hash)) = found {
+            emit_log(&app, &format!("🎉 Block #{} found! nonce={} hash={}...{}",
+                tmpl.height, nonce, &hash[..8], &hash[56..]));
+
+            let coinbase_json = build_coinbase_json(
+                &pubkey_hash_hex, tmpl.height, amount, &cb_txid, &cb_wtxid);
+            let mut all_txs: Vec<serde_json::Value> = vec![coinbase_json];
+            all_txs.extend(tmpl.txs.clone());
+
+            let block_json = serde_json::json!({
+                "index":        tmpl.height,
+                "timestamp":    timestamp,
+                "transactions": all_txs,
+                "prev_hash":    tmpl.prev_hash,
+                "nonce":        nonce,
+                "hash":         hash,
+                "witness_root": witness_root,
+            });
+
+            match submit_block_tcp(&node_addr, block_json) {
+                Ok(tip) => {
+                    emit_log(&app, &format!("✅ Block accepted! Node height={}", tip));
+                    blocks_mined.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(e) => {
+                    emit_log(&app, &format!("⚠️ Submit error: {}", e));
+                }
+            }
+        }
+    }
+
+    emit_log(&app, &format!("⏹ Mining stopped. Blocks: {}  Hashes: {}",
+        blocks_mined.load(Ordering::Relaxed),
+        fmt_big(total_hashes.load(Ordering::Relaxed))));
+}
+
+// ── Miner helpers ─────────────────────────────────────────────────────────────
+
+struct MineTemplate {
+    prev_hash:  String,
+    height:     u64,
+    difficulty: usize,
+    txs:        Vec<serde_json::Value>,
+}
+
+fn get_template_tcp(node_addr: &str) -> Result<MineTemplate, String> {
+    let msg = b"{\"GetTemplate\":null}\n";
+    let mut stream = TcpStream::connect(node_addr)
+        .map_err(|e| format!("connect: {}", e))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
+    stream.write_all(msg).map_err(|e| format!("write: {}", e))?;
+    let mut line = String::new();
+    BufReader::new(stream)
+        .read_line(&mut line)
+        .map_err(|e| format!("read: {}", e))?;
+    let v: serde_json::Value = serde_json::from_str(line.trim())
+        .map_err(|e| format!("parse: {}", e))?;
+    let t = &v["Template"];
+    if t.is_null() { return Err("Node trả về lỗi (không có Template)".to_string()); }
+    Ok(MineTemplate {
+        prev_hash:  t["prev_hash"].as_str().unwrap_or("").to_string(),
+        height:     t["height"].as_u64().unwrap_or(0),
+        difficulty: t["difficulty"].as_u64().unwrap_or(3) as usize,
+        txs:        t["txs"].as_array().cloned().unwrap_or_default(),
+    })
+}
+
+fn submit_block_tcp(node_addr: &str, block: serde_json::Value) -> Result<u64, String> {
+    let msg = serde_json::json!({"NewBlock": {"block": block}});
+    let mut msg_str = serde_json::to_string(&msg).map_err(|e| e.to_string())?;
+    msg_str.push('\n');
+    let mut stream = TcpStream::connect(node_addr)
+        .map_err(|e| format!("connect: {}", e))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
+    stream.write_all(msg_str.as_bytes()).map_err(|e| format!("write: {}", e))?;
+    let mut line = String::new();
+    BufReader::new(stream)
+        .read_line(&mut line)
+        .map_err(|e| format!("read: {}", e))?;
+    let v: serde_json::Value = serde_json::from_str(line.trim()).unwrap_or_default();
+    Ok(v["Height"]["height"].as_u64().unwrap_or(0))
+}
+
+/// Giải mã địa chỉ PKT: bech32 (tpkt1/pkt1), Base58Check (legacy P2PKH), hoặc hex.
+fn parse_miner_address(addr: &str) -> Result<Vec<u8>, String> {
+    let a = addr.trim();
+    if a.starts_with("pkt1") || a.starts_with("tpkt1") || a.starts_with("rpkt1") {
+        return decode_bech32_witprog(a);
+    }
+    // Hex pubkey_hash (40 hex chars = 20 bytes)
+    if a.len() == 40 && a.chars().all(|c| c.is_ascii_hexdigit()) {
+        return hex::decode(a).map_err(|e| format!("địa chỉ không hợp lệ: {}", e));
+    }
+    // Fallback: Base58Check (legacy P2PKH — starts with '1', 'p', 'm', 'n', etc.)
+    decode_base58check(a)
+}
+
+/// Giải mã Base58Check → 20-byte pubkey_hash (bỏ version byte và 4-byte checksum).
+fn decode_base58check(addr: &str) -> Result<Vec<u8>, String> {
+    const ALPHA: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    // Kết quả P2PKH luôn là 25 bytes: 1 version + 20 hash + 4 checksum
+    let mut out = [0u8; 25];
+    for c in addr.bytes() {
+        let digit = ALPHA.iter().position(|&x| x == c)
+            .ok_or_else(|| format!("địa chỉ không hợp lệ: ký tự '{}' không thuộc Base58", c as char))?
+            as u32;
+        let mut carry = digit;
+        for byte in out.iter_mut().rev() {
+            carry += (*byte as u32) * 58;
+            *byte = (carry & 0xff) as u8;
+            carry >>= 8;
+        }
+        if carry != 0 {
+            return Err("địa chỉ Base58 quá lớn".to_string());
+        }
+    }
+    // out[0] = version, out[1..21] = pubkey_hash, out[21..25] = checksum
+    Ok(out[1..21].to_vec())
+}
+
+fn decode_bech32_witprog(addr: &str) -> Result<Vec<u8>, String> {
+    const CHARSET: &[u8] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let lower = addr.to_ascii_lowercase();
+    let sep   = lower.rfind('1').ok_or("thiếu '1' separator")?;
+    let data_str = &lower[sep + 1..];
+    if data_str.len() < 7 { return Err("địa chỉ quá ngắn".to_string()); }
+    let mut data = Vec::with_capacity(data_str.len());
+    for c in data_str.chars() {
+        let idx = CHARSET.iter().position(|&x| x == c as u8)
+            .ok_or_else(|| format!("ký tự không hợp lệ: '{}'", c))?;
+        data.push(idx as u8);
+    }
+    // data[0] = witness version, last 6 = checksum → strip both
+    let payload = &data[1..data.len() - 6];
+    convertbits5to8(payload).ok_or("convertbits thất bại".to_string())
+}
+
+fn convertbits5to8(data: &[u8]) -> Option<Vec<u8>> {
+    let mut acc: u32  = 0;
+    let mut bits: u32 = 0;
+    let mut ret = Vec::new();
+    for &b in data {
+        if (b as u32) >> 5 != 0 { return None; }
+        acc   = (acc << 5) | b as u32;
+        bits += 5;
+        while bits >= 8 {
+            bits -= 8;
+            ret.push(((acc >> bits) & 0xff) as u8);
+        }
+    }
+    if bits >= 5 || ((acc << (8 - bits)) & 0xff) != 0 { return None; }
+    Some(ret)
+}
+
+/// Coinbase txid = blake3("txid|[("<zeros64>", height, 4294967295)]|[amount]|true")
+fn compute_coinbase_txid(height: u64, amount: u64) -> String {
+    let data = format!(
+        "txid|[(\"{}\", {}, {})]|[{}]|true",
+        "0".repeat(64), height as usize, 0xFFFF_FFFFu32, amount,
+    );
+    hex::encode(blake3::hash(data.as_bytes()).as_bytes())
+}
+
+/// Coinbase wtxid — witness rỗng, thêm "[[]]" ở cuối
+fn compute_coinbase_wtxid(height: u64, amount: u64) -> String {
+    let data = format!(
+        "wtxid|[(\"{}\", {}, {})]|[{}]|true|[[]]",
+        "0".repeat(64), height as usize, 0xFFFF_FFFFu32, amount,
+    );
+    hex::encode(blake3::hash(data.as_bytes()).as_bytes())
+}
+
+/// Binary Merkle tree (blake3) — giống Block::merkle_root trong main crate.
+fn merkle_root(mut hashes: Vec<String>) -> String {
+    if hashes.is_empty() { return "0".repeat(64); }
+    while hashes.len() > 1 {
+        if hashes.len() % 2 == 1 {
+            let last = hashes.last().unwrap().clone();
+            hashes.push(last);
+        }
+        hashes = hashes.chunks(2).map(|p| {
+            let combined = format!("{}{}", p[0], p[1]);
+            hex::encode(blake3::hash(combined.as_bytes()).as_bytes())
+        }).collect();
+    }
+    hashes.into_iter().next().unwrap_or_else(|| "0".repeat(64))
+}
+
+/// Build coinbase TX JSON theo format serde của Transaction trong main crate.
+fn build_coinbase_json(
+    pubkey_hash_hex: &str,
+    height: u64,
+    amount: u64,
+    tx_id: &str,
+    wtx_id: &str,
+) -> serde_json::Value {
+    let hash_bytes: Vec<serde_json::Value> = hex::decode(pubkey_hash_hex)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|b| serde_json::Value::Number(b.into()))
+        .collect();
+    serde_json::json!({
+        "tx_id":  tx_id,
+        "wtx_id": wtx_id,
+        "inputs": [{
+            "tx_id":        "0".repeat(64),
+            "output_index": height as u64,
+            "script_sig":   { "ops": [] },
+            "sequence":     0xFFFF_FFFFu32,
+            "witness":      []
+        }],
+        "outputs": [{
+            "amount": amount,
+            "script_pubkey": {
+                "ops": [
+                    "OpDup",
+                    "OpHash160",
+                    { "OpPushData": hash_bytes },
+                    "OpEqualVerify",
+                    "OpCheckSig"
+                ]
+            }
+        }],
+        "is_coinbase": true,
+        "fee": 0u64
+    })
+}
+
+fn fmt_big(n: u64) -> String {
+    if n >= 1_000_000_000 { format!("{:.2}G", n as f64 / 1e9) }
+    else if n >= 1_000_000 { format!("{:.2}M", n as f64 / 1e6) }
+    else if n >= 1_000     { format!("{:.1}K", n as f64 / 1e3) }
+    else                   { format!("{}", n) }
+}
+
+// ── Peer scan ─────────────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize, Clone)]
+struct PeerInfo {
+    addr:       String,
+    latency_ms: Option<u64>,
+    height:     Option<u64>,
+    status:     String, // "online" | "timeout" | "refused"
+}
+
+/// Probe một peer: TCP connect → đo latency → gửi GetTemplate để lấy height.
+fn probe_peer(addr: &str) -> PeerInfo {
+    let sock_addr: std::net::SocketAddr = match addr.parse() {
+        Ok(a) => a,
+        Err(_) => return PeerInfo {
+            addr: addr.to_string(), latency_ms: None, height: None, status: "invalid".into(),
+        },
+    };
+    let t0 = std::time::Instant::now();
+    match TcpStream::connect_timeout(&sock_addr, Duration::from_secs(5)) {
+        Ok(mut stream) => {
+            let latency_ms = t0.elapsed().as_millis() as u64;
+            stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+            let height = if stream.write_all(b"{\"GetTemplate\":null}\n").is_ok() {
+                let mut line = String::new();
+                if BufReader::new(&stream).read_line(&mut line).is_ok() {
+                    serde_json::from_str::<serde_json::Value>(line.trim())
+                        .ok()
+                        .and_then(|v| v["Template"]["height"].as_u64())
+                }  else { None }
+            } else { None };
+            PeerInfo { addr: addr.to_string(), latency_ms: Some(latency_ms), height, status: "online".into() }
+        }
+        Err(e) => {
+            let status = if e.kind() == std::io::ErrorKind::ConnectionRefused {
+                "refused"
+            } else {
+                "timeout"
+            };
+            PeerInfo { addr: addr.to_string(), latency_ms: None, height: None, status: status.into() }
+        }
+    }
+}
+
+/// Kết nối seed → GetAddr → probe từng peer song song.
+#[tauri::command]
+async fn peer_scan(seed_addr: String) -> Result<Vec<PeerInfo>, String> {
+    let seed = seed_addr.trim().to_string();
+    let seed_sock: std::net::SocketAddr = seed.parse()
+        .map_err(|_| format!("seed address không hợp lệ: {}", seed))?;
+
+    // Bước 1: GetAddr từ seed để lấy danh sách peers
+    let mut addrs: Vec<String> = vec![seed.clone()];
+    if let Ok(mut stream) = TcpStream::connect_timeout(&seed_sock, Duration::from_secs(5)) {
+        stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+        if stream.write_all(b"{\"GetAddr\":null}\n").is_ok() {
+            let mut line = String::new();
+            if BufReader::new(&stream).read_line(&mut line).is_ok() {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) {
+                    // Thử các field name khả dĩ
+                    let arr = v["Addr"]["addrs"].as_array()
+                        .or_else(|| v["addrs"].as_array())
+                        .or_else(|| v["Peers"].as_array());
+                    if let Some(peers) = arr {
+                        for p in peers {
+                            if let Some(s) = p.as_str() {
+                                let s = s.to_string();
+                                if s != seed { addrs.push(s); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Bước 2: Probe song song (tối đa 20 peers, timeout 5s mỗi cái)
+    let addrs: Vec<String> = addrs.into_iter().take(20).collect();
+    let handles: Vec<_> = addrs.into_iter()
+        .map(|a| tokio::task::spawn_blocking(move || probe_peer(&a)))
+        .collect();
+
+    let mut results = Vec::new();
+    for h in handles {
+        if let Ok(info) = h.await {
+            results.push(info);
+        }
+    }
+    // Seed trước, online trước, latency tăng dần
+    results.sort_by(|a, b| {
+        let ord = |s: &str| match s { "online" => 0, "refused" => 1, _ => 2 };
+        ord(&a.status).cmp(&ord(&b.status))
+            .then(a.latency_ms.unwrap_or(u64::MAX).cmp(&b.latency_ms.unwrap_or(u64::MAX)))
+    });
+    Ok(results)
+}
+
+// ── Wallet ────────────────────────────────────────────────────────────────────
+
+/// PKT hash160: RIPEMD160(blake3(pubkey)) — khác Bitcoin (dùng blake3 thay SHA256).
+fn pkt_hash160(data: &[u8]) -> [u8; 20] {
+    let b3   = blake3::hash(data);
+    let ripe = Ripemd160::digest(b3.as_bytes());
+    let mut out = [0u8; 20];
+    out.copy_from_slice(&ripe);
+    out
+}
+
+/// PKT P2PKH address: Base58Check( 0x00 + hash160, checksum = blake3(blake3(payload))[0..4] ).
+fn pkt_address(hash20: &[u8]) -> String {
+    let mut payload = vec![0x00u8];
+    payload.extend_from_slice(hash20);
+    let chk = blake3::hash(blake3::hash(&payload).as_bytes());
+    payload.extend_from_slice(&chk.as_bytes()[..4]);
+    bs58::encode(payload).into_string()
+}
+
+/// Decode PKT Base58Check → hash160 (20 bytes). Không verify checksum (dùng cho script lookup).
+fn decode_pkt_address(addr: &str) -> Result<[u8; 20], String> {
+    let bytes = bs58::decode(addr).into_vec()
+        .map_err(|e| format!("Base58 decode lỗi: {}", e))?;
+    if bytes.len() != 25 {
+        return Err(format!("địa chỉ không hợp lệ: {} bytes (cần 25)", bytes.len()));
+    }
+    let mut h = [0u8; 20];
+    h.copy_from_slice(&bytes[1..21]);
+    Ok(h)
+}
+
+/// Tạo ví PKT mới: secp256k1 keypair → P2PKH Base58Check address.
+#[tauri::command]
+fn wallet_generate(_network: String) -> Result<serde_json::Value, String> {
+    let secp = secp256k1::Secp256k1::new();
+    let (secret_key, public_key) = secp.generate_keypair(&mut secp256k1::rand::thread_rng());
+    let hash    = pkt_hash160(&public_key.serialize());
+    let address = pkt_address(&hash);
+    let privkey = hex::encode(secret_key.secret_bytes());
+    let pubkey  = hex::encode(public_key.serialize());
+    Ok(serde_json::json!({ "address": address, "privkey_hex": privkey, "pubkey_hex": pubkey }))
+}
+
+/// Khôi phục ví từ private key hex → P2PKH Base58Check address.
+#[tauri::command]
+fn wallet_from_privkey(privkey_hex: String, _network: String) -> Result<serde_json::Value, String> {
+    let bytes = hex::decode(privkey_hex.trim())
+        .map_err(|_| "private key hex không hợp lệ".to_string())?;
+    let secp   = secp256k1::Secp256k1::new();
+    let sk     = secp256k1::SecretKey::from_slice(&bytes)
+        .map_err(|e| format!("private key lỗi: {}", e))?;
+    let pk     = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+    let hash   = pkt_hash160(&pk.serialize());
+    let address = pkt_address(&hash);
+    let pubkey  = hex::encode(pk.serialize());
+    Ok(serde_json::json!({ "address": address, "pubkey_hex": pubkey }))
+}
+
+// ── Wallet: build + sign tx ────────────────────────────────────────────────────
+
+/// Input UTXO từ frontend.
+#[derive(serde::Deserialize)]
+struct UtxoInput {
+    txid:          String, // txid hex (big-endian display order)
+    vout:          u32,
+    value:         u64,    // paklets
+    script_pubkey: String, // script_pubkey hex (P2PKH: 76a914{hash160}88ac)
+}
+
+/// Build + sign P2PKH legacy transaction (PKT dùng P2PKH, không phải segwit).
+/// Signing: blake3-double-hash của sighash preimage (PKT dùng blake3 thay SHA256d).
+#[tauri::command]
+fn wallet_tx_build(
+    privkey_hex: String,
+    inputs:      Vec<UtxoInput>,
+    to_addr:     String,
+    amount_sat:  u64,
+    fee_sat:     u64,
+    change_addr: String,
+    _network:    String,
+) -> Result<serde_json::Value, String> {
+    use secp256k1::{Secp256k1, SecretKey, Message};
+
+    let secp     = Secp256k1::new();
+    let sk       = SecretKey::from_slice(
+        &hex::decode(privkey_hex.trim()).map_err(|_| "privkey hex lỗi".to_string())?
+    ).map_err(|e| format!("privkey lỗi: {}", e))?;
+    let pk       = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+    let pk_bytes = pk.serialize(); // 33 bytes compressed
+
+    let to_script  = addr_to_p2pkh_script(&to_addr)?;
+    let chg_script = addr_to_p2pkh_script(&change_addr)?;
+
+    let total_in: u64 = inputs.iter().map(|u| u.value).sum();
+    if total_in < amount_sat + fee_sat {
+        return Err(format!("số dư không đủ: {} < {} + {}", total_in, amount_sat, fee_sat));
+    }
+    let change = total_in - amount_sat - fee_sat;
+    let n_in   = inputs.len() as u64;
+    let n_out  = if change > 0 { 2u64 } else { 1u64 };
+
+    // P2PKH legacy signing: cho mỗi input, serialize tx với scriptSig = scriptPubKey của input đó,
+    // các input còn lại scriptSig = empty, append SIGHASH_ALL(4LE), hash = blake3(blake3(preimage)).
+    let mut sigs: Vec<Vec<u8>> = Vec::new();
+    for (i, inp) in inputs.iter().enumerate() {
+        let sp_bytes = hex::decode(&inp.script_pubkey)
+            .map_err(|_| "script_pubkey hex lỗi")?;
+
+        let mut preimage: Vec<u8> = Vec::new();
+        preimage.extend_from_slice(&1u32.to_le_bytes()); // version
+        write_varint(&mut preimage, n_in);
+        for (j, inp2) in inputs.iter().enumerate() {
+            let mut txid_bytes = hex::decode(&inp2.txid).map_err(|_| "txid hex lỗi")?;
+            txid_bytes.reverse(); // display → wire LE
+            preimage.extend_from_slice(&txid_bytes);
+            preimage.extend_from_slice(&inp2.vout.to_le_bytes());
+            if j == i {
+                write_varint(&mut preimage, sp_bytes.len() as u64);
+                preimage.extend_from_slice(&sp_bytes);
+            } else {
+                preimage.push(0x00); // empty scriptSig
+            }
+            preimage.extend_from_slice(&0xffff_ffffu32.to_le_bytes()); // sequence
+        }
+        write_varint(&mut preimage, n_out);
+        write_tx_output(&mut preimage, amount_sat, &to_script);
+        if change > 0 { write_tx_output(&mut preimage, change, &chg_script); }
+        preimage.extend_from_slice(&0u32.to_le_bytes());  // locktime
+        preimage.extend_from_slice(&1u32.to_le_bytes());  // SIGHASH_ALL
+
+        // PKT hash: blake3(blake3(preimage))
+        let h1  = blake3::hash(&preimage);
+        let h2  = blake3::hash(h1.as_bytes());
+        let msg = Message::from_slice(h2.as_bytes()).map_err(|e| format!("msg error: {}", e))?;
+        let sig = secp.sign_ecdsa(&msg, &sk);
+        let mut der = sig.serialize_der().to_vec();
+        der.push(0x01); // SIGHASH_ALL
+        sigs.push(der);
+    }
+
+    // Serialize final tx: version + inputs(với scriptSig) + outputs + locktime
+    let mut raw: Vec<u8> = Vec::new();
+    raw.extend_from_slice(&1u32.to_le_bytes()); // version
+    write_varint(&mut raw, n_in);
+    for (i, inp) in inputs.iter().enumerate() {
+        let mut txid_bytes = hex::decode(&inp.txid).map_err(|_| "txid hex lỗi")?;
+        txid_bytes.reverse();
+        raw.extend_from_slice(&txid_bytes);
+        raw.extend_from_slice(&inp.vout.to_le_bytes());
+        // scriptSig = <sig_len><sig><pk_len><pk>
+        let sig = &sigs[i];
+        let script_sig_len = 1 + sig.len() + 1 + pk_bytes.len();
+        write_varint(&mut raw, script_sig_len as u64);
+        raw.push(sig.len() as u8);
+        raw.extend_from_slice(sig);
+        raw.push(pk_bytes.len() as u8);
+        raw.extend_from_slice(&pk_bytes);
+        raw.extend_from_slice(&0xffff_ffffu32.to_le_bytes()); // sequence
+    }
+    write_varint(&mut raw, n_out);
+    write_tx_output(&mut raw, amount_sat, &to_script);
+    if change > 0 { write_tx_output(&mut raw, change, &chg_script); }
+    raw.extend_from_slice(&0u32.to_le_bytes()); // locktime
+
+    // txid = blake3(blake3(raw)) reversed
+    let h1   = blake3::hash(&raw);
+    let h2   = blake3::hash(h1.as_bytes());
+    let mut txid_bytes = *h2.as_bytes();
+    txid_bytes.reverse();
+    let txid = hex::encode(txid_bytes);
+
+    Ok(serde_json::json!({
+        "raw_hex":    hex::encode(&raw),
+        "txid":       txid,
+        "fee_sat":    fee_sat,
+        "amount_sat": amount_sat,
+        "change_sat": change,
+    }))
+}
+
+fn write_varint(buf: &mut Vec<u8>, n: u64) {
+    if n < 0xfd {
+        buf.push(n as u8);
+    } else if n <= 0xffff {
+        buf.push(0xfd);
+        buf.extend_from_slice(&(n as u16).to_le_bytes());
+    } else if n <= 0xffff_ffff {
+        buf.push(0xfe);
+        buf.extend_from_slice(&(n as u32).to_le_bytes());
+    } else {
+        buf.push(0xff);
+        buf.extend_from_slice(&n.to_le_bytes());
+    }
+}
+
+fn write_tx_output(buf: &mut Vec<u8>, value: u64, script: &[u8]) {
+    buf.extend_from_slice(&value.to_le_bytes());
+    write_varint(buf, script.len() as u64);
+    buf.extend_from_slice(script);
+}
+
+/// Decode PKT P2PKH address → 25-byte scriptPubKey (OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG).
+fn addr_to_p2pkh_script(addr: &str) -> Result<Vec<u8>, String> {
+    let hash20 = decode_pkt_address(addr)?;
+    let mut script = Vec::with_capacity(25);
+    script.push(0x76); // OP_DUP
+    script.push(0xa9); // OP_HASH160
+    script.push(0x14); // push 20 bytes
+    script.extend_from_slice(&hash20);
+    script.push(0x88); // OP_EQUALVERIFY
+    script.push(0xac); // OP_CHECKSIG
+    Ok(script)
+}
+
+// ── App entry ─────────────────────────────────────────────────────────────────
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            get_summary,
+            get_blocks,
+            get_balance,
+            search,
+            get_analytics,
+            get_address_txs,
+            get_address_utxos,
+            get_block_detail,
+            get_tx_detail,
+            get_rich_list,
+            get_mempool,
+            start_mine,
+            stop_mine,
+            mine_status,
+            peer_scan,
+            wallet_generate,
+            wallet_from_privkey,
+            wallet_tx_build,
+            tx_broadcast,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running PKTScan desktop");
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pkt_address_matches_cli() {
+        // privkey từ ~/.pkt/wallet.key — địa chỉ CLI là 18114ap3q4FsitFbpEe2aig4FJyMpKGGrK
+        let privkey_hex = "01ba03f773968bb837ac7e52d549345fe4d776103608b7516161d3e3efa1c311";
+        let bytes = hex::decode(privkey_hex).unwrap();
+        let secp  = secp256k1::Secp256k1::new();
+        let sk    = secp256k1::SecretKey::from_slice(&bytes).unwrap();
+        let pk    = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let hash  = pkt_hash160(&pk.serialize());
+        let addr  = pkt_address(&hash);
+        assert_eq!(addr, "18114ap3q4FsitFbpEe2aig4FJyMpKGGrK");
+    }
+
+    #[test]
+    fn test_base_trims_trailing_slash() {
+        assert_eq!(base("https://oceif.com/blockchain-rust/"), "https://oceif.com/blockchain-rust");
+        assert_eq!(base("https://oceif.com/blockchain-rust"),  "https://oceif.com/blockchain-rust");
+    }
+
+    #[test]
+    fn test_base_no_slash() {
+        assert_eq!(base("http://localhost:8080"), "http://localhost:8080");
+    }
+
+    #[tokio::test]
+    async fn test_client_builds() {
+        assert!(client().is_ok());
+    }
+}

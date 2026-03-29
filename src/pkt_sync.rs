@@ -418,6 +418,22 @@ impl SyncDb {
         Ok(count)
     }
 
+    /// Lưu số lượng TX trong block ở height (dùng bởi sync_blocks sau khi apply).
+    pub fn save_block_tx_count(&self, height: u64, count: u64) -> Result<(), SyncError> {
+        let key = format!("txcount:{:016x}", height);
+        self.db.put(key.as_bytes(), &count.to_le_bytes())
+            .map_err(|e| SyncError::Db(e.to_string()))
+    }
+
+    /// Lấy số TX đã lưu cho block ở height. Trả 0 nếu chưa có (block cũ trước v22.2).
+    pub fn get_block_tx_count(&self, height: u64) -> u64 {
+        let key = format!("txcount:{:016x}", height);
+        self.db.get(key.as_bytes()).ok()
+            .flatten()
+            .and_then(|v| v.try_into().ok().map(u64::from_le_bytes))
+            .unwrap_or(0)
+    }
+
     pub fn path(&self) -> &Path { &self.path }
 }
 

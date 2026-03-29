@@ -69,6 +69,18 @@ async fn serve_rx_detail() -> impl IntoResponse {
     serve_html("rx/detail.html").await
 }
 
+async fn serve_playground() -> impl IntoResponse {
+    serve_html("playground/index.html").await
+}
+
+async fn serve_webhooks_page() -> impl IntoResponse {
+    serve_html("webhooks/index.html").await
+}
+
+async fn serve_dev_page() -> impl IntoResponse {
+    serve_html("dev/index.html").await
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 /// Mount vào pktscan_api::serve() qua .merge(web_serve::web_router())
@@ -82,4 +94,7 @@ pub fn web_router() -> Router {
         .route("/block/:height",  get(serve_block_detail))
         .route("/rx",             get(serve_rx_list))
         .route("/rx/:txid",       get(serve_rx_detail))
+        .route("/playground",     get(serve_playground))
+        .route("/webhooks",       get(serve_webhooks_page))
+        .route("/dev",            get(serve_dev_page))
 }

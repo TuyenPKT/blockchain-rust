@@ -144,8 +144,10 @@ pub fn format_utxo_json(entry: &UtxoEntry) -> Value {
     json!({
         "txid":          entry.txid,
         "vout":          entry.vout,
+        "amount":        entry.value,
         "value":         entry.value,
         "script_pubkey": hex::encode(&entry.script_pubkey),
+        "height":        entry.height,
     })
 }
 

@@ -445,7 +445,7 @@ mod tests {
         let prev_txid = [0x10u8; 32];
         let script = b"\x76\xa9";
         let utxo_out = WireTxOut { value: 3000, script_pubkey: script.to_vec() };
-        udb.insert_utxo(&prev_txid, 0, &utxo_out).unwrap();
+        udb.insert_utxo(&prev_txid, 0, &utxo_out, 0).unwrap();
         adb.add_to_balance(&hex::encode(script), 3000).unwrap();
 
         let spend_tx   = make_tx(vec![spend_in(prev_txid, 0)], vec![]);

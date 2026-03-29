@@ -137,6 +137,7 @@ mod pkt_export;
 mod block_storage;
 mod pkt_rpc;
 mod pkt_libp2p;
+mod key_api;
 mod pkt_labels;
 mod pkt_search;
 mod pkt_explorer_api;

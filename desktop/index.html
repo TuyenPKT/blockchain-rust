@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PKTScan</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      #root { min-height: 100vh; }
+      /* Default dark bg before JS loads — overridden by applyTheme() */
+      @media (prefers-color-scheme: light) { html, body { background: #f4f6fb; } }
+      @media (prefers-color-scheme: dark)  { html, body { background: #0b0f1a; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

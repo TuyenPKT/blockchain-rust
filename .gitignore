@@ -32,6 +32,12 @@ data/
 db/
 rocksdb/
 
+# Desktop app build artifacts
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
 # Logs
 *.log
 audit.log

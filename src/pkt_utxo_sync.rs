@@ -76,6 +76,8 @@ pub struct UtxoEntry {
     pub vout:         u32,
     pub value:        u64,      // satoshis
     pub script_pubkey: Vec<u8>,
+    #[serde(default)]
+    pub height:       u64,      // block height where UTXO was created (0 = unknown/pre-v22.1)
 }
 
 // ── Wire tx encoding (for tests) ─────────────────────────────────────────────
@@ -318,13 +320,14 @@ impl UtxoSyncDb {
 
     // ── UTXO CRUD ────────────────────────────────────────────────────────────
 
-    pub fn insert_utxo(&self, txid: &[u8; 32], vout: u32, out: &WireTxOut) -> Result<(), SyncError> {
+    pub fn insert_utxo(&self, txid: &[u8; 32], vout: u32, out: &WireTxOut, height: u64) -> Result<(), SyncError> {
         let key   = utxo_key(txid, vout);
         let entry = UtxoEntry {
             txid:         hex::encode(txid),
             vout,
             value:        out.value,
             script_pubkey: out.script_pubkey.clone(),
+            height,
         };
         let val = serde_json::to_vec(&entry)
             .map_err(|e| SyncError::Db(e.to_string()))?;
@@ -448,9 +451,10 @@ impl Drop for UtxoSyncDb {
 /// Apply one transaction: spend inputs, create outputs.
 /// Coinbase inputs (null prev_txid) are not spent from the UTXO set.
 pub fn apply_wire_tx(
-    db:   &UtxoSyncDb,
-    tx:   &WireTx,
-    txid: &[u8; 32],
+    db:     &UtxoSyncDb,
+    tx:     &WireTx,
+    txid:   &[u8; 32],
+    height: u64,
 ) -> Result<(), SyncError> {
     // Spend inputs (skip coinbase null inputs)
     for inp in &tx.inputs {
@@ -460,7 +464,7 @@ pub fn apply_wire_tx(
     }
     // Create outputs
     for (vout, out) in tx.outputs.iter().enumerate() {
-        db.insert_utxo(txid, vout as u32, out)?;
+        db.insert_utxo(txid, vout as u32, out, height)?;
     }
     Ok(())
 }
@@ -475,7 +479,7 @@ pub fn apply_block_txns(
 ) -> Result<(), SyncError> {
     for tx in txns {
         let txid = wire_txid(tx);
-        apply_wire_tx(db, tx, &txid)?;
+        apply_wire_tx(db, tx, &txid, height)?;
     }
     db.set_utxo_height(height)?;
     db.set_tip_hash(tip_hash)?;
@@ -781,7 +785,7 @@ mod tests {
         let db  = UtxoSyncDb::open_temp().unwrap();
         let txid = [0x11u8; 32];
         let out  = WireTxOut { value: 5000, script_pubkey: vec![0x51] };
-        db.insert_utxo(&txid, 0, &out).unwrap();
+        db.insert_utxo(&txid, 0, &out, 0).unwrap();
 
         let got = db.get_utxo(&txid, 0).unwrap().unwrap();
         assert_eq!(got.value, 5000);
@@ -799,7 +803,7 @@ mod tests {
         let db   = UtxoSyncDb::open_temp().unwrap();
         let txid = [0x22u8; 32];
         let out  = WireTxOut { value: 1000, script_pubkey: vec![] };
-        db.insert_utxo(&txid, 1, &out).unwrap();
+        db.insert_utxo(&txid, 1, &out, 0).unwrap();
         db.remove_utxo(&txid, 1).unwrap();
         assert!(db.get_utxo(&txid, 1).unwrap().is_none());
     }
@@ -815,7 +819,7 @@ mod tests {
         let db  = UtxoSyncDb::open_temp().unwrap();
         let out = WireTxOut { value: 100, script_pubkey: vec![] };
         for i in 0..5u8 {
-            db.insert_utxo(&[i; 32], 0, &out).unwrap();
+            db.insert_utxo(&[i; 32], 0, &out, 0).unwrap();
         }
         assert_eq!(db.count_utxos().unwrap(), 5);
     }
@@ -825,7 +829,7 @@ mod tests {
         let db  = UtxoSyncDb::open_temp().unwrap();
         for i in 0..3u8 {
             let out = WireTxOut { value: 1000 * (i as u64 + 1), script_pubkey: vec![] };
-            db.insert_utxo(&[i; 32], 0, &out).unwrap();
+            db.insert_utxo(&[i; 32], 0, &out, 0).unwrap();
         }
         // 1000 + 2000 + 3000 = 6000
         assert_eq!(db.total_value().unwrap(), 6000);
@@ -867,7 +871,7 @@ mod tests {
         let db   = UtxoSyncDb::open_temp().unwrap();
         let tx   = coinbase_tx(50_000_000);
         let txid = wire_txid(&tx);
-        apply_wire_tx(&db, &tx, &txid).unwrap();
+        apply_wire_tx(&db, &tx, &txid, 0).unwrap();
 
         let got = db.get_utxo(&txid, 0).unwrap();
         assert!(got.is_some());
@@ -881,8 +885,8 @@ mod tests {
         let txid = wire_txid(&tx);
         // Insert a dummy UTXO that should NOT be removed (coinbase doesn't spend)
         let dummy = WireTxOut { value: 999, script_pubkey: vec![] };
-        db.insert_utxo(&[0u8; 32], 0xffff_ffff, &dummy).unwrap();
-        apply_wire_tx(&db, &tx, &txid).unwrap();
+        db.insert_utxo(&[0u8; 32], 0xffff_ffff, &dummy, 0).unwrap();
+        apply_wire_tx(&db, &tx, &txid, 0).unwrap();
         // The dummy UTXO should still be there (coinbase input is skipped)
         assert!(db.get_utxo(&[0u8; 32], 0xffff_ffff).unwrap().is_some());
     }
@@ -894,13 +898,13 @@ mod tests {
         // First, create a UTXO to spend
         let cb      = coinbase_tx(5000);
         let cb_txid = wire_txid(&cb);
-        apply_wire_tx(&db, &cb, &cb_txid).unwrap();
+        apply_wire_tx(&db, &cb, &cb_txid, 1).unwrap();
         assert!(db.get_utxo(&cb_txid, 0).unwrap().is_some());
 
         // Now spend it
         let spend      = spend_tx(cb_txid, 0, 4900);
         let spend_txid = wire_txid(&spend);
-        apply_wire_tx(&db, &spend, &spend_txid).unwrap();
+        apply_wire_tx(&db, &spend, &spend_txid, 1).unwrap();
 
         // Input UTXO should be gone
         assert!(db.get_utxo(&cb_txid, 0).unwrap().is_none());
@@ -913,11 +917,11 @@ mod tests {
         let db       = UtxoSyncDb::open_temp().unwrap();
         let cb       = coinbase_tx(10_000);
         let cb_txid  = wire_txid(&cb);
-        apply_wire_tx(&db, &cb, &cb_txid).unwrap();
+        apply_wire_tx(&db, &cb, &cb_txid, 1).unwrap();
 
         let sp      = spend_tx(cb_txid, 0, 9000);
         let sp_txid = wire_txid(&sp);
-        apply_wire_tx(&db, &sp, &sp_txid).unwrap();
+        apply_wire_tx(&db, &sp, &sp_txid, 2).unwrap();
 
         let got = db.get_utxo(&sp_txid, 0).unwrap().unwrap();
         assert_eq!(got.value, 9000);

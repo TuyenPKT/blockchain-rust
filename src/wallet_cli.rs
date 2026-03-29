@@ -286,6 +286,14 @@ pub fn cmd_wallet_address() {
     }
 }
 
+/// In private key hex ra stdout — dùng để import vào desktop app.
+pub fn cmd_wallet_privkey() {
+    match load_wallet() {
+        Ok((sk_hex, _)) => println!("{}", sk_hex),
+        Err(e)          => eprintln!("❌ {}", e),
+    }
+}
+
 /// Trả về pubkey_hash hex từ wallet file — dùng cho miner auto-detect
 pub fn load_miner_address() -> Option<String> {
     let (sk_hex, _) = load_wallet().ok()?;
@@ -304,6 +312,7 @@ pub fn run_wallet(args: &[String]) {
         "new"     => cmd_wallet_new(),
         "show"    => cmd_wallet_show(),
         "address" => cmd_wallet_address(),
+        "privkey" => cmd_wallet_privkey(),
         "restore" => cmd_wallet_restore(args),
         other => {
             eprintln!("❌ Lệnh wallet không hợp lệ: '{}'", other);
@@ -311,6 +320,7 @@ pub fn run_wallet(args: &[String]) {
             eprintln!("  Cách dùng:");
             eprintln!("    cargo run -- wallet new                      tạo ví mới + hiển thị seed phrase");
             eprintln!("    cargo run -- wallet show                     xem thông tin ví + seed phrase");
+            eprintln!("    cargo run -- wallet privkey                  in private key hex (để import vào desktop)");
             eprintln!("    cargo run -- wallet restore <word1>...<w12>  khôi phục ví từ seed phrase");
             eprintln!("    cargo run -- wallet address                  chỉ in pubkey hash (cho scripts)");
         }

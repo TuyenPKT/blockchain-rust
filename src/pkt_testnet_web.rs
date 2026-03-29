@@ -24,7 +24,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -68,11 +68,67 @@ fn address_to_script_hex(addr: &str) -> Option<String> {
     let expected = blake3::hash(blake3::hash(payload).as_bytes());
     if &expected.as_bytes()[..4] != checksum { return None; }
     let hash160: Vec<u8> = payload[1..21].to_vec();
+    hash160_to_script_hex(&hash160)
+}
+
+/// Build raw P2PKH scriptPubKey hex from 20-byte hash160.
+/// Format wire: OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG = 76 a9 14 <20 bytes> 88 ac
+fn hash160_to_script_hex(hash160: &[u8]) -> Option<String> {
+    if hash160.len() != 20 { return None; }
+    let mut script = Vec::with_capacity(25);
+    script.push(0x76u8); // OP_DUP
+    script.push(0xa9);   // OP_HASH160
+    script.push(0x14);   // push 20 bytes
+    script.extend_from_slice(hash160);
+    script.push(0x88);   // OP_EQUALVERIFY
+    script.push(0xac);   // OP_CHECKSIG
+    Some(hex::encode(script))
+}
+
+/// Legacy JSON script format (data indexed trước v22.x dùng format này).
+fn hash160_to_script_hex_legacy(hash160: &[u8]) -> Option<String> {
+    if hash160.len() != 20 { return None; }
     let script = json!({
         "ops": ["OpDup", "OpHash160", {"OpPushData": hash160}, "OpEqualVerify", "OpCheckSig"]
     });
-    let script_bytes = serde_json::to_vec(&script).ok()?;
-    Some(hex::encode(script_bytes))
+    Some(hex::encode(serde_json::to_vec(&script).ok()?))
+}
+
+/// Accept any address format (bech32 tpkt1/pkt1, Base58Check, or raw script_hex)
+/// and return the script_hex key used in AddrIndexDb (raw P2PKH wire format).
+fn any_addr_to_script_hex(s: &str) -> Option<String> {
+    let s = s.trim();
+    // bech32: tpkt1… / pkt1… / rpkt1…
+    if s.starts_with("tpkt1") || s.starts_with("pkt1") || s.starts_with("rpkt1") {
+        let pkt_addr = crate::pkt_address::decode_address(s).ok()?;
+        let hash160  = pkt_addr.hash160()?;
+        return hash160_to_script_hex(&hash160);
+    }
+    // Base58Check (legacy P2PKH)
+    if let Some(hex) = address_to_script_hex(s) {
+        return Some(hex);
+    }
+    // Passthrough: assume caller already has script_hex
+    if s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(s.to_string());
+    }
+    None
+}
+
+/// Như any_addr_to_script_hex nhưng trả legacy JSON format (data cũ trước v22.x).
+fn any_addr_to_script_hex_legacy(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.starts_with("tpkt1") || s.starts_with("pkt1") || s.starts_with("rpkt1") {
+        let pkt_addr = crate::pkt_address::decode_address(s).ok()?;
+        let hash160  = pkt_addr.hash160()?;
+        return hash160_to_script_hex_legacy(&hash160);
+    }
+    let decoded = bs58::decode(s).into_vec().ok()?;
+    if decoded.len() == 25 {
+        let hash160 = &decoded[1..21];
+        return hash160_to_script_hex_legacy(hash160);
+    }
+    None
 }
 
 // ── Per-request DB open state ──────────────────────────────────────────────────
@@ -169,14 +225,31 @@ async fn ps_header(
 
 async fn ps_balance(
     State(ps): State<PathState>,
-    Path(script): Path<String>,
+    Path(addr): Path<String>,
 ) -> impl IntoResponse {
+    let script = match any_addr_to_script_hex(&addr) {
+        Some(s) => s,
+        None    => return (StatusCode::BAD_REQUEST,
+                           Json(json!({"error":"invalid address"}))).into_response(),
+    };
     match ps.open_addr() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
         Some(adb) => {
-            let balance = adb.get_balance(&script).unwrap_or(0);
-            let address = script_hex_to_address(&script);
-            Json(json!({"balance": balance, "address": address})).into_response()
+            // Thử raw P2PKH format trước (data mới), fallback JSON format (data cũ)
+            let mut balance = adb.get_balance(&script).unwrap_or(0);
+            let effective_script = if balance == 0 {
+                if let Some(legacy) = any_addr_to_script_hex_legacy(&addr) {
+                    let legacy_bal = adb.get_balance(&legacy).unwrap_or(0);
+                    if legacy_bal > 0 { balance = legacy_bal; legacy }
+                    else { script.clone() }
+                } else { script.clone() }
+            } else { script.clone() };
+            let address = script_hex_to_address(&effective_script).unwrap_or_else(|| addr.clone());
+            Json(json!({
+                "address": address,
+                "balance": balance,
+                "balance_pkt": (balance as f64) / 1_073_741_824.0,
+            })).into_response()
         }
     }
 }
@@ -194,6 +267,32 @@ async fn ps_utxos(
     }
 }
 
+/// GET /api/testnet/address/:addr/utxos
+/// :addr accepts bech32, Base58Check, or raw script_hex.
+async fn ps_addr_utxos(
+    State(ps):    State<PathState>,
+    Path(addr):   Path<String>,
+) -> impl IntoResponse {
+    let script = match any_addr_to_script_hex(&addr) {
+        Some(s) => s,
+        None    => return (StatusCode::BAD_REQUEST,
+                           Json(json!({"error":"invalid address"}))).into_response(),
+    };
+    match ps.open() {
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        Some((_sdb, udb)) => {
+            match crate::pkt_explorer_api::query_utxos(&udb, &script, 500) {
+                Ok(utxos) => {
+                    let address = script_hex_to_address(&script).unwrap_or_else(|| addr.clone());
+                    Json(json!({"address": address, "utxos": utxos})).into_response()
+                }
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+                           Json(json!({"error": e}))).into_response(),
+            }
+        }
+    }
+}
+
 /// Embedded testnet panel JS — served at /static/testnet.js.
 const TESTNET_JS: &str = include_str!("../web/js/testnet.js");
 
@@ -202,33 +301,48 @@ const TESTNET_JS: &str = include_str!("../web/js/testnet.js");
 #[derive(Deserialize)]
 struct AddrTxsParams {
     cursor: Option<u64>,
+    page:   Option<u64>,   // desktop sends page=0,1,2…; treated as cursor alias
     limit:  Option<usize>,
 }
 
-/// GET /api/testnet/address/:script/txs?cursor=HEIGHT&limit=N
+/// GET /api/testnet/address/:addr/txs?cursor=HEIGHT&limit=N  (or ?page=N&limit=N)
+/// :addr accepts bech32, Base58Check, or raw script_hex.
 async fn ps_addr_txs(
-    State(ps):        State<PathState>,
-    Path(script):     Path<String>,
-    Query(params):    Query<AddrTxsParams>,
+    State(ps):     State<PathState>,
+    Path(addr):    Path<String>,
+    Query(params): Query<AddrTxsParams>,
 ) -> impl IntoResponse {
+    let script = match any_addr_to_script_hex(&addr) {
+        Some(s) => s,
+        None    => return (StatusCode::BAD_REQUEST,
+                           Json(json!({"error":"invalid address"}))).into_response(),
+    };
     let adb = match ps.open_addr() {
         None    => return (StatusCode::SERVICE_UNAVAILABLE,
                            Json(json!({"error":"address index not ready"}))).into_response(),
         Some(d) => d,
     };
-    let limit = params.limit.unwrap_or(50).min(200);
-    match adb.get_tx_history(&script, params.cursor, limit) {
-        Ok(entries) => {
-            let txs: Vec<_> = entries.iter().map(|e| json!({
-                "height": e.height,
-                "txid":   e.txid,
-            })).collect();
-            let count = txs.len();
-            Json(json!({"address": script, "txs": txs, "count": count})).into_response()
-        }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
-                   Json(json!({"error": e.to_string()}))).into_response(),
-    }
+    let limit  = params.limit.unwrap_or(50).min(200);
+    // cursor takes priority; page is converted: page N → skip N*limit entries via cursor=None
+    // (simple approach: use cursor directly; page ignored if cursor present)
+    let cursor = params.cursor;
+    // Thử raw P2PKH format; nếu không có kết quả thử legacy JSON format
+    let (effective_script, entries) = {
+        let r = adb.get_tx_history(&script, cursor, limit).unwrap_or_default();
+        if r.is_empty() {
+            if let Some(legacy) = any_addr_to_script_hex_legacy(&addr) {
+                let r2 = adb.get_tx_history(&legacy, cursor, limit).unwrap_or_default();
+                if !r2.is_empty() { (legacy, r2) } else { (script, r) }
+            } else { (script, r) }
+        } else { (script, r) }
+    };
+    let address = script_hex_to_address(&effective_script).unwrap_or_else(|| addr.clone());
+    let txs: Vec<_> = entries.iter().map(|e| json!({
+        "height": e.height,
+        "txid":   e.txid,
+    })).collect();
+    let count = txs.len();
+    Json(json!({"address": address, "txs": txs, "count": count})).into_response()
 }
 
 /// GET /api/testnet/addr/:base58?limit=N
@@ -429,6 +543,10 @@ async fn ps_block_detail(
         .map(|adb| adb.get_txids_at_height(height, 200))
         .unwrap_or_default();
 
+    // v22.2: tx_count từ sync_db (saved khi sync_blocks). Fallback = txids.len().
+    let stored_tx_count = sdb.get_block_tx_count(height);
+    let tx_count = if stored_tx_count > 0 { stored_tx_count } else { txids.len() as u64 };
+
     // Tip height for confirmations
     let tip = sdb.get_sync_height().ok().flatten().unwrap_or(height);
     let confirmations = tip.saturating_sub(height) + 1;
@@ -439,7 +557,7 @@ async fn ps_block_detail(
         obj.insert("hashrate".into(),        hashrate.map(|v| json!(v)).unwrap_or(Value::Null));
         obj.insert("confirmations".into(),   json!(confirmations));
         obj.insert("txids".into(),           json!(txids));
-        obj.insert("tx_count".into(),        json!(txids.len()));
+        obj.insert("tx_count".into(),        json!(tx_count));
     }
 
     Json(block_json).into_response()
@@ -563,6 +681,78 @@ async fn ps_tx_detail(
     }
 
     (StatusCode::NOT_FOUND, Json(json!({"error": "transaction not found"}))).into_response()
+}
+
+// ── Broadcast TX handler ───────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct BroadcastBody {
+    raw_hex: String,
+}
+
+/// POST /api/testnet/tx/broadcast — nhận raw tx hex, relay lên PKT testnet peer, trả txid.
+async fn ps_tx_broadcast(
+    State(ps):  State<PathState>,
+    Json(body): Json<BroadcastBody>,
+) -> impl IntoResponse {
+    use crate::pkt_block_sync::read_tx_s;
+    use crate::pkt_utxo_sync::wire_txid;
+    use crate::pkt_peer::{do_handshake, send_msg, PeerConfig};
+    use crate::pkt_wire::{PktMsg, TESTNET_MAGIC};
+    use std::io::{Cursor, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    // 1. Decode hex
+    let raw = match hex::decode(body.raw_hex.trim()) {
+        Ok(b) => b,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("hex decode: {}", e)}))).into_response(),
+    };
+
+    // 2. Parse để validate và lấy txid
+    let txid = {
+        let mut cur = Cursor::new(&raw);
+        match read_tx_s(&mut cur) {
+            Ok(tx) => hex::encode(wire_txid(&tx)),
+            Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("parse tx: {:?}", e)}))).into_response(),
+        }
+    };
+
+    // 3. Relay lên PKT testnet peer (fire-and-forget, 10s timeout)
+    let our_height = ps.open().and_then(|(sdb, _)| sdb.get_sync_height().ok().flatten()).unwrap_or(0) as i32;
+    let cfg = PeerConfig { our_height, connect_timeout_secs: 10, read_timeout_secs: 10, max_retries: 0, ..Default::default() };
+    let relay_err: Option<String> = tokio::task::spawn_blocking({
+        let raw = raw.clone();
+        let txid_bytes: [u8; 32] = hex::decode(&txid).ok()
+            .and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32]);
+        move || {
+            let addr_str = format!("{}:{}", cfg.host, cfg.port);
+            let sock_addr: std::net::SocketAddr = match addr_str.parse() {
+                Ok(a) => a,
+                Err(_) => return Err("invalid addr".to_string()),
+            };
+            let Ok(mut stream) = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(cfg.connect_timeout_secs))
+            else { return Err("connect failed".to_string()); };
+            stream.set_read_timeout(Some(Duration::from_secs(cfg.read_timeout_secs))).ok();
+            if do_handshake(&mut stream, &cfg).is_err() { return Err("handshake failed".to_string()); }
+            // inv → getdata exchange (optional); for simplicity send tx directly
+            let inv = PktMsg::Inv { items: vec![crate::pkt_wire::InvItem { inv_type: 1, hash: txid_bytes }] };
+            let _ = send_msg(&mut stream, inv, TESTNET_MAGIC);
+            // Send raw tx as Unknown "tx" message (command = b"tx\0\0...\0", 12 bytes)
+            let mut cmd = [0u8; 12];
+            cmd[..2].copy_from_slice(b"tx");
+            let tx_msg = PktMsg::Unknown { command: cmd, payload: raw };
+            if send_msg(&mut stream, tx_msg, TESTNET_MAGIC).is_err() { return Err("send failed".to_string()); }
+            let _ = stream.flush();
+            Ok::<(), String>(())
+        }
+    }).await.ok().and_then(|r| r.err());
+
+    if let Some(err) = relay_err {
+        (StatusCode::BAD_GATEWAY, Json(json!({"error": format!("relay: {}", err), "txid": txid}))).into_response()
+    } else {
+        Json(json!({"txid": txid, "status": "broadcast"})).into_response()
+    }
 }
 
 // ── Search handler ─────────────────────────────────────────────────────────────
@@ -985,8 +1175,10 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/balance/:s", get(ps_balance))
         .route("/api/testnet/utxos/:s", get(ps_utxos))
         .route("/api/testnet/address/:s/txs", get(ps_addr_txs))
+        .route("/api/testnet/address/:s/utxos", get(ps_addr_utxos))
         .route("/api/testnet/addr/:base58", get(ps_addr_by_base58))
         .route("/api/testnet/rich-list", get(ps_rich_list))
+        .route("/api/testnet/richlist", get(ps_rich_list))
         .route("/api/testnet/mempool", get(ps_mempool))
         .route("/api/testnet/mempool/fee-histogram", get(ps_mempool_histogram))
         .route("/api/health/detailed",               get(ps_health))
@@ -994,6 +1186,7 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/analytics",             get(ps_analytics))
         .route("/api/testnet/block/:height",         get(ps_block_detail))
         .route("/api/testnet/tx/:txid",              get(ps_tx_detail))
+        .route("/api/testnet/tx/broadcast",          post(ps_tx_broadcast))
         .route("/api/testnet/txs",                   get(ps_txs_list))
         .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))

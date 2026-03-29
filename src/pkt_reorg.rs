@@ -268,7 +268,7 @@ impl ReorgDb {
                             let script = hex::decode(&snap.script_pubkey_hex)
                                 .unwrap_or_default();
                             let out = WireTxOut { value: snap.value, script_pubkey: script };
-                            utxo_db.insert_utxo(&arr, snap.vout, &out)?;
+                            utxo_db.insert_utxo(&arr, snap.vout, &out, 0)?;
                         }
                     }
                 }
@@ -472,7 +472,7 @@ mod tests {
             value: 2000,
             script_pubkey: b"\x76".to_vec(),
         };
-        udb.insert_utxo(&created_txid, 0, &out).unwrap();
+        udb.insert_utxo(&created_txid, 0, &out, 0).unwrap();
         udb.set_utxo_height(1).unwrap();
 
         let mut delta = BlockDelta::new([0x01; 32]);

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Playground — PKTScan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=19.7">
+  <style>
+    /* ── Playground layout ──────────────────────────────── */
+    .pg-header {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 22px 24px 4px;
+    }
+    .pg-header h1 { font-size: 1.45rem; font-weight: 700; margin-bottom: 4px; }
+    .pg-header p  { color: var(--muted); font-size: .88rem; }
+    kbd {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: .78rem;
+    }
+
+    .pg-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 18px;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 16px 24px 48px;
+    }
+    @media (max-width: 860px) {
+      .pg-layout { grid-template-columns: 1fr; }
+    }
+
+    .pg-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 12px;
+    }
+    .pg-panel h3 {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+    }
+
+    /* ── Controls ───────────────────────────────────────── */
+    .pg-select {
+      width: 100%;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      padding: 9px 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: .82rem;
+      cursor: pointer; outline: none;
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237a92b0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+    }
+    .pg-select:focus { border-color: var(--accent); }
+
+    .ep-desc { margin-top: 8px; font-size: .82rem; color: var(--muted); }
+
+    .param-label {
+      display: block; font-size: .76rem; color: var(--muted);
+      font-weight: 600; margin: 12px 0 4px;
+    }
+    .param-input {
+      width: 100%;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: .85rem;
+      outline: none; transition: border-color .2s;
+    }
+    .param-input:focus { border-color: var(--accent); }
+
+    .url-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .url-box {
+      flex: 1;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: .76rem;
+      color: var(--blue); word-break: break-all;
+      min-height: 38px; display: flex; align-items: center;
+    }
+
+    /* ── Buttons ────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px; border: none; border-radius: 8px;
+      cursor: pointer; font-family: 'Sora', sans-serif;
+      font-weight: 600; transition: all .2s;
+    }
+    .btn-run {
+      width: 100%; padding: 11px 18px; font-size: .92rem;
+      background: var(--accent); color: #000;
+    }
+    .btn-run:hover  { filter: brightness(1.1); }
+    .btn-run:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+    .btn-sm {
+      padding: 6px 12px; font-size: .76rem;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); white-space: nowrap;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+
+    .hint { font-size: .72rem; color: var(--muted); text-align: center; margin-top: 6px; }
+
+    /* ── Response panel ─────────────────────────────────── */
+    .pg-right { display: flex; flex-direction: column; }
+    .resp-hdr {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+    .resp-hdr-title {
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); flex: 1;
+    }
+    .badge {
+      font-family: 'JetBrains Mono', monospace; font-size: .74rem;
+      font-weight: 700; padding: 3px 8px; border-radius: 5px;
+    }
+    .badge-ok  { background: rgba(62,207,110,.15); color: var(--green); }
+    .badge-err { background: rgba(240,96,96,.15);  color: var(--red);   }
+    .badge-time { background: var(--surface2); color: var(--muted); }
+
+    .resp-body {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px;
+      font-family: 'JetBrains Mono', monospace; font-size: .79rem;
+      line-height: 1.75; overflow: auto;
+      min-height: 360px; max-height: 72vh;
+      white-space: pre; flex: 1;
+    }
+
+    /* JSON highlight classes */
+    .jk { color: #79b8ff; }         /* key   */
+    .jv { color: #a5d6a7; }         /* string value */
+    .jd { color: #f9b55a; }         /* number */
+    .jb { color: #ce93d8; }         /* bool */
+    .jn { color: var(--muted); }    /* null */
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/blockchain-rust/">
+    <div class="nav-logo-icon">P</div>
+    <span class="nav-logo-text">PKT<span>Scan</span></span>
+  </a>
+  <div class="nav-right">
+    <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
+    <a class="nav-link" href="/blockchain-rust/">Home</a>
+    <a class="nav-link active" href="/blockchain-rust/playground" style="color:var(--accent)">API</a>
+    <a class="nav-link" href="/blockchain-rust/webhooks">Webhooks</a>
+    <a class="nav-link" href="/blockchain-rust/dev">Developers</a>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+  </div>
+</nav>
+
+<div class="pg-header">
+  <h1>⚡ API Playground</h1>
+  <p>Thử nghiệm PKTScan REST API trực tiếp trong trình duyệt.
+     Nhấn <kbd>Ctrl+Enter</kbd> để gọi nhanh. URL tự cập nhật trong thanh địa chỉ để chia sẻ.</p>
+</div>
+
+<div class="pg-layout">
+
+  <!-- ── Left: controls ── -->
+  <div class="pg-left">
+
+    <div class="pg-panel">
+      <h3>Endpoint</h3>
+      <select class="pg-select" id="ep-select" aria-label="Chọn endpoint"></select>
+      <p class="ep-desc" id="ep-desc"></p>
+    </div>
+
+    <div class="pg-panel" id="params-panel" style="display:none">
+      <h3>Parameters</h3>
+      <div id="params"></div>
+    </div>
+
+    <div class="pg-panel">
+      <h3>Request URL</h3>
+      <div class="url-row">
+        <div class="url-box" id="url-display"></div>
+        <button class="btn btn-sm" id="copy-url-btn" onclick="copyUrl()">Copy</button>
+      </div>
+    </div>
+
+    <button class="btn btn-run" id="run-btn" onclick="runRequest()">▶ Run</button>
+    <p class="hint"><kbd>Ctrl+Enter</kbd></p>
+
+  </div>
+
+  <!-- ── Right: response ── -->
+  <div class="pg-right">
+    <div class="resp-hdr">
+      <span class="resp-hdr-title">Response</span>
+      <span class="badge" id="status-badge"></span>
+      <span class="badge badge-time" id="time-badge"></span>
+      <button class="btn btn-sm" id="copy-resp-btn" onclick="copyResponse()">Copy</button>
+    </div>
+    <pre class="resp-body" id="response"><span style="color:var(--muted);font-style:italic">Click ▶ Run để gọi API…</span></pre>
+  </div>
+
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
+      PKTScan
+    </div>
+    <span>PKT Blockchain Explorer</span>
+    <span>© 2026 PKTScan</span>
+  </div>
+</footer>
+
+<script src="/blockchain-rust/web/js/shared.js?v=19.7"></script>
+<script src="/blockchain-rust/web/js/playground.js?v=19.7"></script>
+</body>
+</html>

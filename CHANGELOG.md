@@ -4,6 +4,541 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v22.5 — Wallet Send TX (2026-03-29)
+
+### Added
+- `wallet_tx_build(privkey_hex, inputs, to_addr, amount_sat, fee_sat, change_addr)` Tauri command:
+  - BIP143 segwit v0 P2WPKH transaction signing (ECDSA secp256k1)
+  - Tự tính hashPrevouts, hashSequence, hashOutputs, scriptCode
+  - Serialize raw segwit tx (version + marker 0x00 + flag 0x01 + inputs + outputs + witnesses + locktime)
+  - Tính txid (non-witness double-sha256)
+  - Helpers: `double_sha256`, `write_varint`, `write_tx_output`, `addr_to_p2wpkh_script`
+- `tx_broadcast(node_url, raw_hex)` Tauri command — POST `/api/testnet/tx/broadcast`
+- `Wallet.tsx` — Send panel: to address, amount (PKT), fee (PKT), greedy UTXO auto-select, sign & broadcast
+- `AddressUtxo.script_pubkey` field thêm vào interface
+
+### Files
+- `desktop/src-tauri/src/lib.rs` — `wallet_tx_build`, `tx_broadcast`, helpers
+- `desktop/src/pages/Wallet.tsx` — Send panel, `handleSend()`
+- `desktop/src/api.ts` — `AddressUtxo.script_pubkey` field
+- `desktop/src/i18n.ts` — send strings (en + vi)
+
+### Tests
+- +0 (build verification only)
+
+### Breaking / Gotcha
+- UTXO `script_pubkey` từ backend là hex P2WPKH (22 bytes `0014{hash160}`) — wallet chỉ hỗ trợ P2WPKH input
+- txid display = reverse của double_sha256(legacy serialization) — khác với wtxid
+
+---
+
+## v22.4 — Broadcast TX Endpoint (2026-03-29)
+
+### Added
+- `POST /api/testnet/tx/broadcast` — nhận `{raw_hex}`, parse WireTx, relay lên testnet peer qua P2P
+- Connect → handshake → inv + tx wire message
+- 502 + txid nếu relay thất bại (txid vẫn trả về để client retry)
+
+### Files
+- `src/pkt_testnet_web.rs` — `ps_tx_broadcast` handler, route `post`
+
+### Tests
+- +0
+
+---
+
+## v22.3 — Rich List Alias (2026-03-29)
+
+### Added
+- Route `/api/testnet/richlist` alias cho `/api/testnet/rich-list` (đã thêm trong v22.0)
+
+---
+
+## v22.2 — Block TX Count (2026-03-29)
+
+### Added
+- `SyncDb::save_block_tx_count(height, count)` + `get_block_tx_count(height)` — key `txcount:{height:016x}`
+- `sync_blocks` loop gọi `save_block_tx_count` sau mỗi block apply
+- `ps_block_detail` dùng stored tx_count, fallback = `txids.len()`
+
+### Files
+- `src/pkt_sync.rs` — 2 methods mới
+- `src/pkt_block_sync.rs` — save tx_count trong sync loop
+- `src/pkt_testnet_web.rs` — dùng stored count
+
+### Tests
+- +0
+
+---
+
+## v22.1 — UTXO Height Field (2026-03-29)
+
+### Added
+- `#[serde(default)] pub height: u64` vào `UtxoEntry` — backward-compatible với data cũ (height=0)
+- `insert_utxo(txid, vout, out, height)` signature update
+- `apply_wire_tx(db, tx, txid, height)` signature update
+- `apply_block_txns` truyền `height` xuống
+
+### Files
+- `src/pkt_utxo_sync.rs` — UtxoEntry, insert_utxo, apply_wire_tx, apply_block_txns
+- `src/pkt_block_sync.rs` — sync_blocks caller
+- `src/pkt_reorg.rs` — callers
+- `src/pkt_addr_index.rs` — test callers
+
+### Tests
+- Existing tests updated (+0 new)
+
+---
+
+## v22.0 — Address Index Fix (2026-03-29)
+
+### Added
+- `any_addr_to_script_hex(addr)` — unified bech32/Base58Check/script_hex → script_hex conversion
+- `hash160_to_script_hex(hash160)` helper
+- `ps_balance` + `ps_addr_txs` dùng `any_addr_to_script_hex`; balance response thêm `balance_pkt`
+- `ps_addr_utxos` handler mới + route `/api/testnet/address/:s/utxos`
+- `/api/testnet/richlist` alias
+- `AddrTxsParams.page` field
+
+### Files
+- `src/pkt_testnet_web.rs`
+
+---
+
+## v21.2 — Node Manager + Wallet Tab (2026-03-29)
+
+### Added
+- Terminal tab → Wallet tab (create/import/remove wallet, balance, keys reveal)
+- Node tab: real P2P peer scan via `peer_scan(seed_addr)` IPC
+- `peer_scan`: TCP GetAddr → probe ≤20 peers parallel (latency + height) → sort online-first
+- `wallet_generate(network)`: secp256k1 keypair + bech32 address
+- `wallet_from_privkey(privkey_hex, network)`: restore pubkey + address
+- localStorage wallet persistence (`pktscan_wallet`)
+- Private key hidden by default, reveal toggle
+
+### Files
+- `desktop/src/pages/Wallet.tsx` (new)
+- `desktop/src/pages/Node.tsx` — peer scan
+- `desktop/src/App.tsx` — wallet tab
+- `desktop/src/components/Nav.tsx` — wallet tab
+- `desktop/src-tauri/src/lib.rs` — peer_scan, wallet commands, Base58Check decoder
+- `desktop/src-tauri/Cargo.toml` — secp256k1, sha2, ripemd
+- `desktop/src/i18n.ts` — wallet + peers strings
+
+---
+
+## v21.1 — Light/Dark Mode Fix + i18n Complete (2026-03-29)
+
+### Added
+- i18n hoàn chỉnh Miner.tsx + Node.tsx
+- Fix light mode: `SearchBar.tsx` module-level `TYPE_COLOR` → `typeColor()` function
+- Fix dark mode: `RichList.tsx` FeeHistogram canvas deps thêm colors
+- Fix `MiniChart.tsx` canvas deps thêm `colors.border`
+- Fix Tauri build: xóa `"theme": "auto"` (Tauri v2 không hỗ trợ)
+- Fix Base58 address validation trong miner (decode_base58check)
+- Mine log persist khi chuyển tab (Miner always mounted via CSS display:none)
+
+### Files
+- `desktop/src/pages/Miner.tsx`
+- `desktop/src/pages/Node.tsx`
+- `desktop/src/components/SearchBar.tsx`
+- `desktop/src/components/MiniChart.tsx`
+- `desktop/src/pages/RichList.tsx`
+- `desktop/src-tauri/tauri.conf.json`
+- `desktop/src-tauri/src/lib.rs`
+- `desktop/src/App.tsx`
+
+---
+
+## v21.0 — Real Miner IPC (2026-03-28)
+
+### Added
+- `start_mine(address, node_addr, threads)` IPC command — spawn Rust background thread với real blake3 PoW miner:
+  - Decode địa chỉ PKT (bech32 `tpkt1...`/`pkt1...` hoặc hex pubkey_hash)
+  - TCP `GetTemplate` → node trả `prev_hash`, `height`, `difficulty`, `txs`
+  - Build coinbase TX JSON (re-implement `calculate_txid`/`wtxid` + Merkle từ main crate)
+  - Rayon parallel mining: check MINER_STOP flag mỗi 50k hashes
+  - TCP `NewBlock` submit khi block found
+  - Emit `mine_log` (string) + `mine_stats` (hashrate, blocks_mined, uptime_secs) mỗi 800ms
+- `stop_mine()` IPC command — set MINER_STOP AtomicBool, rayon workers thoát ≤50k hashes
+- `mine_status()` IPC command — trả về bool
+- `Miner.tsx` rewrite — địa chỉ input, node addr input, threads slider; `invoke("start_mine")`; `listen("mine_log")` + `listen("mine_stats")`; real hashrate + blocks mined; auto-scroll log; sync status on mount via `mine_status()`
+- Dependencies desktop: `blake3 = "1.5"`, `rayon = "1.10"`, `hex = "0.4"`
+
+### Files
+- `desktop/src-tauri/src/lib.rs` — added miner commands + helpers (bech32 decode, coinbase txid, merkle, submit TCP)
+- `desktop/src-tauri/Cargo.toml` — added blake3, rayon, hex
+- `desktop/src/pages/Miner.tsx` — rewrite (real IPC, không còn fake simulation)
+
+### Tests
+- +0 tests (IPC miner cần node thật, không thể unit test)
+
+### Breaking / Gotcha
+- `use tauri::Emitter` cần import rõ ràng trong Tauri v2 để dùng `app.emit()`
+- Coinbase txid tái tạo format Debug của Rust: `"txid|[(\"<zeros64>\", height, 4294967295)]|[amount]|true"` — phải match chính xác với `Transaction::calculate_txid()` trong main crate
+- `MINER_STOP` là `static AtomicBool` → tất cả rayon threads đọc trực tiếp, không cần Arc
+- Bech32 decode: strip witness version (byte 0) + 6 checksum bytes trước convertbits
+
+---
+
+## v20.9 — Build & Release (2026-03-28)
+
+### Added
+- `tauri.conf.json` — version bump 0.8.0; identifier `com.oceif.pktscan`; bundle metadata (category, description); macOS minimumSystemVersion 10.15; Windows digest sha256; Linux deb + AppImage config
+- `.github/workflows/release.yml` — multi-platform CI triggered on tag `v*.*.*`:
+  - `macos-latest` → `universal-apple-darwin` (.dmg, signed nếu có Apple secrets)
+  - `windows-latest` → `x86_64-pc-windows-msvc` (.msi + .exe)
+  - `ubuntu-22.04` → `x86_64-unknown-linux-gnu` (.AppImage + .deb)
+  - Dùng `tauri-apps/tauri-action@v0`, `swatinem/rust-cache@v2`, `dtolnay/rust-toolchain@stable`
+  - GitHub Release tự động với release body table (platform/file/notes)
+  - Optional Apple code signing + notarization qua secrets
+- `.github/workflows/build-check.yml` — PR/push check 3 jobs:
+  - `typescript` — `tsc --noEmit` trên ubuntu
+  - `rust` — `cargo build + test -p pktscan-desktop` với frontend build trước
+  - `rust-main` — `cargo test --workspace --exclude pktscan-desktop`
+  - Chỉ chạy khi path `desktop/**` hoặc `src/**` thay đổi
+- `desktop/RELEASE.md` — hướng dẫn đầy đủ: yêu cầu hệ thống, build thủ công, CI secrets, version bump checklist, dev mode
+
+### Files
+- `desktop/src-tauri/tauri.conf.json` — updated
+- `.github/workflows/release.yml` — mới
+- `.github/workflows/build-check.yml` — mới
+- `desktop/RELEASE.md` — mới
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.8 — Settings & Preferences (2026-03-28)
+
+### Added
+- `useSettings` hook — `AppSettings` type (nodeUrlTestnet/Mainnet, currency, language, theme, pollInterval); load/save localStorage; `update(patch)` + `reset()`
+- `Settings` page — overlay khi click ⚙ icon trong Nav:
+  - **Network section** — Testnet URL + Mainnet URL với `UrlInput` + Test button (AbortController 5s timeout, trạng thái ✓ Online / ✗ Offline)
+  - **Appearance section** — Theme segmented (Dark/Light) + Currency segmented (PKT/USD)
+  - **Language section** — EN / Tiếng Việt segmented
+  - **Poll interval** — 5 options: 4s/8s/15s/30s/60s button group
+  - **About section** — version, stack badges, source URL
+  - **Danger Zone** — Reset với confirm 2 bước
+  - Auto-save indicator "✓ Saved" toast sau mỗi thay đổi
+- `theme.ts` — export `dark` + `light` token sets; `applyTheme(mode)` function; `colors` mutable export
+- `Nav.tsx` — ⚙ Settings icon button (highlight khi settingsOpen); thêm `onSettings` + `settingsOpen` props
+- `App.tsx` — `useSettings()` tích hợp; `nodeUrl` lấy từ `settings.nodeUrl{Testnet|Mainnet}`; `applyTheme()` gọi trong `useEffect`; Settings overlay thay thế main content khi `settingsOpen`
+
+### Files
+- `src/hooks/useSettings.ts` — mới
+- `src/pages/Settings.tsx` — mới
+- `src/theme.ts` — thêm light tokens + `applyTheme`
+- `src/components/Nav.tsx` — ⚙ button + props
+- `src/App.tsx` — settings integration
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.7 — Rich List & Mempool UI (2026-03-28)
+
+### Added
+- `RichList` page (tab mới "Rich List" trong Nav):
+  - **Summary bar** — 4 stat cards: Top Holders, Total Supply, Mempool Count, Mempool Fees
+  - **Leaderboard** — rank/avatar/address/balance/pct/share-bar; avatar: 🥇🥈🥉 top 3, deterministic HSL color avatar cho rank khác; click → Address detail; animated balance bar gradient
+  - **Fee Histogram** — canvas thuần: bucket fee rate (sat/byte) <1/1-5/5-10/10-50/50-100/100+, gradient fill, grid lines, count label above bar
+  - **Mempool TX table** — TXID/Fee/Rate badge (green/amber/red)/Size/In⁻Out/Age; click row → TxDetail
+  - Tab switcher: Rich List / Mempool với count badge, fadeIn animation
+- 2 IPC commands mới: `get_rich_list(limit)`, `get_mempool(limit)`
+- `RichHolder`, `MempoolTx` interfaces + `fetchRichList`, `fetchMempool` trong `api.ts`
+- Nav — tab "Rich List" thêm giữa Charts và Miner
+
+### Files
+- `src/pages/RichList.tsx` — mới
+- `src-tauri/src/lib.rs` — +2 IPC commands
+- `src/api.ts` — +2 functions, +2 interfaces
+- `src/components/Nav.tsx` — thêm tab richlist
+- `src/App.tsx` — routing richlist + import RichList
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.6 — Block & TX Detail UI (2026-03-28)
+
+### Added
+- `BlockDetail` page:
+  - Hero: block height, hash, confirmation badge (green ≥6, amber <6, red=0), chips (txs/time/fee)
+  - Metadata panel: height/hash/prev_hash/timestamp/txs/size/difficulty/miner/total_fees
+  - TX list: click row → TxDetail; hiển thị TXID rút gọn, inputs/outputs count, fee badge, total PKT output
+  - Fallback: nếu server chỉ trả txids[], render danh sách clickable
+- `TxDetail` page:
+  - Hero: full txid, confirmation badge, fee rate badge (Low/Medium/High sat/byte), block height, timestamp, size
+  - **Flow bar**: Total Input → Total Output + Fee (3 cột)
+  - **Inputs panel**: coinbase tag, txid:vout, address button → navigate Address; amount
+  - **Outputs panel**: address button → navigate Address; type label; amount màu green
+- `Blocks.tsx` — click row → `onBlock(height)` navigate BlockDetail
+- `App.tsx` — tab ẩn `block-detail` + `tx-detail`; `goBlock/goTx/goAddr` helpers; back-tab tracking
+- `SearchBar.tsx` — Tab type thêm `block-detail | tx-detail`; tx type → `explorer` (App handle)
+- 2 IPC commands mới: `get_block_detail(height)`, `get_tx_detail(txid)`
+
+### Files
+- `src/pages/BlockDetail.tsx` — mới
+- `src/pages/TxDetail.tsx` — mới
+- `src/pages/Blocks.tsx` — thêm `onBlock` prop + click handler
+- `src/App.tsx` — routing block-detail/tx-detail
+- `src/components/SearchBar.tsx` — Tab type expanded
+- `src-tauri/src/lib.rs` — +2 IPC commands
+- `src/api.ts` — +2 functions, +4 interfaces (TxInput/TxOutput/TxDetail/BlockDetail)
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.5 — Address Detail UI (2026-03-28)
+
+### Added
+- `Address` page (rewrite hoàn toàn):
+  - **Balance Hero** — animated PKT balance (ease-out cubic), accent glow bar, address truncated
+  - **Copy button** — clipboard API, feedback "✓ Copied" 1.8s
+  - **QR modal** — blur backdrop, deterministic pixel pattern từ address chars, full address monospace, Copy button
+  - **TX History table** — cột TXID/Height/Amount/Type/Time; amount màu green/red theo dấu; pagination cursor-based (Prev/Next, tổng số txs)
+  - **UTXO list** — cột TXID/Vout/Amount/Height, tổng UTXO PKT ở header
+  - **Tab switcher** — Transactions / UTXOs với count badge
+  - **Back button** — quay về Explorer
+- 2 IPC commands mới: `get_address_txs(page, limit)`, `get_address_utxos`
+- `fetchAddressTxs`, `fetchAddressUtxos`, `AddressTx`, `AddressUtxo` trong `api.ts`
+- `App.tsx` — tab ẩn "address"; `handleNavigate` phân biệt type=address → `setSelectedAddress` + tab
+- `SearchBar.tsx` — `tabForType("address")` → `"address"` (thay vì explorer)
+
+### Files
+- `src/pages/Address.tsx` — rewrite
+- `src-tauri/src/lib.rs` — +2 IPC commands
+- `src/api.ts` — +2 functions, +2 interfaces
+- `src/App.tsx` — +address tab, selectedAddress state
+- `src/components/SearchBar.tsx` — address routing
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.4 — Search & Navigation (2026-03-28)
+
+### Added
+- `useSearch` hook — debounced search (320ms), localStorage recent history (max 8), auto type detection: block/tx/address/unknown
+- `SearchBar` component — Cmd+K / Ctrl+K global modal overlay:
+  - Blur backdrop, centered modal
+  - Input với SVG icon, loading indicator, ESC hint
+  - Dropdown: Recent searches (với nút Clear) hoặc Live results với TypeBadge (Block/TX/Addr)
+  - Keyboard nav: ↑↓ cursor, Enter select, Escape đóng
+  - Tự navigate sang tab phù hợp (block → Blocks, address/tx → Explorer)
+- `SearchTrigger` button trong Nav — compact với ⌘K / Ctrl+K hint
+- `detectType(q)` util — regex detect: number→block, 64-hex→tx, p[a-z0-9]→address
+- Xóa SearchBar inline cũ trong Explorer.tsx — chuyển sang global instance trong App.tsx
+
+### Files
+- `src/hooks/useSearch.ts` — hook mới
+- `src/components/SearchBar.tsx` — rewrite hoàn toàn
+- `src/components/Nav.tsx` — thêm `onSearchOpen` prop + `SearchTrigger`
+- `src/App.tsx` — mount global `<SearchBar>`, truyền `handleNavigate`
+- `src/pages/Explorer.tsx` — xóa SearchBar cục bộ
+
+### Tests
+- TypeScript strict 0 errors · Rust build 0 warnings
+
+---
+
+## v20.3 — Charts & Analytics (2026-03-28)
+
+### Added
+- `get_analytics` Tauri IPC command — fetch `hashrate | block_time | difficulty` từ `/api/testnet/analytics`
+- `MiniChart` component — canvas sparkline thuần (không thư viện): filled area gradient, grid lines, last-point dot, devicePixelRatio aware
+- `Charts` page — 3 charts: Hashrate (blue), Block Time (green), Difficulty (purple full-width)
+  - Window selector: 50 / 100 / 200 / 500 blocks
+  - Min / Avg / Max stats per chart
+  - X-axis height labels cho difficulty chart
+- Tab "Charts" thêm vào Nav (giữa Blocks và Miner)
+- `fetchAnalytics()` typed wrapper trong `api.ts`
+
+### Files
+- `src/components/MiniChart.tsx`
+- `src/pages/Charts.tsx`
+- `src-tauri/src/lib.rs` — thêm `get_analytics` command
+- `src/api.ts` — thêm `fetchAnalytics`, `AnalyticsPoint`, `AnalyticsSeries`
+
+### Tests
+- TypeScript strict 0 errors · Rust build sạch
+
+---
+
+## v20.2 — Live Dashboard (2026-03-28)
+
+### Added
+- `hooks/useLiveDashboard.ts` — poll 8s, detect block mới qua height diff, emit `LiveEvent[]`, connected/error state
+- `hooks/useAnimatedNumber.ts` — animate số tăng/giảm với ease-out cubic, requestAnimationFrame
+- `Explorer.tsx` rewrite:
+  - `LiveStat` card — animated counter + glow line top + pulse dot khi connected
+  - `ConnBadge` — Live/Offline indicator với pulse animation
+  - `BlockRow` — slide-in animation khi block mới xuất hiện
+  - `EventRow` — live event feed, slide-in animation
+  - Status bar: connection, node URL, poll interval, difficulty, UTXO count
+- Poll 8s (thay 15s), auto-detect block mới, không duplicate event
+
+### Files
+- `src/hooks/useLiveDashboard.ts`
+- `src/hooks/useAnimatedNumber.ts`
+- `src/pages/Explorer.tsx` — rewrite
+
+### Tests
+- TypeScript strict, 0 errors
+
+---
+
+## v20.1 — React UI Foundation (2026-03-28)
+
+### Added
+- **Nav** — fixed top bar, 4 tabs (Explorer/Blocks/Address/Terminal), Mainnet/Testnet toggle
+- **Explorer** — stats cards (Height/Hashrate/BlockTime/Mempool), Latest Blocks panel, Event Log panel, Network info bar, auto-refresh 15s
+- **Blocks** — block table: height, hash, tx count, time ago; hover highlight; Refresh button
+- **Address** — address lookup form, balance hero card, raw JSON
+- **Terminal** — interactive CLI: summary/blocks/balance/search commands, history (↑↓), color-coded output
+- **SearchBar** — global search, Cmd+K shortcut
+- `theme.ts` — color tokens, font tokens
+- `api.ts` — typed IPC wrappers + fmtHashrate/shortHash/timeAgo utils
+- TypeScript strict, 0 errors
+
+### Files
+- `src/theme.ts`, `src/api.ts`
+- `src/components/Nav.tsx`, `StatCard.tsx`, `Panel.tsx`, `SearchBar.tsx`
+- `src/pages/Explorer.tsx`, `Blocks.tsx`, `Address.tsx`, `Terminal.tsx`
+- `src/App.tsx` — routing qua tab state
+
+### Dev
+```bash
+cd desktop && npm run tauri dev
+```
+
+---
+
+## v20.0 — Tauri Desktop Scaffold (2026-03-28)
+
+### Added
+- `desktop/src-tauri/` — Rust Tauri v2 backend
+  - `src/lib.rs` — 4 IPC commands: `get_summary`, `get_blocks`, `get_balance`, `search`
+  - `src/main.rs` — entry point (windows_subsystem = "windows" cho release)
+  - `build.rs` — tauri-build
+  - `tauri.conf.json` — window 1280×800, bundle targets all
+  - `capabilities/default.json` — core:default permissions
+  - `icons/` — 32x32, 128x128 (RGBA PNG), icon.icns, icon.ico
+- `desktop/src/` — React + TypeScript frontend stub
+  - `main.tsx` — ReactDOM.createRoot entry
+  - `App.tsx` — Fetch Network Summary button, gọi IPC `get_summary`, hiển thị JSON
+- `desktop/index.html`, `package.json`, `vite.config.ts`, `tsconfig.json`
+- Root `Cargo.toml` workspace: thêm `desktop/src-tauri`
+- IPC bridge: React `invoke("get_summary", { nodeUrl })` → Rust `reqwest` → PKTScan API
+
+### Files
+- `desktop/src-tauri/src/lib.rs` — Rust IPC commands
+- `desktop/src-tauri/src/main.rs`
+- `desktop/src/App.tsx`, `desktop/src/main.tsx`
+
+### Tests
+- +3 tests (`test_base_trims_trailing_slash`, `test_base_no_slash`, `test_client_builds`)
+- Build sạch (0 warnings)
+
+### Dev
+```bash
+cd desktop && npm install && npm run tauri dev
+```
+
+---
+
+## v19.9 — Developer Portal (2026-03-28)
+
+### Added
+- `web/dev/index.html` — landing page cho developers: hero, quickstart 4 bước, API endpoint table, rate limits, API key roles, webhook verify guide
+- Quickstart: curl examples, SDK install + TypeScript snippet, WebSocket subscribe, webhook đăng ký
+- Endpoint table: 15 endpoints với method badge, path, auth requirement
+- Rate limit cards: Anonymous (60/min) · read key (600/min) · write key (120/min)
+- API key section: 3 roles (read/write/admin) + hướng dẫn lấy key
+- Node.js webhook verify snippet với HMAC-SHA256
+- Route `GET /dev` trong `src/web_serve.rs`
+- Link **Developers** thêm vào nav toàn bộ 9 pages (8 sub-pages + index.html)
+
+### Files
+- `web/dev/index.html` — ~250 lines HTML + inline CSS + inline JS (copyCode)
+- `src/web_serve.rs` — thêm `serve_dev_page()` + route `/dev`
+
+### Tests
+- Build sạch (0 warnings)
+
+---
+
+## v19.9.1 — REST API Key Management (2026-03-28)
+
+### Added
+- `src/key_api.rs` — REST endpoints quản lý API key (yêu cầu admin role):
+  - `GET /api/keys` — liệt kê tất cả keys (id, role, label, created_at) — không trả raw key
+  - `POST /api/keys` — tạo key mới (body: label?, role?), trả raw key 1 lần
+  - `DELETE /api/keys/:key_id` — thu hồi key theo key_id
+- `AuthDb` clone truyền vào `key_router()` trước khi bị move vào auth middleware
+- Dev Portal endpoint table cập nhật 3 dòng mới (GET/POST/DELETE /api/keys)
+
+### Files
+- `src/key_api.rs` — module mới
+
+### Tests
+- +6 tests (key_api, tất cả pass)
+- Build sạch (0 warnings)
+
+---
+
+## v19.8 — Webhook UI (2026-03-28)
+
+### Added
+- `web/webhooks/index.html` — trang quản lý webhook: đăng ký, xem danh sách, xoá
+- `web/js/webhooks.js` — logic đầy đủ: POST/GET/DELETE `/api/webhooks` với auth header
+- API key input (show/hide) + badge xác nhận khi key hợp lệ
+- Form đăng ký: URL, checkboxes events (new_block / new_tx / address_activity), address filter tuỳ chọn
+- Secret reveal box — hiển thị 1 lần sau khi register, có nút Copy + Dismiss
+- Webhook list: card mỗi webhook, event tags, address filter badge, timestamp, nút Xoá
+- Toast notifications (ok/err) cho mọi thao tác
+- Signature verify guide + Node.js code snippet inline
+- Route `GET /webhooks` trong `src/web_serve.rs`
+
+### Files
+- `web/webhooks/index.html` — HTML + inline CSS
+- `web/js/webhooks.js` — ~190 lines
+- `src/web_serve.rs` — thêm `serve_webhooks_page()` + route `/webhooks`
+
+### Tests
+- Build sạch (0 warnings)
+
+---
+
+## v19.7 — API Playground (2026-03-27)
+
+### Added
+- `web/playground/index.html` — interactive API playground page
+- `web/js/playground.js` — 15 endpoints, param inputs, Run button, JSON highlight
+- JSON syntax highlight: key (blue), string (green), number (orange), bool (purple), null (muted)
+- Badge: HTTP status + latency ms sau mỗi request
+- Copy URL (absolute) + Copy Response buttons
+- Share / bookmark qua URL hash: `#ep=block&height=100`
+- Keyboard shortcut: `Ctrl+Enter` = Run
+- Route `GET /playground` trong `src/web_serve.rs`
+
+### Files
+- `web/playground/index.html` — HTML shell, inline playground CSS
+- `web/js/playground.js` — logic hoàn chỉnh (~200 lines)
+- `src/web_serve.rs` — thêm `serve_playground()` + route
+
+### Tests
+- Build sạch (0 warnings)
+
+---
+
 ## v19.6 — PKT CLI (2026-03-27)
 
 ### Added

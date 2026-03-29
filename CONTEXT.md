@@ -1,6 +1,6 @@
 # Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v19.5.1 ✅ — 0 errors, 0 warnings**
+**Version hiện tại: v21.0 ✅ — 0 errors, 0 warnings**
 
 ---
 
@@ -216,24 +216,52 @@ _Mục tiêu: nâng cấp node production-grade + dev layer cho ecosystem — wo
 - [x] v19.5 — **libp2p Transport**: `src/pkt_libp2p.rs` — `PktP2pNode` (TCP + Noise + Yamux + mDNS + Identify + Ping via libp2p 0.53); `PeerManager` (score-based reputation, auto ban < threshold); `ScoreEvent`; optional feature `libp2p-transport` (không kéo libp2p vào build mặc định); 15 tests
 - [x] v19.5.1 — **JS/TS SDK** (`sdk-js/`): npm package `@pktcore/sdk v0.1.0`; `PktClient` — REST wrapper (getBlock, getTx, getAddress, getUtxos, getAddressTxs, getSummary, getMempool, getAnalytics, getRichList, search, exportCsvUrl); JSON-RPC methods (getBlockCount, getBlockHash, getMiningInfo, rpc()); WebSocket subscribe (block/tx/mempool, auto-reconnect 3s); `types.ts` — Block/Tx/AddressInfo/Utxo/NetworkSummary/...; `utils.ts` — pakletsToPkt, fmtHashrate, shortHash, timeAgo; TypeScript strict, builds to `dist/`
 - [x] v19.6 — **PKT CLI tool** (`crates/pkt-cli`): binary `pkt`; commands: `pkt block <height>`, `pkt tx <txid>`, `pkt address <addr>`, `pkt mempool`, `pkt sync-status`, `pkt config show/set-node`; flag `--json` raw JSON / mặc định pretty table; flag `--node <url>` override; config `~/.pkt/cli.toml`; clap 4 derive; reqwest blocking; 14 tests
-- [ ] v19.7 — **API Playground**: `web/playground/index.html` — interactive docs; dropdown chọn endpoint; input params; "Run" button gọi API thật; syntax-highlighted JSON response; chia sẻ URL với params; thay thế Swagger UI tĩnh
-- [ ] v19.8 — **Webhook Management UI**: `web/webhooks/index.html` — list/create/delete webhooks qua UI; test webhook với payload mẫu; log delivery history; auth bằng API key
-- [ ] v19.9 — **Developer Portal**: `web/dev/index.html` — landing page cho developers: quickstart guide, SDK install, API reference link, rate limit info, API key generator UI; target: third-party devs build app trên PKTScan
+- [x] v19.7 — **API Playground**: `web/playground/index.html` + `web/js/playground.js`; dropdown 15 endpoints; param inputs động; ▶ Run gọi API thật; JSON syntax-highlight (key/string/number/bool/null); badge HTTP status + latency ms; Copy URL (full absolute) + Copy Response; share/bookmark qua URL hash (`#ep=block&height=100`); Ctrl+Enter shortcut; route `/playground` trong `web_serve.rs`
+- [x] v19.8 — **Webhook Management UI**: `web/webhooks/index.html` + `web/js/webhooks.js`; form đăng ký (URL, events checkboxes, address filter); secret reveal 1 lần sau register; list webhooks với event tags + timestamp; nút Xoá; toast notifications; HMAC verify guide + Node.js snippet; route `/webhooks` trong `web_serve.rs`; nav đồng nhất toàn bộ sub-pages
+- [x] v19.9 — **Developer Portal**: `web/dev/index.html` — hero + quickstart 4 bước (curl/SDK/WebSocket/Webhook); endpoint table 15 routes với auth badge; rate limit cards (60/600/120 req/min); API key roles (read/write/admin); Node.js HMAC verify snippet; route `/dev`; link Developers thêm vào nav toàn bộ pages
+- [x] v19.9.1 — **REST API Key Management**: `src/key_api.rs` — GET/POST/DELETE `/api/keys` (admin only); list không trả raw key; raw key hiển thị 1 lần khi tạo; 6 tests — hero + quickstart 4 bước (curl/SDK/WebSocket/Webhook); endpoint table 15 routes với auth badge; rate limit cards (60/600/120 req/min); API key roles (read/write/admin); Node.js HMAC verify snippet; route `/dev`; link Developers thêm vào nav toàn bộ pages
 
 ### Era 27 — PKTScan Desktop App (v20.x)
 
 _Mục tiêu: PKTScan thành native desktop app macOS + Windows dùng Tauri (Rust backend + React frontend)._
 
-- [ ] v20.0 — **Tauri Setup**: tích hợp `tauri` vào workspace; `src-tauri/` cho Rust backend; `src/` cho React frontend; build ra `.app` (macOS) + `.exe` (Windows); IPC bridge giữa React ↔ Rust
-- [ ] v20.1 — **React UI Foundation**: setup Vite + React + TailwindCSS; component library: Block, TX, Address cards; dark/light theme; router (React Router) cho `/`, `/block/:h`, `/rx/:txid`, `/address/:addr`
-- [ ] v20.2 — **Live Dashboard**: trang chủ React — stats bar realtime, Latest Blocks + Transactions live feed qua Tauri IPC hoặc WebSocket; auto-refresh; animated số tăng
-- [ ] v20.3 — **Charts & Analytics**: tích hợp Chart.js hoặc Recharts — hashrate 7 ngày, tx volume, fee histogram, block time; data fetch từ `/api/testnet/analytics`
-- [ ] v20.4 — **Search & Navigation**: search bar toàn cục (block/tx/address); keyboard shortcut `Cmd+K` / `Ctrl+K`; recent searches history; result preview dropdown
-- [ ] v20.5 — **Address Detail UI**: balance hero, TX history table paginated, UTXO list, copy address button, QR code popup
-- [ ] v20.6 — **Block & TX Detail UI**: block detail với TX list, TX detail với inputs/outputs flow diagram, fee rate badge, confirmation count
-- [ ] v20.7 — **Rich List & Mempool UI**: top holders leaderboard với avatar placeholder, mempool fee histogram bar chart, pending TX table
-- [ ] v20.8 — **Settings & Preferences**: chọn node URL (local/VPS), theme, currency display (PKT/USD), language (EN/VI); lưu vào Tauri store
-- [ ] v20.9 — **Build & Release**: `tauri build` → `.dmg` (macOS) + `.msi`/`.exe` (Windows) + `.AppImage`/`.deb` (Linux); GitHub Actions CI build cả 3 platform; auto-updater
+- [x] v20.0 — **Tauri Setup**: `desktop/src-tauri/` Tauri v2 backend (4 IPC commands: get_summary/get_blocks/get_balance/search); `desktop/src/` React stub (App.tsx invoke → reqwest → PKTScan API); workspace member; icons RGBA; 3 tests; dev: `cd desktop && npm install && npm run tauri dev`
+- [x] v20.1 — **React UI Foundation**: Nav (4 tabs + Mainnet/Testnet toggle); Explorer (stats cards + blocks + event log + auto-refresh 15s); Blocks table; Address lookup + balance hero; Terminal CLI (summary/blocks/balance/search, history ↑↓); SearchBar (Cmd+K); theme.ts + api.ts; TypeScript strict 0 errors
+- [x] v20.2 — **Live Dashboard**: `useLiveDashboard` (poll 8s, detect block mới qua height diff, LiveEvent[]); `useAnimatedNumber` (ease-out cubic RAF); Explorer rewrite: LiveStat animated + glow, ConnBadge pulse, BlockRow/EventRow slide-in animation, status bar; TypeScript 0 errors
+- [x] v20.3 — **Charts & Analytics**: `MiniChart` canvas sparkline (no deps, dpr-aware, fill gradient); `Charts` page 3 charts (hashrate/block_time/difficulty); window selector 50/100/200/500; Min/Avg/Max stats; `get_analytics` IPC + `fetchAnalytics` typed; tab Charts trong Nav; TypeScript 0 errors, Rust build sạch
+- [x] v20.4 — **Search & Navigation**: `useSearch` hook (debounce 320ms, localStorage recents max 8, detectType); `SearchBar` Cmd+K modal overlay (blur backdrop, TypeBadge, ↑↓ keyboard nav, Enter select, Escape đóng, navigate tab); `SearchTrigger` button trong Nav với ⌘K hint; global mount trong App.tsx; TypeScript 0 errors
+- [x] v20.5 — **Address Detail UI**: Balance Hero animated + copy + QR modal (pixel pattern); TX history table paginated (page/total); UTXO list + tab switcher; Back button; tab ẩn "address" trong App.tsx; 2 IPC commands mới; TypeScript 0 errors
+- [x] v20.6 — **Block & TX Detail UI**: BlockDetail (hero+conf badge+meta+TX list clickable); TxDetail (flow bar input→output, inputs panel, outputs panel, FeeRateBadge, ConfBadge); Blocks click → BlockDetail; back-tab tracking; 2 IPC mới; TypeScript 0 errors
+- [x] v20.7 — **Rich List & Mempool UI**: Leaderboard (avatar HSL + medal emoji, balance bar), Fee Histogram canvas (6 buckets, gradient fill), Mempool TX table (fee rate badge), Summary bar 4 cards, tab switcher; 2 IPC mới; TypeScript 0 errors
+- [x] v20.8 — **Settings & Preferences**: `useSettings` hook (localStorage); Settings page (Network URLs + Test, Theme dark/light, Currency PKT/USD, Language EN/VI, Poll 4-60s, About, Danger Zone reset); ⚙ Nav icon; `applyTheme()` + light tokens; nodeUrl từ settings; TypeScript 0 errors
+- [x] v20.9 — **Build & Release**: `tauri.conf.json` v0.8.0 + bundle metadata; `release.yml` CI 3-platform (macOS universal/.dmg, Windows/.msi, Linux/.AppImage+.deb); `build-check.yml` PR check (TS + Rust + tests); `RELEASE.md` hướng dẫn đầy đủ; TypeScript 0 errors
+
+### Era 28 — PKTScan Desktop Nâng Cao (v21.x)
+
+_Mục tiêu: hoàn thiện desktop app — miner thật, wallet, peer scan, i18n, auto theme._
+
+- [x] v21.0 — **Real Miner IPC**: `start_mine/stop_mine/mine_status` Tauri commands; TCP GetTemplate/NewBlock; blake3 PoW rayon parallel; coinbase txid/wtxid/merkle đúng format; bech32+Base58Check+hex address parse; emit `mine_log`+`mine_stats` events; Miner.tsx rewrite realtime; TypeScript 0 errors
+- [x] v21.1 — **i18n + Auto Theme + UI Polish**: `i18n.ts` EN/VI ~60 keys; `setLang()` synchronous trong App render; `applyTheme()` auto mode via `getCurrentWindow().onThemeChanged()` (Tauri native) + matchMedia fallback; Node.tsx bỏ fake data; white-border fix CSS reset + `tauri.conf.json backgroundColor`; light mode canvas deps fix (MiniChart, FeeHistogram); SearchBar module-level color capture fix
+- [x] v21.2 — **Wallet + Peer Scan**: `wallet_generate/wallet_from_privkey` (secp256k1 + bech32 encode tự implement); `peer_scan` TCP GetAddr + probe peers song song; Wallet.tsx (create/import/reveal key/remove, balance fetch, view on explorer); Node.tsx thêm Peers panel (latency badge, height, status); bỏ tab Terminal, thêm tab Wallet; Miner log persist khi chuyển tab (`display:none`)
+
+### Era 29 — PKTScan Backend Fix (v22.x)
+
+_Mục tiêu: fix backend để desktop app có đủ data thực — UTXO index, address index, tx index, broadcast endpoint._
+
+_Vấn đề phát hiện (2026-03-29):_
+- `GET /api/testnet/address/{addr}/utxos` → 404 (chưa implement)
+- `GET /api/testnet/richlist` → 404 (chưa expose, chỉ có `rich_top5` trong summary)
+- `/api/testnet/balance/{addr}` luôn trả 0 dù địa chỉ có balance trong `rich_top5`
+- Tất cả blocks đều 0 tx — coinbase chưa được lưu vào DB
+- TCP `GetAddr` → không trả gì (node chưa respond)
+- Chưa có broadcast endpoint (TCP NewTx hoặc REST POST)
+
+- [x] v22.0 — **Address Index Fix**: `pkt_testnet_web.rs` — thêm `any_addr_to_script_hex()` chấp nhận bech32/Base58Check/script_hex; `hash160_to_script_hex()` helper; `ps_balance` + `ps_addr_txs` đều convert địa chỉ tự động; thêm `ps_addr_utxos` handler mới; route `/api/testnet/address/:s/utxos` + `/api/testnet/richlist` alias; `AddrTxsParams` thêm `page` field; balance response thêm `balance_pkt`
+- [x] v22.1 — **UTXO Height Field**: thêm `#[serde(default)] pub height: u64` vào `UtxoEntry`; cập nhật `insert_utxo(height)` + `apply_wire_tx(height)` + `apply_block_txns`; backward-compatible với data cũ (height=0); tất cả callers trong `pkt_block_sync.rs`, `pkt_reorg.rs`, `pkt_addr_index.rs` đã cập nhật
+- [x] v22.2 — **Block TX Count**: thêm `save_block_tx_count/get_block_tx_count` vào `SyncDb`; `sync_blocks` save `r.tx_count` sau mỗi block apply; `ps_block_detail` dùng stored count (fallback = txids.len()); giải quyết block detail hiển thị 0 tx với old data
+- [x] v22.3 — **Rich List Endpoint**: đã hoàn thành trong v22.0 — `/api/testnet/richlist` alias đã thêm, handler `ps_rich_list` đã tồn tại
+- [x] v22.4 — **Broadcast TX**: `POST /api/testnet/tx/broadcast` nhận `{raw_hex}` → parse WireTx (validate + txid) → relay lên testnet peer qua P2P (inv + tx wire msg) → trả `{txid, status}`; relay lỗi trả 502 + txid để client retry
+- [x] v22.5 — **Wallet Send TX**: `wallet_tx_build` Tauri command — BIP143 segwit P2WPKH signing (ECDSA), raw wire serialization; `tx_broadcast` command POST lên backend; Wallet.tsx thêm Send panel (to addr, amount, fee, UTXO auto-select greedy); `addr_to_p2wpkh_script` decoder; `write_tx_output/write_varint/double_sha256` helpers
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
