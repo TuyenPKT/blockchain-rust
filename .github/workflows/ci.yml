@@ -8,29 +8,42 @@ on:
     branches: [main, master]
 
 jobs:
-  # ── Detect changed paths ────────────────────────────────────────────────────
+  # ── Detect changed paths (pure git, no Node.js action) ─────────────────────
   # Bỏ qua khi push tag (release job tự handle)
   changes:
     if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
     outputs:
-      cli:     ${{ steps.filter.outputs.cli }}
-      desktop: ${{ steps.filter.outputs.desktop }}
+      cli:     ${{ steps.detect.outputs.cli }}
+      desktop: ${{ steps.detect.outputs.desktop }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
         with:
-          filters: |
-            cli:
-              - 'src/**'
-              - 'crates/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-            desktop:
-              - 'desktop/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
+          fetch-depth: 2   # cần commit trước để so sánh
+      - name: Detect changed paths
+        id: detect
+        run: |
+          # PR: so sánh base..head; push: so sánh HEAD~1..HEAD
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+            HEAD=${{ github.event.pull_request.head.sha }}
+          else
+            BASE=HEAD~1
+            HEAD=HEAD
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git diff --name-only HEAD)
+
+          CLI=false
+          DESKTOP=false
+
+          echo "$CHANGED" | grep -qE '^(src/|crates/|Cargo\.(toml|lock))' && CLI=true
+          echo "$CHANGED" | grep -qE '^(desktop/|Cargo\.(toml|lock))'     && DESKTOP=true
+
+          echo "cli=$CLI"     >> "$GITHUB_OUTPUT"
+          echo "desktop=$DESKTOP" >> "$GITHUB_OUTPUT"
+          echo "Changed files: $CHANGED"
+          echo "cli=$CLI  desktop=$DESKTOP"
 
   # ── CLI: cargo test ─────────────────────────────────────────────────────────
   # Chạy khi src/** hoặc crates/** thay đổi
