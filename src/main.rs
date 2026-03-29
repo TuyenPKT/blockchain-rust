@@ -146,6 +146,9 @@ mod pkt_testnet_web;
 mod pkt_node;
 mod pkt_validate;
 mod pkt_script;
+mod pkt_relay;
+mod pkt_peer_set;
+mod pkt_mempool;
 
 // ── Entry point ───────────────────────────────────────────────
 //

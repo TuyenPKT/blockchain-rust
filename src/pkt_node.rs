@@ -21,6 +21,7 @@ use std::thread;
 
 use crate::pkt_wire::{PktMsg, VersionMsg, TESTNET_MAGIC, MAINNET_MAGIC, PROTOCOL_VERSION};
 use crate::pkt_peer::{send_msg, recv_msg, PeerError};
+use crate::pkt_relay::{RelayHub, SeenHashes, wire_block_hash};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,7 @@ fn handle_peer(
     our_height: i32,
     peers:      Arc<Mutex<Vec<ConnectedPeer>>>,
     chain:      SharedChain,
+    relay_hub:  Arc<RelayHub>,
 ) {
     let addr = stream
         .peer_addr()
@@ -265,6 +267,48 @@ fn handle_peer(
 
     // Longer read timeout for established session
     let _ = stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)));
+
+    // ── Relay setup ───────────────────────────────────────────────────────────
+    // Đăng ký peer với RelayHub, nhận channel để write-thread gửi Inv.
+    let relay_rx = relay_hub.register(&addr);
+
+    // Clone stream cho write-thread (relay outbound Inv messages).
+    let write_stream = match stream.try_clone() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("[pkt-node] stream clone failed {}: {}", addr, e);
+            relay_hub.deregister(&addr);
+            return;
+        }
+    };
+    let relay_magic = magic;
+    let relay_addr  = addr.clone();
+    thread::spawn(move || {
+        let mut ws = write_stream;
+        for event in relay_rx {
+            let item = event.to_inv_item();
+            let msg  = PktMsg::Inv { items: vec![item] };
+            if let Err(e) = send_msg(&mut ws, msg, relay_magic) {
+                println!("[pkt-node] relay write failed {}: {}", relay_addr, e);
+                break;
+            }
+        }
+    });
+
+    // SeenHashes: seed từ BLAKE3 hashes hiện tại của chain (dạng bytes).
+    let mut seen: SeenHashes = SeenHashes::new(8192);
+    {
+        let bc = chain.lock().unwrap();
+        for blk in &bc.chain {
+            if let Ok(bytes) = hex::decode(&blk.hash) {
+                if bytes.len() == 32 {
+                    let mut arr = [0u8; 32];
+                    arr.copy_from_slice(&bytes);
+                    seen.insert(arr);
+                }
+            }
+        }
+    }
 
     // ── Message loop ──────────────────────────────────────────────────────────
     loop {
@@ -366,13 +410,58 @@ fn handle_peer(
                     println!("[pkt-node] addr from {}: {} entries", addr, received.len());
                 }
                 PktMsg::Inv { items } => {
-                    println!("[pkt-node] inv from {}: {} items", addr, items.len());
+                    // Lọc những hash chưa thấy → gửi GetData để request
+                    let unknown: Vec<_> = items.into_iter()
+                        .filter(|item| {
+                            let already_seen = seen.contains(&item.hash);
+                            if !already_seen { seen.insert(item.hash); }
+                            !already_seen
+                        })
+                        .collect();
+                    if !unknown.is_empty() {
+                        println!("[pkt-node] inv from {}: {} unknown items → GetData", addr, unknown.len());
+                        let getdata = PktMsg::GetData { items: unknown };
+                        if let Err(e) = send_msg(&mut stream, getdata, magic) {
+                            println!("[pkt-node] send getdata failed {}: {}", addr, e);
+                            break;
+                        }
+                    }
                 }
                 PktMsg::Version(_) | PktMsg::Verack => {} // already done
                 other => {
-                    let dbg = format!("{:?}", other);
-                    let cmd = &dbg[..dbg.find('(').unwrap_or(dbg.len())];
-                    println!("[pkt-node] {} → {}", addr, cmd);
+                    // Nhận block payload từ peer → relay Inv tới các peers khác
+                    if let PktMsg::Unknown { ref command, ref payload } = other {
+                        let cmd_str = String::from_utf8_lossy(command);
+                        let cmd_trim = cmd_str.trim_end_matches('\0');
+                        if cmd_trim == "block" {
+                            if let Some(wire_hash) = wire_block_hash(payload) {
+                                let is_new = !seen.insert(wire_hash); // insert trả false nếu mới
+                                if is_new {
+                                    println!("[pkt-node] block from {}: {} → relay to {} peers",
+                                        addr, hex::encode(&wire_hash[..8]), relay_hub.peer_count().saturating_sub(1));
+                                    relay_hub.broadcast_block(wire_hash, Some(&addr));
+                                }
+                            }
+                        } else if cmd_trim == "tx" {
+                            // Raw tx relay
+                            use crate::pkt_relay::wire_tx_hash;
+                            let txid = wire_tx_hash(payload);
+                            let is_new = !seen.insert(txid);
+                            if is_new {
+                                println!("[pkt-node] tx from {}: {} → relay to {} peers",
+                                    addr, hex::encode(&txid[..8]), relay_hub.peer_count().saturating_sub(1));
+                                relay_hub.broadcast_tx(txid, Some(&addr));
+                            }
+                        } else {
+                            let dbg = format!("{:?}", other);
+                            let name = &dbg[..dbg.find('(').unwrap_or(dbg.len())];
+                            println!("[pkt-node] {} → {}", addr, name);
+                        }
+                    } else {
+                        let dbg = format!("{:?}", other);
+                        let cmd = &dbg[..dbg.find('(').unwrap_or(dbg.len())];
+                        println!("[pkt-node] {} → {}", addr, cmd);
+                    }
                 }
             },
             Err(PeerError::Timeout) => {
@@ -397,17 +486,22 @@ fn handle_peer(
         }
     }
 
-    // Remove peer from active list
+    // Remove peer from active list + relay hub
     {
         let mut locked = peers.lock().unwrap();
         locked.retain(|p| p.addr != addr);
         println!("[pkt-node] total peers: {}", locked.len());
     }
+    relay_hub.deregister(&addr);
 }
 
 // ── Main server loop ──────────────────────────────────────────────────────────
 
-pub fn run_pkt_node(cfg: NodeConfig, chain: SharedChain) {
+/// Khởi động PKT node server.
+///
+/// Trả về `Arc<RelayHub>` để caller (miner, API) có thể broadcast
+/// block/tx mới sau khi validate.
+pub fn run_pkt_node(cfg: NodeConfig, chain: SharedChain) -> Arc<RelayHub> {
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
     let listener  = TcpListener::bind(&bind_addr).unwrap_or_else(|e| {
         eprintln!("[pkt-node] cannot bind {}: {}", bind_addr, e);
@@ -421,34 +515,41 @@ pub fn run_pkt_node(cfg: NodeConfig, chain: SharedChain) {
         PROTOCOL_VERSION,
     );
 
-    let peers: Arc<Mutex<Vec<ConnectedPeer>>> = Arc::new(Mutex::new(Vec::new()));
+    let peers:     Arc<Mutex<Vec<ConnectedPeer>>> = Arc::new(Mutex::new(Vec::new()));
+    let relay_hub: Arc<RelayHub> = Arc::new(RelayHub::new());
+    let hub_ret   = Arc::clone(&relay_hub);
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(s) => {
-                let current = peers.lock().map(|l| l.len()).unwrap_or(0);
-                if current >= cfg.max_peers {
-                    println!(
-                        "[pkt-node] max peers ({}) reached, rejecting connection",
-                        cfg.max_peers
-                    );
-                    continue;
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(s) => {
+                    let current = peers.lock().map(|l| l.len()).unwrap_or(0);
+                    if current >= cfg.max_peers {
+                        println!(
+                            "[pkt-node] max peers ({}) reached, rejecting connection",
+                            cfg.max_peers
+                        );
+                        continue;
+                    }
+
+                    let peers_clone = Arc::clone(&peers);
+                    let chain_clone = Arc::clone(&chain);
+                    let hub_clone   = Arc::clone(&relay_hub);
+                    let magic       = cfg.magic;
+                    let our_height  = cfg.our_height;
+
+                    thread::spawn(move || {
+                        handle_peer(s, magic, our_height, peers_clone, chain_clone, hub_clone);
+                    });
                 }
-
-                let peers_clone  = Arc::clone(&peers);
-                let chain_clone  = Arc::clone(&chain);
-                let magic        = cfg.magic;
-                let our_height   = cfg.our_height;
-
-                thread::spawn(move || {
-                    handle_peer(s, magic, our_height, peers_clone, chain_clone);
-                });
-            }
-            Err(e) => {
-                eprintln!("[pkt-node] accept error: {}", e);
+                Err(e) => {
+                    eprintln!("[pkt-node] accept error: {}", e);
+                }
             }
         }
-    }
+    });
+
+    hub_ret
 }
 
 // ── CLI arg parsing ───────────────────────────────────────────────────────────
@@ -495,7 +596,11 @@ pub fn parse_node_args(args: &[String]) -> NodeConfig {
 
 type SharedChain = Arc<Mutex<crate::chain::Blockchain>>;
 
-fn handle_template_client(mut stream: std::net::TcpStream, chain: SharedChain) {
+fn handle_template_client(
+    mut stream: std::net::TcpStream,
+    chain:      SharedChain,
+    relay_hub:  Arc<RelayHub>,
+) {
     use std::io::{BufRead, BufReader, Write};
     use crate::message::Message;
 
@@ -520,11 +625,26 @@ fn handle_template_client(mut stream: std::net::TcpStream, chain: SharedChain) {
                 Message::Template { prev_hash: prev, height, difficulty: diff, txs }
             }
             Message::NewBlock { block } => {
+                // Lấy BLAKE3 hash trước khi commit để relay
+                let block_hash_hex = block.hash.clone();
                 let mut bc = chain.lock().unwrap();
                 bc.commit_mined_block(block);
                 let h = bc.chain.len() as u64;
-                if let Err(e) = crate::storage::save_blockchain(&bc) {
+                drop(bc);
+                if let Err(e) = crate::storage::save_blockchain(&chain.lock().unwrap()) {
                     eprintln!("[template] save error: {}", e);
+                }
+                // Relay block hash tới tất cả connected peers
+                if let Ok(bytes) = hex::decode(&block_hash_hex) {
+                    if bytes.len() == 32 {
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&bytes);
+                        if relay_hub.peer_count() > 0 {
+                            println!("[template] relay block {} to {} peers",
+                                &block_hash_hex[..16], relay_hub.peer_count());
+                            relay_hub.broadcast_block(arr, None);
+                        }
+                    }
                 }
                 Message::Height { height: h }
             }
@@ -543,7 +663,7 @@ fn handle_template_client(mut stream: std::net::TcpStream, chain: SharedChain) {
     }
 }
 
-fn run_template_server(port: u16, chain: SharedChain) {
+fn run_template_server(port: u16, chain: SharedChain, relay_hub: Arc<RelayHub>) {
     let addr = format!("0.0.0.0:{}", port);
     let listener = match TcpListener::bind(&addr) {
         Ok(l) => l,
@@ -552,8 +672,9 @@ fn run_template_server(port: u16, chain: SharedChain) {
     println!("[template] listening on {} (miner endpoint)", addr);
     for stream in listener.incoming() {
         if let Ok(s) = stream {
-            let c = Arc::clone(&chain);
-            thread::spawn(move || handle_template_client(s, c));
+            let c   = Arc::clone(&chain);
+            let hub = Arc::clone(&relay_hub);
+            thread::spawn(move || handle_template_client(s, c, hub));
         }
     }
 }
@@ -567,12 +688,17 @@ pub fn cmd_pkt_node(args: &[String]) {
         println!("[pkt-node] chain loaded: height={}", bc.chain.len().saturating_sub(1));
     }
 
-    // Spawn template server on port+1 (local miner endpoint)
+    // Khởi động P2P node server — nhận RelayHub để share với template server
+    let relay_hub = run_pkt_node(cfg.clone(), Arc::clone(&chain));
+
+    // Spawn template server on port+1 (local miner endpoint) — share relay_hub
     let template_port  = cfg.port + 1;
     let chain_template = Arc::clone(&chain);
-    thread::spawn(move || run_template_server(template_port, chain_template));
+    let hub_template   = Arc::clone(&relay_hub);
+    thread::spawn(move || run_template_server(template_port, chain_template, hub_template));
 
-    run_pkt_node(cfg, chain);
+    // Block main thread
+    loop { thread::sleep(Duration::from_secs(60)); }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

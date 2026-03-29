@@ -4,6 +4,106 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.4 — Mempool Full (2026-03-29)
+
+### Added
+- `src/pkt_mempool.rs` — `PktMempool` với đầy đủ tính năng:
+  - **Fee priority queue**: `BTreeMap<FeeKey, tx_id>` — O(log n) insert/evict/select; `FeeKey` dùng `fee_rate × 1_000_000` integer tránh float comparison
+  - **RBF**: detect conflict qua `spenders: HashMap<(prev_txid, vout), mempool_txid>`; kiểm tra `new_fee × 100 >= old_fee × 110` (integer, tránh float rounding)
+  - **Max-size eviction**: `evict_lowest()` — khi đầy và TX mới có fee_rate cao hơn min → evict lowest rồi insert; ngược lại reject
+  - **72h age expiry**: `evict_expired(now)` — loại bỏ entries có `added_at < now - max_age_secs`
+  - `AddResult` enum: `Added / Replaced(old_txid) / Rejected(reason)`
+  - `select_transactions(max_count)` — iterate BTreeMap ngược (highest first)
+  - `remove_confirmed(txids)` — sync cả 3 indices (entries + by_fee + spenders)
+  - `min_fee_rate() / max_fee_rate()` — O(1) từ BTreeMap
+  - `total_fees() / len() / is_empty() / contains() / get() / entries()`
+
+### Files
+- `src/pkt_mempool.rs` — module mới
+- `src/main.rs` — thêm `mod pkt_mempool`
+
+### Tests
+- +18 tests (add basic, coinbase reject, duplicate reject, RBF accept/reject/exact/index, evict lowest, evict expired, remove_confirmed, select order, fee stats)
+
+### Breaking / Gotcha
+- RBF so sánh bằng integer (`fee*100 >= old_fee*110`) thay vì `ceil(fee * 1.10)` — tránh `ceil(110.000...01) = 111`
+- `PktMempool` là module mới — không sửa `Mempool` cũ (vẫn dùng trong `chain.rs` / `mempool_stats.rs`)
+- `add()` nhận `now: u64` (unix timestamp) — caller cần truyền vào; không tự lấy trong struct
+
+---
+
+## v23.3 — Multi-peer Manager (2026-03-29)
+
+### Added
+- `src/pkt_peer_set.rs` — `PeerSet`: quản lý N outbound connections song song:
+  - `PeerStatus` enum: `Connecting / Connected / Disconnected { retry_at, attempt } / Banned { until_unix }`
+  - `PeerSlot` — trạng thái mỗi peer: addr, status, height, agent, strikes
+  - `PeerSet::new(magic, our_height, max_outbound)` → `Arc<PeerSet>`; spawn manager-thread ngay
+  - `add_peer(addr)` — thêm peer, spawn connect-thread; dedup nếu đã có
+  - `ban(addr, duration_secs)` — ban thủ công
+  - `strike(addr)` — tăng counter; đủ `MAX_STRIKES` (3) → auto-ban `DEFAULT_BAN_SECS` (3600s)
+  - `peer_count()` — chỉ đếm Connected
+  - `best_height()` — max height trong Connected peers
+  - `connected_addrs()` — danh sách addr đang kết nối
+  - `set_our_height(h)` — cập nhật `AtomicI32` dùng trong Version message
+  - `update_height(addr, h)` — chỉ tăng (không giảm)
+  - connect-thread per peer: TCP + handshake → message loop (Ping/Pong, Inv log, Version height update) → on disconnect `mark_disconnected` → manager respawn
+  - manager-thread: wakeup mỗi 10s, tìm peers `Disconnected.retry_at <= now` hoặc `Banned` hết hạn → respawn connect-thread
+  - Backoff: `5 * 2^attempt` giây, capped 300s (5 phút)
+
+### Files
+- `src/pkt_peer_set.rs` — module mới
+- `src/main.rs` — thêm `mod pkt_peer_set`
+
+### Tests
+- +21 tests (peer_count, best_height, ban, strike, update_height, backoff, PeerStatus helpers)
+
+### Breaking / Gotcha
+- `PeerSet::new()` trả `Arc<PeerSet>` (không phải plain struct) — manager-thread cần Arc để tồn tại
+- `SeenHashes::insert()` trả `true` nếu đã thấy, `false` nếu mới — ngược với `HashSet::insert`
+- connect-thread tự kết thúc sau disconnect — manager là người respawn; không dùng loop vô tận trong connect-thread
+
+---
+
+## v23.2 — Block + TX Relay (2026-03-29)
+
+### Added
+- `src/pkt_relay.rs` — relay broadcast hub:
+  - `RelayHub` — `Arc<Mutex<Vec<(addr, Sender<RelayEvent>)>>>`, thread-safe
+  - `register(addr)` → `Receiver<RelayEvent>` cho write-thread của mỗi peer
+  - `deregister(addr)` — cleanup khi peer disconnect
+  - `broadcast_block(hash, except_addr)` / `broadcast_tx(hash, except_addr)` — fanout tới tất cả peers trừ nguồn
+  - Sender bị drop tự động clean khi `send()` fail (receiver dropped)
+  - `SeenHashes` — bounded HashSet (cap=8192) tránh relay lại hash đã biết; evict FIFO khi đầy
+  - `wire_block_hash(payload)` — SHA256d của 80-byte header → wire hash
+  - `wire_tx_hash(raw_tx)` — SHA256d của raw tx bytes → txid
+  - `RelayEvent::to_inv_item()` — chuyển event thành `InvItem` để gửi `PktMsg::Inv`
+- `src/pkt_node.rs` — integrate relay vào node:
+  - `handle_peer` nhận `relay_hub: Arc<RelayHub>`; spawn write-thread per peer via `try_clone()`
+  - Seed `SeenHashes` từ BLAKE3 hashes của chain hiện tại khi peer connect
+  - `PktMsg::Inv` handler: lọc unknown hashes → gửi `GetData`; known hashes bị skip
+  - `PktMsg::Unknown "block"` handler: extract wire hash → `relay_hub.broadcast_block(hash, Some(&addr))`
+  - `PktMsg::Unknown "tx"` handler: compute txid → `relay_hub.broadcast_tx(txid, Some(&addr))`
+  - `run_pkt_node` chạy trong background thread, trả về `Arc<RelayHub>`
+  - `handle_template_client` nhận `relay_hub`; khi `NewBlock` commit → `relay_hub.broadcast_block`
+  - `cmd_pkt_node` share relay_hub giữa P2P node và template server
+
+### Files
+- `src/pkt_relay.rs` — module mới
+- `src/pkt_node.rs` — handle_peer, run_pkt_node, handle_template_client, cmd_pkt_node
+- `src/main.rs` — thêm `mod pkt_relay`
+
+### Tests
+- +18 tests (relay hub, seen hashes, wire hash helpers, relay events)
+
+### Breaking / Gotcha
+- `run_pkt_node` đã thay đổi signature: trả về `Arc<RelayHub>` thay vì `()`; chạy accept loop trong background thread
+- `handle_template_client` thêm param `relay_hub: Arc<RelayHub>`
+- Wire hash trong `Inv` dùng SHA256d (PKT wire format), không phải BLAKE3 (internal chain format)
+- `SeenHashes::insert()` trả `true` nếu hash ĐÃ thấy (ngược với `HashSet::insert`)
+
+---
+
 ## v23.1 — P2PKH Script Verification (2026-03-29)
 
 ### Added

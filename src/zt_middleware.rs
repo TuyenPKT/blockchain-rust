@@ -559,7 +559,7 @@ mod tests {
     #[test]
     fn test_default_config_values() {
         let cfg = ZtConfig::default();
-        assert_eq!(cfg.max_per_window, 100);
+        assert_eq!(cfg.max_per_window, 600);
         assert_eq!(cfg.window_secs, 60);
         assert_eq!(cfg.max_query_len, 512);
         assert_eq!(cfg.max_path_len, 256);

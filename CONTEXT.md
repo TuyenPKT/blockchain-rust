@@ -270,9 +270,9 @@ _Mục tiêu: validate toàn bộ chain locally — không trust peer, không tr
 
 - [x] v23.0 — **TX Validation**: `src/pkt_validate.rs` — `validate_block()`: coinbase rules, UTXO existence, in-block double-spend (HashSet), value conservation, merkle root (blake3^2 PKT-specific); `validate_tx()` cho mempool; `ValidateError` enum; `compute_merkle_root()`; fix `pkt_explorer_api.rs` test stubs (v22.1 API); +15 tests
 - [x] v23.1 — **P2PKH Script Verification**: `src/pkt_script.rs` — `parse_p2pkh_script/scriptsig`, `build_sighash_preimage` (legacy SIGHASH_ALL), `pkt_double_hash` blake3^2, `verify_p2pkh_input` (pubkey hash check + ECDSA), `verify_tx_scripts` (all inputs), `ScriptError` enum; non-P2PKH skip; +14 tests
-- [ ] v23.2 — **Block + TX Relay**: broadcast inv/block/tx tới tất cả connected peers sau validate
-- [ ] v23.3 — **Multi-peer Manager**: `PeerSet` N peers song song, track height, ban misbehaving
-- [ ] v23.4 — **Mempool Full**: fee priority queue, RBF, max-size eviction, 72h age expiry
+- [x] v23.2 — **Block + TX Relay**: `src/pkt_relay.rs` — `RelayHub` (mpsc fanout per peer), `SeenHashes` (bounded 8192, FIFO evict), `wire_block_hash/wire_tx_hash` (SHA256d); `pkt_node.rs` — write-thread per peer via `try_clone()`, `Inv` → `GetData` for unknown hashes, `Unknown "block/tx"` → relay, `run_pkt_node` returns `Arc<RelayHub>`, template server broadcasts mined blocks; +18 tests
+- [x] v23.3 — **Multi-peer Manager**: `src/pkt_peer_set.rs` — `PeerSet` (`Arc<Mutex>`), `PeerSlot` (status/height/agent/strikes), `PeerStatus` (Connecting/Connected/Disconnected{retry_at}/Banned{until_unix}); connect-thread per peer + manager-thread (wakeup 10s); `strike()` auto-ban tại MAX_STRIKES=3; `best_height()` max of Connected; backoff 5*2^n capped 300s; +21 tests
+- [x] v23.4 — **Mempool Full**: `src/pkt_mempool.rs` — `PktMempool` với `BTreeMap<FeeKey, tx_id>` priority queue (O(log n)), `spenders` index cho RBF detect, integer bump check (`fee×100 >= old_fee×110`), `evict_lowest()` khi full, `evict_expired(now)` 72h, `AddResult(Added/Replaced/Rejected)`, `select_transactions` highest-first; +18 tests
 - [ ] v23.5 — **IBD Checkpoints**: hardcoded hashes tại checkpoint heights, skip validation trước checkpoint
 - [ ] v23.6 — **UTXO Snapshot**: dump/load full UTXO set → fast bootstrap không cần IBD
 - [ ] v23.7 — **Full Node Mode**: `cargo run -- fullnode` — sync + relay + RPC + REST một process
