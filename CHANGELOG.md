@@ -4,6 +4,60 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.1 — P2PKH Script Verification (2026-03-29)
+
+### Added
+- `src/pkt_script.rs` — PKT P2PKH OP_CHECKSIG verification:
+  - `parse_p2pkh_script()` — detect P2PKH pattern `76 a9 14 <20b> 88 ac`
+  - `parse_p2pkh_scriptsig()` — parse `<push_sig><push_pubkey>` từ scriptSig bytes
+  - `build_sighash_preimage()` — legacy sighash preimage: tx serialized với subscript tại input đang ký, empty scriptSig cho các input khác, append `SIGHASH_ALL (0x00000001)` 4-byte LE
+  - `pkt_double_hash()` — `blake3(blake3(data))` (PKT thay SHA256d)
+  - `verify_p2pkh_input()` — kiểm tra pubkey hash match → sighash → ECDSA verify; non-P2PKH bị skip (treated as valid)
+  - `verify_tx_scripts()` — verify tất cả non-coinbase inputs qua UTXO lookup callback
+  - `ScriptError` enum (6 variants)
+
+### Files
+- `src/pkt_script.rs` — module mới
+- `src/main.rs` — thêm `mod pkt_script`
+
+### Tests
+- +14 tests (parse, sighash, verify valid/invalid/tampered/skip cases)
+
+### Breaking / Gotcha
+- PKT sighash = blake3(blake3(preimage)) — không phải SHA256(SHA256(preimage))
+- Non-P2PKH scripts (OP_RETURN, multisig, etc.) bị skip (`Ok(())`) — v23.1 chỉ verify P2PKH
+- scriptSig trailing byte = sighash_type (0x01) bị strip trước khi `Signature::from_der()`
+
+---
+
+## v23.0 — TX Validation (2026-03-29)
+
+### Added
+- `src/pkt_validate.rs` — `validate_block()` và `validate_tx()`:
+  - Coinbase rules: đúng một coinbase ở index 0, không có extra coinbase
+  - UTXO existence: mọi non-coinbase input phải tham chiếu UTXO tồn tại
+  - In-block double-spend detection (HashSet per block)
+  - Value conservation: `sum(inputs) >= sum(outputs)` mỗi tx
+  - Merkle root: tính lại từ txids (blake3^2, duplicate-last cho odd count) so với header
+- `compute_merkle_root()` — PKT merkle tree dùng blake3 double-hash thay SHA256d
+- `validate_tx()` — validate đơn lẻ (mempool acceptance)
+- `ValidateError` enum với Display, `BlockValidation` result struct
+- Fix lỗi cũ trong `pkt_explorer_api.rs`: `apply_wire_tx` + `UtxoEntry` thiếu `height` field
+
+### Files
+- `src/pkt_validate.rs` — module mới (toàn bộ validation logic)
+- `src/main.rs` — thêm `mod pkt_validate`
+- `src/pkt_explorer_api.rs` — fix test stubs cho v22.1 API changes
+
+### Tests
+- +15 tests (validate_* + merkle_* cases)
+
+### Breaking / Gotcha
+- Merkle root dùng blake3^2, không phải SHA256d như Bitcoin — PKT-specific
+- PKT coinbase có thể có nhiều inputs (PacketCrypt announcement proofs) — không validate số lượng input coinbase
+
+---
+
 ## v22.6 — Fix Stats Display (2026-03-29)
 
 ### Added

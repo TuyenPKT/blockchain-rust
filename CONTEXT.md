@@ -262,6 +262,20 @@ _Vấn đề phát hiện (2026-03-29):_
 - [x] v22.3 — **Rich List Endpoint**: đã hoàn thành trong v22.0 — `/api/testnet/richlist` alias đã thêm, handler `ps_rich_list` đã tồn tại
 - [x] v22.4 — **Broadcast TX**: `POST /api/testnet/tx/broadcast` nhận `{raw_hex}` → parse WireTx (validate + txid) → relay lên testnet peer qua P2P (inv + tx wire msg) → trả `{txid, status}`; relay lỗi trả 502 + txid để client retry
 - [x] v22.5 — **Wallet Send TX**: `wallet_tx_build` Tauri command — BIP143 segwit P2WPKH signing (ECDSA), raw wire serialization; `tx_broadcast` command POST lên backend; Wallet.tsx thêm Send panel (to addr, amount, fee, UTXO auto-select greedy); `addr_to_p2wpkh_script` decoder; `write_tx_output/write_varint/double_sha256` helpers
+- [x] v22.6 — **Fix Stats Display**: `ps_summary` trả thêm `difficulty` (bits_to_difficulty of tip); Explorer.tsx + Node.tsx đọc `block_time_avg ?? avg_block_time_s`
+
+### Era 30 — PKT Full Node (v23.x)
+
+_Mục tiêu: validate toàn bộ chain locally — không trust peer, không trust indexer._
+
+- [x] v23.0 — **TX Validation**: `src/pkt_validate.rs` — `validate_block()`: coinbase rules, UTXO existence, in-block double-spend (HashSet), value conservation, merkle root (blake3^2 PKT-specific); `validate_tx()` cho mempool; `ValidateError` enum; `compute_merkle_root()`; fix `pkt_explorer_api.rs` test stubs (v22.1 API); +15 tests
+- [x] v23.1 — **P2PKH Script Verification**: `src/pkt_script.rs` — `parse_p2pkh_script/scriptsig`, `build_sighash_preimage` (legacy SIGHASH_ALL), `pkt_double_hash` blake3^2, `verify_p2pkh_input` (pubkey hash check + ECDSA), `verify_tx_scripts` (all inputs), `ScriptError` enum; non-P2PKH skip; +14 tests
+- [ ] v23.2 — **Block + TX Relay**: broadcast inv/block/tx tới tất cả connected peers sau validate
+- [ ] v23.3 — **Multi-peer Manager**: `PeerSet` N peers song song, track height, ban misbehaving
+- [ ] v23.4 — **Mempool Full**: fee priority queue, RBF, max-size eviction, 72h age expiry
+- [ ] v23.5 — **IBD Checkpoints**: hardcoded hashes tại checkpoint heights, skip validation trước checkpoint
+- [ ] v23.6 — **UTXO Snapshot**: dump/load full UTXO set → fast bootstrap không cần IBD
+- [ ] v23.7 — **Full Node Mode**: `cargo run -- fullnode` — sync + relay + RPC + REST một process
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain

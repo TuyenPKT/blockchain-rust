@@ -144,6 +144,8 @@ mod pkt_explorer_api;
 mod pkt_sync_ui;
 mod pkt_testnet_web;
 mod pkt_node;
+mod pkt_validate;
+mod pkt_script;
 
 // ── Entry point ───────────────────────────────────────────────
 //

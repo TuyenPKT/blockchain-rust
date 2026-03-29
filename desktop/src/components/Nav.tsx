@@ -2,7 +2,7 @@ import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { SearchTrigger } from "./SearchBar";
 
-type Tab = "explorer" | "blocks" | "charts" | "miner" | "node" | "wallet" | "richlist";
+type Tab = "explorer" | "miner" | "node" | "wallet" | "richlist";
 
 interface NavProps {
   tab:           Tab;
@@ -17,12 +17,10 @@ interface NavProps {
 function getTabs(): { id: Tab; label: string }[] {
   return [
     { id: "explorer", label: t.tab_explorer },
-    { id: "blocks",   label: t.tab_blocks   },
-    { id: "charts",   label: t.tab_charts   },
     { id: "richlist", label: t.tab_richlist  },
-    { id: "miner",  label: t.tab_miner  },
-    { id: "node",   label: t.tab_node   },
-    { id: "wallet", label: t.tab_wallet },
+    { id: "miner",    label: t.tab_miner  },
+    { id: "node",     label: t.tab_node   },
+    { id: "wallet",   label: t.tab_wallet },
   ];
 }
 

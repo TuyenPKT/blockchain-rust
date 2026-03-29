@@ -394,7 +394,7 @@ mod tests {
                 locktime: 0,
             };
             let txid = wire_txid(&fake_tx);
-            apply_wire_tx(&db, &fake_tx, &txid).unwrap();
+            apply_wire_tx(&db, &fake_tx, &txid, 0).unwrap();
         }
         db.set_utxo_height(n as u64).unwrap();
         db
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn test_format_utxo_has_txid() {
         let e = UtxoEntry {
-            txid: "abcd".to_string(), vout: 0, value: 5000, script_pubkey: vec![0x51],
+            txid: "abcd".to_string(), vout: 0, value: 5000, script_pubkey: vec![0x51], height: 0,
         };
         let v = format_utxo_json(&e);
         assert_eq!(v["txid"].as_str(), Some("abcd"));
@@ -550,7 +550,7 @@ mod tests {
     #[test]
     fn test_format_utxo_has_value() {
         let e = UtxoEntry {
-            txid: "aa".to_string(), vout: 1, value: 99999, script_pubkey: vec![],
+            txid: "aa".to_string(), vout: 1, value: 99999, script_pubkey: vec![], height: 0,
         };
         let v = format_utxo_json(&e);
         assert_eq!(v["value"].as_u64(), Some(99999));
@@ -559,7 +559,7 @@ mod tests {
     #[test]
     fn test_format_utxo_script_hex_encoded() {
         let e = UtxoEntry {
-            txid: "bb".to_string(), vout: 0, value: 0, script_pubkey: vec![0xde, 0xad],
+            txid: "bb".to_string(), vout: 0, value: 0, script_pubkey: vec![0xde, 0xad], height: 0,
         };
         let v = format_utxo_json(&e);
         assert_eq!(v["script_pubkey"].as_str(), Some("dead"));
@@ -605,7 +605,7 @@ mod tests {
                 locktime: i as u32,
             };
             let txid = wire_txid(&tx);
-            apply_wire_tx(&db, &tx, &txid).unwrap();
+            apply_wire_tx(&db, &tx, &txid, 0).unwrap();
         }
         // Filter by 0x51 prefix
         let result = query_utxos(&db, "51", 100).unwrap();
@@ -652,7 +652,7 @@ mod tests {
                 locktime: value as u32,
             };
             let txid = wire_txid(&tx);
-            apply_wire_tx(&db, &tx, &txid).unwrap();
+            apply_wire_tx(&db, &tx, &txid, 0).unwrap();
         }
         let bal = query_balance(&db, "76").unwrap();
         assert_eq!(bal, 1000);
