@@ -1,0 +1,17 @@
+[Unit]
+Description=PKTScan API Server
+After=network.target
+
+[Service]
+Type=simple
+User=tuyenpkt
+WorkingDirectory=/home/tuyenpkt/blockchain-rust
+ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust pktscan 8081
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pktscan
+
+[Install]
+WantedBy=multi-user.target
