@@ -13,9 +13,10 @@ interface WalletProps {
 }
 
 interface WalletData {
-  address:    string;
-  pubkey_hex: string;
+  address:     string;
+  pubkey_hex:  string;
   privkey_hex: string; // stored in localStorage, shown only on reveal
+  watch_only?: boolean; // true = address-only import, cannot sign
 }
 
 const STORAGE_KEY = "pktscan_wallet";
@@ -104,16 +105,35 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
 
   async function handleImport() {
     setImportErr("");
-    const key = importKey.trim();
-    if (key.length !== 64 || !/^[0-9a-fA-F]+$/.test(key)) {
+    const input = importKey.trim();
+
+    // Watch-only: looks like a Base58 address (not 64-char hex privkey)
+    const isAddress = input.length >= 25 && input.length <= 62
+      && !/^[0-9a-fA-F]{64}$/.test(input);
+
+    if (isAddress) {
+      const w: WalletData = {
+        address:    input,
+        pubkey_hex: "",
+        privkey_hex: "",
+        watch_only: true,
+      };
+      saveWallet(w);
+      setWallet(w);
+      setImportKey("");
+      setIsNew(false);
+      return;
+    }
+
+    if (input.length !== 64 || !/^[0-9a-fA-F]+$/.test(input)) {
       setImportErr(t.wallet_invalid_key);
       return;
     }
     try {
       const result = await invoke<{ address: string; pubkey_hex: string }>(
-        "wallet_from_privkey", { privkeyHex: key, network }
+        "wallet_from_privkey", { privkeyHex: input, network }
       );
-      const w: WalletData = { ...result, privkey_hex: key };
+      const w: WalletData = { ...result, privkey_hex: input };
       saveWallet(w);
       setWallet(w);
       setImportKey("");
@@ -140,6 +160,11 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
       if (!amtSat || amtSat <= 0) { setSendResult({ ok: false, msg: "Amount không hợp lệ" }); setSending(false); return; }
 
       const utxoData = await fetchAddressUtxos(nodeUrl, wallet.address);
+      if (utxoData.error) {
+        setSendResult({ ok: false, msg: `${t.wallet_node_error}: ${utxoData.error}` });
+        setSending(false);
+        return;
+      }
       const utxos: AddressUtxo[] = utxoData.utxos ?? [];
       if (!utxos.length) { setSendResult({ ok: false, msg: t.wallet_no_utxos }); setSending(false); return; }
 
@@ -225,7 +250,7 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
             <input
               value={importKey}
               onChange={e => { setImportKey(e.target.value); setImportErr(""); }}
-              placeholder={t.wallet_import_hint}
+              placeholder={t.wallet_import_hint_full}
               style={{
                 width: "100%", boxSizing: "border-box",
                 background: colors.surface2, border: `1px solid ${importErr ? colors.red : colors.border}`,
@@ -276,6 +301,13 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
                 border: `1px solid ${colors.green}44`,
               }}>{t.wallet_new_badge}</span>
             )}
+            {wallet.watch_only && (
+              <span style={{
+                fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 700,
+                background: `${colors.blue}22`, color: colors.blue,
+                border: `1px solid ${colors.blue}44`,
+              }}>{t.wallet_watch_only_badge}</span>
+            )}
             <CopyBtn text={wallet.address} label={t.wallet_copy} />
             <button onClick={() => onViewAddr(wallet.address)} style={{
               padding: "4px 12px", borderRadius: 6, border: `1px solid ${colors.border}`,
@@ -308,8 +340,8 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
         </div>
       </Panel>
 
-      {/* Keys panel */}
-      <Panel icon="🔐" title="Keys">
+      {/* Keys panel — hidden for watch-only wallets */}
+      {!wallet.watch_only && <Panel icon="🔐" title="Keys">
         <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Public key */}
@@ -368,9 +400,19 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
             )}
           </div>
         </div>
-      </Panel>
+      </Panel>}
 
-      {/* Send panel */}
+      {/* Send panel — hidden for watch-only wallets */}
+      {wallet.watch_only && (
+        <div style={{
+          padding: "16px 24px", borderRadius: 12,
+          background: `${colors.blue}0a`, border: `1px solid ${colors.blue}33`,
+          fontSize: 13, color: colors.blue,
+        }}>
+          {t.wallet_watch_only_no_send}
+        </div>
+      )}
+      {!wallet.watch_only && <>
       <Panel icon="➤" title={t.wallet_send}>
         <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
           <input
@@ -430,6 +472,7 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
           </button>
         </div>
       </Panel>
+      </>}
 
       {/* Danger zone */}
       <div style={{

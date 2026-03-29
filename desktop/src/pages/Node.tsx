@@ -15,7 +15,8 @@ interface PeerInfo {
   status:     "online" | "timeout" | "refused" | "invalid";
 }
 
-const DEFAULT_SEED = "seed.testnet.oceif.com:8334";
+const DEFAULT_SEED    = "seed.testnet.oceif.com:8334";
+const DEFAULT_SYNC_PEER = "seed.testnet.oceif.com:8333";
 
 export function Node({ nodeUrl }: NodeProps) {
   const [summary, setSummary]   = useState<NetworkSummary>({});
@@ -24,6 +25,12 @@ export function Node({ nodeUrl }: NodeProps) {
   const [peers, setPeers]       = useState<PeerInfo[]>([]);
   const [scanning, setScanning] = useState(false);
   const [seedAddr, setSeedAddr] = useState(DEFAULT_SEED);
+
+  // Sync control
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncBusy, setSyncBusy]       = useState(false);
+  const [syncPeer, setSyncPeer]       = useState(DEFAULT_SYNC_PEER);
+  const [syncMsg, setSyncMsg]         = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -53,6 +60,46 @@ export function Node({ nodeUrl }: NodeProps) {
 
   // Auto-scan on mount
   useEffect(() => { scanPeers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll sync process status every 3s
+  const pollSyncStatus = useCallback(async () => {
+    try {
+      const result = await invoke<{ running: boolean }>("get_sync_proc_status", { nodeUrl });
+      setSyncRunning(result.running ?? false);
+    } catch (_) {}
+  }, [nodeUrl]);
+
+  useEffect(() => {
+    pollSyncStatus();
+    const id = setInterval(pollSyncStatus, 3000);
+    return () => clearInterval(id);
+  }, [pollSyncStatus]);
+
+  async function handleStartSync() {
+    setSyncBusy(true);
+    setSyncMsg("");
+    try {
+      const result = await invoke<{ started?: boolean; error?: string; pid?: number }>(
+        "start_node_sync", { nodeUrl, peerAddr: syncPeer.trim() || undefined }
+      );
+      if (result.error) { setSyncMsg(result.error); }
+      else { setSyncRunning(true); setSyncMsg(`PID ${result.pid}`); }
+    } catch (e) { setSyncMsg(String(e)); }
+    setSyncBusy(false);
+  }
+
+  async function handleStopSync() {
+    setSyncBusy(true);
+    setSyncMsg("");
+    try {
+      const result = await invoke<{ stopped?: boolean; error?: string }>(
+        "stop_node_sync", { nodeUrl }
+      );
+      if (result.error) { setSyncMsg(result.error); }
+      else { setSyncRunning(false); setSyncMsg("Stopped"); }
+    } catch (e) { setSyncMsg(String(e)); }
+    setSyncBusy(false);
+  }
 
   const height   = summary.height ?? 0;
   const mempool  = summary.mempool_count ?? 0;
@@ -115,6 +162,73 @@ export function Node({ nodeUrl }: NodeProps) {
           ⚠️ {error}
         </div>
       )}
+
+      {/* Sync Control panel */}
+      <Panel icon="⚙" title={t.sync_control}>
+        <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Status dot */}
+            <div style={{
+              width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+              background: syncRunning ? colors.green : colors.muted,
+              boxShadow: syncRunning ? `0 0 6px ${colors.green}` : "none",
+              transition: "all .3s",
+            }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: syncRunning ? colors.green : colors.muted }}>
+              {syncRunning ? t.sync_running : t.sync_idle}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: colors.muted, flexShrink: 0 }}>{t.sync_peer}:</span>
+            <input
+              value={syncPeer}
+              onChange={e => setSyncPeer(e.target.value)}
+              disabled={syncRunning}
+              placeholder={DEFAULT_SYNC_PEER}
+              style={{
+                flex: 1, background: colors.surface2, border: `1px solid ${colors.border}`,
+                borderRadius: 6, padding: "6px 10px", color: colors.text,
+                fontFamily: fonts.mono, fontSize: 12, outline: "none",
+                opacity: syncRunning ? 0.5 : 1,
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            {!syncRunning ? (
+              <button onClick={handleStartSync} disabled={syncBusy} style={{
+                flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
+                background: syncBusy ? colors.surface2 : `linear-gradient(135deg, ${colors.green}, #3aaa60)`,
+                color: syncBusy ? colors.muted : "#000",
+                fontWeight: 700, fontSize: 13, cursor: syncBusy ? "wait" : "pointer",
+                transition: "all .2s",
+              }}>
+                {syncBusy ? t.sync_starting : t.sync_start}
+              </button>
+            ) : (
+              <button onClick={handleStopSync} disabled={syncBusy} style={{
+                flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
+                background: syncBusy ? colors.surface2 : `${colors.red}dd`,
+                color: syncBusy ? colors.muted : "#fff",
+                fontWeight: 700, fontSize: 13, cursor: syncBusy ? "wait" : "pointer",
+                transition: "all .2s",
+              }}>
+                {syncBusy ? t.sync_stopping : t.sync_stop}
+              </button>
+            )}
+          </div>
+
+          {syncMsg && (
+            <div style={{
+              fontSize: 11, fontFamily: fonts.mono, color: colors.muted,
+              background: colors.surface2, borderRadius: 6, padding: "6px 10px",
+            }}>
+              {syncMsg}
+            </div>
+          )}
+        </div>
+      </Panel>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
 

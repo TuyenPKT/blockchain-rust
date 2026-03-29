@@ -102,7 +102,7 @@ export async function fetchAddressTxs(
 export async function fetchAddressUtxos(
   nodeUrl: string,
   address: string,
-): Promise<{ utxos?: AddressUtxo[] }> {
+): Promise<{ utxos?: AddressUtxo[]; error?: string }> {
   return invoke("get_address_utxos", { nodeUrl, address });
 }
 

@@ -18,7 +18,8 @@
 //! returns 503 (frontend shows "Offline") but all routes are always registered.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::process::Child;
+use std::sync::{Arc, Mutex};
 
 use axum::{
     extract::{Path, Query, State},
@@ -37,6 +38,86 @@ use crate::pkt_mempool_sync::MempoolDb;
 use crate::pkt_sync::SyncDb;
 use crate::pkt_sync_ui::{sync_status_router, SyncProgress, SyncUiState};
 use crate::pkt_utxo_sync::UtxoSyncDb;
+
+// ── Sync process control ──────────────────────────────────────────────────────
+
+/// Global handle to the running sync child process (nếu có).
+static SYNC_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+
+/// `POST /api/testnet/sync/start?peer=host:port`
+/// Spawn `{current_exe} sync [peer]` nếu chưa có process đang chạy.
+async fn ps_sync_start(
+    Query(params): Query<SyncStartParams>,
+) -> impl IntoResponse {
+    let peer = params.peer.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+    let mut guard = match SYNC_CHILD.lock() {
+        Ok(g) => g,
+        Err(_) => return Json(json!({"error": "lock poisoned"})).into_response(),
+    };
+    // Kiểm tra process cũ đã thoát chưa
+    if let Some(child) = guard.as_mut() {
+        match child.try_wait() {
+            Ok(None) => return Json(json!({"error": "sync already running", "pid": child.id()})).into_response(),
+            _ => { *guard = None; } // đã thoát → clear
+        }
+    }
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => return Json(json!({"error": format!("cannot get exe path: {}", e)})).into_response(),
+    };
+    match std::process::Command::new(&exe).args(["sync", &peer]).spawn() {
+        Ok(child) => {
+            let pid = child.id();
+            *guard = Some(child);
+            Json(json!({"started": true, "pid": pid, "peer": peer})).into_response()
+        }
+        Err(e) => Json(json!({"error": format!("spawn failed: {}", e)})).into_response(),
+    }
+}
+
+/// `POST /api/testnet/sync/stop`
+/// Kill sync child process nếu đang chạy.
+async fn ps_sync_stop() -> impl IntoResponse {
+    let mut guard = match SYNC_CHILD.lock() {
+        Ok(g) => g,
+        Err(_) => return Json(json!({"error": "lock poisoned"})).into_response(),
+    };
+    match guard.as_mut() {
+        None => Json(json!({"stopped": false, "reason": "not running"})).into_response(),
+        Some(child) => {
+            let pid = child.id();
+            match child.kill() {
+                Ok(_) => {
+                    let _ = child.wait();
+                    *guard = None;
+                    Json(json!({"stopped": true, "pid": pid})).into_response()
+                }
+                Err(e) => Json(json!({"error": format!("kill failed: {}", e)})).into_response(),
+            }
+        }
+    }
+}
+
+/// `GET /api/testnet/sync/status`
+/// Trả về trạng thái process sync (running hay không).
+async fn ps_sync_proc_status() -> impl IntoResponse {
+    let mut guard = match SYNC_CHILD.lock() {
+        Ok(g) => g,
+        Err(_) => return Json(json!({"running": false})).into_response(),
+    };
+    if let Some(child) = guard.as_mut() {
+        match child.try_wait() {
+            Ok(None) => return Json(json!({"running": true, "pid": child.id()})).into_response(),
+            _ => { *guard = None; }
+        }
+    }
+    Json(json!({"running": false})).into_response()
+}
+
+#[derive(Deserialize)]
+struct SyncStartParams {
+    peer: Option<String>,
+}
 
 // ── Script helpers ─────────────────────────────────────────────────────────────
 
@@ -1196,6 +1277,9 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/label/:script",         get(ps_label))
         .route("/api/testnet/address/:s/export.csv", get(ps_export_address))
         .route("/api/testnet/blocks/export.csv",     get(ps_export_blocks))
+        .route("/api/testnet/sync/start",            post(ps_sync_start))
+        .route("/api/testnet/sync/stop",             post(ps_sync_stop))
+        .route("/api/testnet/sync/proc-status",      get(ps_sync_proc_status))
         .with_state(ps)
 }
 

@@ -134,6 +134,50 @@ async fn tx_broadcast(node_url: String, raw_hex: String) -> Result<serde_json::V
     resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
+// ── Sync control commands ──────────────────────────────────────────────────────
+
+/// POST to a node URL and return JSON, with graceful fallback for non-JSON bodies.
+async fn post_json(url: &str) -> Result<serde_json::Value, String> {
+    let resp = client()?.post(url).send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if text.is_empty() {
+        return Ok(serde_json::json!({"status": status.as_u16()}));
+    }
+    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
+}
+
+/// GET JSON with graceful fallback for non-JSON bodies.
+async fn get_json_safe(url: &str) -> Result<serde_json::Value, String> {
+    let resp = client()?.get(url).send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if text.is_empty() {
+        return Ok(serde_json::json!({"status": status.as_u16()}));
+    }
+    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
+}
+
+/// Start sync process on the node server.
+#[tauri::command]
+async fn start_node_sync(node_url: String, peer_addr: Option<String>) -> Result<serde_json::Value, String> {
+    let peer = peer_addr.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+    let url = format!("{}/api/testnet/sync/start?peer={}", base(&node_url), urlencoding::encode(&peer));
+    post_json(&url).await
+}
+
+/// Stop running sync process on the node server.
+#[tauri::command]
+async fn stop_node_sync(node_url: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("{}/api/testnet/sync/stop", base(&node_url))).await
+}
+
+/// Get sync process status (running / not running).
+#[tauri::command]
+async fn get_sync_proc_status(node_url: String) -> Result<serde_json::Value, String> {
+    get_json_safe(&format!("{}/api/testnet/sync/proc-status", base(&node_url))).await
+}
+
 // ── Miner commands ────────────────────────────────────────────────────────────
 
 /// Bắt đầu mine: spawn background thread, emit "mine_log" + "mine_stats" events.
@@ -898,6 +942,9 @@ pub fn run() {
             wallet_from_privkey,
             wallet_tx_build,
             tx_broadcast,
+            start_node_sync,
+            stop_node_sync,
+            get_sync_proc_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PKTScan desktop");
