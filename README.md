@@ -337,4 +337,4 @@ curl http://seed.testnet.oceif.com:3001/health
 
 ## License
 
-GPL-3.0 license
+GPL-3.0
