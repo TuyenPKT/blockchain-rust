@@ -861,6 +861,15 @@ async fn ps_tx_broadcast(
     if let Some(err) = relay_err {
         (StatusCode::BAD_GATEWAY, Json(json!({"error": format!("relay: {}", err), "txid": txid}))).into_response()
     } else {
+        // v23.6: store broadcast TX in local MempoolDb so miner template includes it
+        if let Ok(mdb) = MempoolDb::open(&ps.mempool_path) {
+            let ts_ns = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            // fee_rate unknown without UTXO lookup — use min (1 msat/vB) so TX is included
+            let _ = mdb.put_tx(&txid, &raw, 1, ts_ns);
+        }
         Json(json!({"txid": txid, "status": "broadcast"})).into_response()
     }
 }

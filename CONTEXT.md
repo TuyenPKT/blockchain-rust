@@ -276,7 +276,7 @@ _Mục tiêu: validate toàn bộ chain locally — không trust peer, không tr
 - [x] v23.5 — **IBD Checkpoints**: `src/pkt_checkpoints.rs` — `Checkpoint` + `const fn from_hex` (compile-time hex parse), `TESTNET/MAINNET_CHECKPOINTS`, `CheckpointSet` (`max_height/get/verify/can_skip_validation/last_before`), `ibd_action()` → `IbdBlockAction(AcceptSkipValidation/AcceptFullValidation/Reject)`; wire hash = SHA256d; +17 tests
 - [x] v23.6 — **Wire Mempool Bridge**: `src/pkt_mempool_bridge.rs` — `load_wire_mempool_txs(path, limit)`: đọc raw wire TX từ `MempoolDb` (RocksDB, pkt_sync), parse qua `decode_wire_tx`, convert `WireTx→Transaction` (SHA256d TXID, wire script→internal Script P2PKH/P2SH/P2WPKH/P2TR, fee_rate×size/1000); `pkt_node.rs` template server merge wire TXs vào `bc.mempool` TXs (dedup by tx_id) → miner block template bao gồm broadcast TXs; +21 tests
 - [ ] v23.7 — **UTXO Snapshot**: dump/load full UTXO set → fast bootstrap không cần IBD
-- [ ] v23.7 — **Full Node Mode**: `cargo run -- fullnode` — sync + relay + RPC + REST một process
+- [ ] v23.8 — **Full Node Mode**: `cargo run -- fullnode` — sync + relay + RPC + REST một process
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
