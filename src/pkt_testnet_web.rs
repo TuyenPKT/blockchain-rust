@@ -816,9 +816,12 @@ async fn ps_tx_broadcast(
             .and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32]);
         move || {
             let addr_str = format!("{}:{}", cfg.host, cfg.port);
-            let sock_addr: std::net::SocketAddr = match addr_str.parse() {
-                Ok(a) => a,
-                Err(_) => return Err("invalid addr".to_string()),
+            let sock_addr = {
+                use std::net::ToSocketAddrs;
+                match addr_str.to_socket_addrs().ok().and_then(|mut i| i.next()) {
+                    Some(a) => a,
+                    None    => return Err(format!("cannot resolve {}", addr_str)),
+                }
             };
             let Ok(mut stream) = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(cfg.connect_timeout_secs))
             else { return Err("connect failed".to_string()); };
