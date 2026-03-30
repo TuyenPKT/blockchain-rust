@@ -867,10 +867,10 @@ fn wallet_tx_build(
         preimage.extend_from_slice(&0u32.to_le_bytes());  // locktime
         preimage.extend_from_slice(&1u32.to_le_bytes());  // SIGHASH_ALL
 
-        // PKT hash: blake3(blake3(preimage))
-        let h1  = blake3::hash(&preimage);
-        let h2  = blake3::hash(h1.as_bytes());
-        let msg = Message::from_slice(h2.as_bytes()).map_err(|e| format!("msg error: {}", e))?;
+        // PKT wire sighash: SHA256d (same as Bitcoin P2PKH)
+        let h1  = sha2::Sha256::digest(&preimage);
+        let h2  = sha2::Sha256::digest(&h1);
+        let msg = Message::from_slice(&h2).map_err(|e| format!("msg error: {}", e))?;
         let sig = secp.sign_ecdsa(&msg, &sk);
         let mut der = sig.serialize_der().to_vec();
         der.push(0x01); // SIGHASH_ALL
@@ -901,10 +901,11 @@ fn wallet_tx_build(
     if change > 0 { write_tx_output(&mut raw, change, &chg_script); }
     raw.extend_from_slice(&0u32.to_le_bytes()); // locktime
 
-    // txid = blake3(blake3(raw)) reversed
-    let h1   = blake3::hash(&raw);
-    let h2   = blake3::hash(h1.as_bytes());
-    let mut txid_bytes = *h2.as_bytes();
+    // txid = SHA256d(raw) reversed (PKT wire protocol = Bitcoin wire)
+    let h1   = sha2::Sha256::digest(&raw);
+    let h2   = sha2::Sha256::digest(&h1);
+    let mut txid_bytes = [0u8; 32];
+    txid_bytes.copy_from_slice(&h2);
     txid_bytes.reverse();
     let txid = hex::encode(txid_bytes);
 
