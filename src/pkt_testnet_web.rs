@@ -812,7 +812,7 @@ async fn ps_tx_broadcast(
     let cfg = PeerConfig { our_height, connect_timeout_secs: 10, read_timeout_secs: 10, max_retries: 0, ..Default::default() };
     let relay_err: Option<String> = tokio::task::spawn_blocking({
         let raw = raw.clone();
-        let txid_bytes: [u8; 32] = hex::decode(&txid).ok()
+        let _txid_bytes: [u8; 32] = hex::decode(&txid).ok()
             .and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32]);
         move || {
             let addr_str = format!("{}:{}", cfg.host, cfg.port);
