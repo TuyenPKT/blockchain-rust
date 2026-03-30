@@ -834,6 +834,26 @@ async fn ps_tx_broadcast(
             let tx_msg = PktMsg::Unknown { command: cmd, payload: raw };
             if send_msg(&mut stream, tx_msg, TESTNET_MAGIC).is_err() { return Err("send tx failed".to_string()); }
             let _ = stream.flush();
+
+            // Đọc response 3s để bắt reject message
+            stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
+            loop {
+                match crate::pkt_peer::recv_msg(&mut stream, TESTNET_MAGIC) {
+                    Ok(PktMsg::Ping { nonce }) => {
+                        let _ = send_msg(&mut stream, PktMsg::Pong { nonce }, TESTNET_MAGIC);
+                    }
+                    Ok(PktMsg::Unknown { command, payload }) => {
+                        let cmd_str = std::str::from_utf8(&command)
+                            .unwrap_or("?").trim_matches('\0');
+                        if cmd_str == "reject" {
+                            let reason = String::from_utf8_lossy(&payload).to_string();
+                            return Err(format!("rejected: {}", reason));
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break, // timeout → không có reject → ok
+                }
+            }
             Ok::<(), String>(())
         }
     }).await.ok().and_then(|r| r.err());
