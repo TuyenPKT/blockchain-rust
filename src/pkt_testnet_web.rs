@@ -828,35 +828,12 @@ async fn ps_tx_broadcast(
             stream.set_read_timeout(Some(Duration::from_secs(cfg.read_timeout_secs))).ok();
             if do_handshake(&mut stream, &cfg).is_err() { return Err("handshake failed".to_string()); }
 
-            // Bước 1: gửi Inv(TX)
-            let inv = PktMsg::Inv { items: vec![crate::pkt_wire::InvItem { inv_type: 1, hash: txid_bytes }] };
-            if send_msg(&mut stream, inv, TESTNET_MAGIC).is_err() { return Err("send inv failed".to_string()); }
-
-            // Bước 2: đợi GetData (5s timeout)
-            stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
-            let got_getdata = loop {
-                match crate::pkt_peer::recv_msg(&mut stream, TESTNET_MAGIC) {
-                    Ok(PktMsg::GetData { items }) => {
-                        if items.iter().any(|it| it.hash == txid_bytes) { break true; }
-                    }
-                    Ok(PktMsg::Ping { nonce }) => {
-                        let _ = send_msg(&mut stream, PktMsg::Pong { nonce }, TESTNET_MAGIC);
-                    }
-                    Ok(_) => {} // ignore other messages
-                    Err(_) => break false, // timeout hoặc lỗi
-                }
-            };
-
-            // Bước 3: gửi TX dưới dạng "tx" message
+            // Gửi TX trực tiếp dưới dạng "tx" message
             let mut cmd = [0u8; 12];
             cmd[..2].copy_from_slice(b"tx");
             let tx_msg = PktMsg::Unknown { command: cmd, payload: raw };
             if send_msg(&mut stream, tx_msg, TESTNET_MAGIC).is_err() { return Err("send tx failed".to_string()); }
             let _ = stream.flush();
-
-            if !got_getdata {
-                return Err("peer did not request tx (no GetData)".to_string());
-            }
             Ok::<(), String>(())
         }
     }).await.ok().and_then(|r| r.err());
