@@ -174,9 +174,9 @@ pub fn query_health(
     addr_path:    &Path,
     mempool_path: &Path,
 ) -> HealthStatus {
-    let sdb = SyncDb::open(sync_path).ok();
-    let udb = UtxoSyncDb::open(utxo_path).ok();
-    let mdb = MempoolDb::open(mempool_path).ok();
+    let sdb = SyncDb::open_read_only(sync_path).ok();
+    let udb = UtxoSyncDb::open_read_only(utxo_path).ok();
+    let mdb = MempoolDb::open_read_only(mempool_path).ok();
     collect_health(
         sdb.as_ref(),
         udb.as_ref(),

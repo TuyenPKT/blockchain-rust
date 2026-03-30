@@ -309,7 +309,7 @@ pub fn cmd_explorer_status() {
         std::path::PathBuf::from(home).join(".pkt").join("utxodb")
     };
 
-    let sync_info = SyncDb::open(&sync_path).ok().and_then(|db| {
+    let sync_info = SyncDb::open_read_only(&sync_path).ok().and_then(|db| {
         let h   = db.get_sync_height().ok()??;
         let tip = db.get_tip_hash().ok()?
             .map(|h| hex::encode(&h[..8]))
@@ -317,7 +317,7 @@ pub fn cmd_explorer_status() {
         Some(format!("height={} tip={}…", h, tip))
     });
 
-    let utxo_info = UtxoSyncDb::open(&utxo_path).ok().and_then(|db| {
+    let utxo_info = UtxoSyncDb::open_read_only(&utxo_path).ok().and_then(|db| {
         let h   = db.get_utxo_height().ok()??;
         let cnt = db.count_utxos().ok()?;
         let val = db.total_value().ok()?;

@@ -83,7 +83,7 @@ export function Node({ nodeUrl }: NodeProps) {
         "start_node_sync", { nodeUrl, peerAddr: syncPeer.trim() || undefined }
       );
       if (result.error) { setSyncMsg(result.error); }
-      else { setSyncRunning(true); setSyncMsg(`PID ${result.pid}`); }
+      else { setSyncRunning(true); setSyncMsg(result.pid ? `PID ${result.pid}` : "Started"); }
     } catch (e) { setSyncMsg(String(e)); }
     setSyncBusy(false);
   }
