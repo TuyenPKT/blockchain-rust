@@ -350,26 +350,34 @@ async fn ps_utxos(
 
 /// GET /api/testnet/address/:addr/utxos
 /// :addr accepts bech32, Base58Check, or raw script_hex.
+/// Thử cả wire format (76a914…) và legacy JSON format để tương thích với
+/// UTXOs indexed trước v22.x.
 async fn ps_addr_utxos(
     State(ps):    State<PathState>,
     Path(addr):   Path<String>,
 ) -> impl IntoResponse {
-    let script = match any_addr_to_script_hex(&addr) {
-        Some(s) => s,
-        None    => return (StatusCode::BAD_REQUEST,
-                           Json(json!({"error":"invalid address"}))).into_response(),
-    };
+    let script_wire   = any_addr_to_script_hex(&addr);
+    let script_legacy = any_addr_to_script_hex_legacy(&addr);
+    if script_wire.is_none() && script_legacy.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid address"}))).into_response();
+    }
     match ps.open() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
         Some((_sdb, udb)) => {
-            match crate::pkt_explorer_api::query_utxos(&udb, &script, 500) {
-                Ok(utxos) => {
-                    let address = script_hex_to_address(&script).unwrap_or_else(|| addr.clone());
-                    Json(json!({"address": address, "utxos": utxos})).into_response()
-                }
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
-                           Json(json!({"error": e}))).into_response(),
+            // Thử wire format trước, nếu rỗng thử legacy
+            let mut utxos = Vec::new();
+            if let Some(ref s) = script_wire {
+                utxos = crate::pkt_explorer_api::query_utxos(&udb, s, 500).unwrap_or_default();
             }
+            if utxos.is_empty() {
+                if let Some(ref s) = script_legacy {
+                    utxos = crate::pkt_explorer_api::query_utxos(&udb, s, 500).unwrap_or_default();
+                }
+            }
+            let address = script_wire.as_deref()
+                .and_then(|s| script_hex_to_address(s))
+                .unwrap_or_else(|| addr.clone());
+            Json(json!({"address": address, "utxos": utxos})).into_response()
         }
     }
 }
