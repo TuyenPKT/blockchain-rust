@@ -763,13 +763,48 @@ fn wallet_from_privkey(privkey_hex: String, _network: String) -> Result<serde_js
 
 // ── Wallet: build + sign tx ────────────────────────────────────────────────────
 
+/// Chuẩn hoá script_pubkey hex về dạng wire P2PKH (76a914{20 bytes}88ac).
+///
+/// UTXO indexed trước v22.x lưu script dưới dạng JSON hex:
+///   hex( {"ops":["OpDup","OpHash160",{"OpPushData":[b0..b19]},"OpEqualVerify","OpCheckSig"]} )
+/// Hàm này detect format đó và rebuild wire bytes.
+/// Wire format (76a914…88ac) được trả về nguyên.
+fn normalize_script_pubkey(hex_str: &str) -> Result<Vec<u8>, String> {
+    let bytes = hex::decode(hex_str).map_err(|_| "script_pubkey hex lỗi".to_string())?;
+    // Wire P2PKH: 25 bytes, bắt đầu 76 a9 14, kết thúc 88 ac
+    if bytes.len() == 25 && bytes[0] == 0x76 && bytes[1] == 0xa9 && bytes[2] == 0x14
+        && bytes[23] == 0x88 && bytes[24] == 0xac {
+        return Ok(bytes);
+    }
+    // Legacy JSON format
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+        if let Some(ops) = json["ops"].as_array() {
+            for op in ops {
+                if let Some(arr) = op["OpPushData"].as_array() {
+                    let hash160: Vec<u8> = arr.iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as u8))
+                        .collect();
+                    if hash160.len() == 20 {
+                        let mut script = vec![0x76u8, 0xa9, 0x14];
+                        script.extend_from_slice(&hash160);
+                        script.push(0x88);
+                        script.push(0xac);
+                        return Ok(script);
+                    }
+                }
+            }
+        }
+    }
+    Err(format!("không nhận dạng được script_pubkey format ({} bytes)", bytes.len()))
+}
+
 /// Input UTXO từ frontend.
 #[derive(serde::Deserialize)]
 struct UtxoInput {
     txid:          String, // txid hex (big-endian display order)
     vout:          u32,
     value:         u64,    // paklets
-    script_pubkey: String, // script_pubkey hex (P2PKH: 76a914{hash160}88ac)
+    script_pubkey: String, // script_pubkey hex (P2PKH wire hoặc legacy JSON hex)
 }
 
 /// Build + sign P2PKH legacy transaction (PKT dùng P2PKH, không phải segwit).
@@ -808,8 +843,7 @@ fn wallet_tx_build(
     // các input còn lại scriptSig = empty, append SIGHASH_ALL(4LE), hash = blake3(blake3(preimage)).
     let mut sigs: Vec<Vec<u8>> = Vec::new();
     for (i, inp) in inputs.iter().enumerate() {
-        let sp_bytes = hex::decode(&inp.script_pubkey)
-            .map_err(|_| "script_pubkey hex lỗi")?;
+        let sp_bytes = normalize_script_pubkey(&inp.script_pubkey)?;
 
         let mut preimage: Vec<u8> = Vec::new();
         preimage.extend_from_slice(&1u32.to_le_bytes()); // version
