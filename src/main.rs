@@ -150,6 +150,7 @@ mod pkt_relay;
 mod pkt_peer_set;
 mod pkt_mempool;
 mod pkt_checkpoints;
+mod pkt_mempool_bridge;
 
 // ── Entry point ───────────────────────────────────────────────
 //

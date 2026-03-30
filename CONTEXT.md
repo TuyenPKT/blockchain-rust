@@ -274,7 +274,8 @@ _Mục tiêu: validate toàn bộ chain locally — không trust peer, không tr
 - [x] v23.3 — **Multi-peer Manager**: `src/pkt_peer_set.rs` — `PeerSet` (`Arc<Mutex>`), `PeerSlot` (status/height/agent/strikes), `PeerStatus` (Connecting/Connected/Disconnected{retry_at}/Banned{until_unix}); connect-thread per peer + manager-thread (wakeup 10s); `strike()` auto-ban tại MAX_STRIKES=3; `best_height()` max of Connected; backoff 5*2^n capped 300s; +21 tests
 - [x] v23.4 — **Mempool Full**: `src/pkt_mempool.rs` — `PktMempool` với `BTreeMap<FeeKey, tx_id>` priority queue (O(log n)), `spenders` index cho RBF detect, integer bump check (`fee×100 >= old_fee×110`), `evict_lowest()` khi full, `evict_expired(now)` 72h, `AddResult(Added/Replaced/Rejected)`, `select_transactions` highest-first; +18 tests
 - [x] v23.5 — **IBD Checkpoints**: `src/pkt_checkpoints.rs` — `Checkpoint` + `const fn from_hex` (compile-time hex parse), `TESTNET/MAINNET_CHECKPOINTS`, `CheckpointSet` (`max_height/get/verify/can_skip_validation/last_before`), `ibd_action()` → `IbdBlockAction(AcceptSkipValidation/AcceptFullValidation/Reject)`; wire hash = SHA256d; +17 tests
-- [ ] v23.6 — **UTXO Snapshot**: dump/load full UTXO set → fast bootstrap không cần IBD
+- [x] v23.6 — **Wire Mempool Bridge**: `src/pkt_mempool_bridge.rs` — `load_wire_mempool_txs(path, limit)`: đọc raw wire TX từ `MempoolDb` (RocksDB, pkt_sync), parse qua `decode_wire_tx`, convert `WireTx→Transaction` (SHA256d TXID, wire script→internal Script P2PKH/P2SH/P2WPKH/P2TR, fee_rate×size/1000); `pkt_node.rs` template server merge wire TXs vào `bc.mempool` TXs (dedup by tx_id) → miner block template bao gồm broadcast TXs; +21 tests
+- [ ] v23.7 — **UTXO Snapshot**: dump/load full UTXO set → fast bootstrap không cần IBD
 - [ ] v23.7 — **Full Node Mode**: `cargo run -- fullnode` — sync + relay + RPC + REST một process
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent

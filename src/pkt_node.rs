@@ -620,8 +620,25 @@ fn handle_template_client(
                 let prev     = bc.chain.last().map(|b| b.hash.clone())
                                 .unwrap_or_else(|| "0".repeat(64));
                 let diff     = bc.difficulty;
-                let txs      = bc.mempool.select_transactions(100);
+                let mut txs  = bc.mempool.select_transactions(100);
                 drop(bc);
+
+                // v23.6: merge wire mempool TXs (from pkt_sync) into template
+                let remaining = 100usize.saturating_sub(txs.len());
+                if remaining > 0 {
+                    let mempool_path = crate::pkt_mempool_sync::default_mempool_db_path();
+                    let wire_txs = crate::pkt_mempool_bridge::load_wire_mempool_txs(
+                        &mempool_path, remaining,
+                    );
+                    let existing: std::collections::HashSet<String> =
+                        txs.iter().map(|t| t.tx_id.clone()).collect();
+                    for wt in wire_txs {
+                        if !existing.contains(&wt.tx_id) {
+                            txs.push(wt);
+                        }
+                    }
+                }
+
                 Message::Template { prev_hash: prev, height, difficulty: diff, txs }
             }
             Message::NewBlock { block } => {

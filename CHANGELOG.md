@@ -4,6 +4,32 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.6 — Wire Mempool Bridge (2026-03-30)
+
+### Added
+- `src/pkt_mempool_bridge.rs` — Bridge wire mempool → miner template:
+  - `load_wire_mempool_txs(path, limit) → Vec<Transaction>`: đọc raw TX bytes từ `MempoolDb`, parse qua `decode_wire_tx`, convert sang internal `Transaction`
+  - `wire_tx_to_transaction(wire, raw, fee_rate)`: SHA256d TXID (reversed display), wire script → internal `Script` (P2PKH/P2SH/P2WPKH/P2TR/fallback), fee = fee_rate × size / 1000
+  - `compute_wire_txid(raw)`: SHA256d double-hash, byte-reversed (Bitcoin display format)
+  - `wire_script_to_script(raw)`: detect standard script types từ wire bytes
+  - Skip coinbase TXs; graceful khi DB không tồn tại
+- `src/pkt_node.rs` — `handle_template_client`: sau khi lấy `bc.mempool.select_transactions(100)`, merge thêm wire mempool TXs từ `~/.pkt/mempooldb` (dedup by tx_id, tổng ≤ 100)
+
+### Files
+- `src/pkt_mempool_bridge.rs` — module mới
+- `src/pkt_node.rs` — extend `handle_template_client` (v23.6 merge)
+- `src/main.rs` — thêm `mod pkt_mempool_bridge`
+
+### Tests
+- +21 tests (P2PKH/P2SH/P2WPKH script conversion, TXID SHA256d, fee estimate, load from DB, limit, coinbase skip, nonexistent path)
+
+### Breaking / Gotcha
+- Wire TX TXID = SHA256d (Bitcoin-compatible), khác internal blake3 TXID — dedup hoạt động đúng vì mỗi TX chỉ tồn tại trong một mempool
+- `commit_mined_block` → `utxo_set.apply_block()` sẽ add wire TX outputs vào internal UTXO set (harmless); inputs không match nên no-op
+- Wire TXs từ `MempoolDb` được sync bởi `pkt_sync`; miner đọc qua template server (port+1)
+
+---
+
 ## v23.5 — IBD Checkpoints (2026-03-29)
 
 ### Added
