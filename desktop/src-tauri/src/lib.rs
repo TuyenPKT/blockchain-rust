@@ -122,16 +122,141 @@ async fn get_tx_detail(node_url: String, txid: String) -> Result<serde_json::Val
     get_json(&format!("{}/api/testnet/tx/{}", base(&node_url), t)).await
 }
 
-/// POST raw hex transaction lên node để broadcast.
+// ── PKT wire broadcast (direct TCP — không qua HTTP server) ───────────────────
+//
+// Kết nối trực tiếp đến PKT peer, thực hiện Version/Verack handshake,
+// gửi raw "tx" message. Không cần /api/testnet/tx/broadcast endpoint nữa.
+
+const PKT_TESTNET_MAGIC: [u8; 4] = [0xfc, 0x11, 0x09, 0x07];
+const PKT_HEADER_LEN:    usize   = 24;
+const PKT_DEFAULT_PEER:  &str    = "seed.testnet.oceif.com:8333";
+
+fn sha256d_checksum(payload: &[u8]) -> [u8; 4] {
+    use sha2::Sha256;
+    let h1 = Sha256::digest(payload);
+    let h2 = Sha256::digest(&h1);
+    [h2[0], h2[1], h2[2], h2[3]]
+}
+
+fn pkt_frame(cmd: &str, payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(PKT_HEADER_LEN + payload.len());
+    frame.extend_from_slice(&PKT_TESTNET_MAGIC);
+    let mut cmd_bytes = [0u8; 12];
+    let b = cmd.as_bytes();
+    cmd_bytes[..b.len().min(12)].copy_from_slice(&b[..b.len().min(12)]);
+    frame.extend_from_slice(&cmd_bytes);
+    frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    frame.extend_from_slice(&sha256d_checksum(payload));
+    frame.extend_from_slice(payload);
+    frame
+}
+
+fn pkt_version_payload() -> Vec<u8> {
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let ua = b"/pktscan-desktop:0.1/";
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&70015u32.to_le_bytes()); // protocol version
+    buf.extend_from_slice(&0u64.to_le_bytes());     // services
+    buf.extend_from_slice(&ts.to_le_bytes());       // timestamp
+    buf.extend_from_slice(&[0u8; 26]);              // addr_recv
+    buf.extend_from_slice(&[0u8; 26]);              // addr_from
+    buf.extend_from_slice(&0u64.to_le_bytes());     // nonce
+    buf.push(ua.len() as u8);                       // user_agent varint
+    buf.extend_from_slice(ua);
+    buf.extend_from_slice(&0i32.to_le_bytes());     // start_height
+    buf.push(1u8);                                  // relay
+    buf
+}
+
+/// Read one PKT message header; return command string and skip payload bytes.
+fn pkt_recv_cmd(stream: &mut TcpStream) -> Result<String, String> {
+    use std::io::Read;
+    let mut hdr = [0u8; PKT_HEADER_LEN];
+    stream.read_exact(&mut hdr).map_err(|e| format!("read header: {}", e))?;
+    if hdr[0..4] != PKT_TESTNET_MAGIC {
+        return Err("wrong magic".into());
+    }
+    let cmd = std::str::from_utf8(&hdr[4..16])
+        .unwrap_or("").trim_matches('\0').to_string();
+    let payload_len = u32::from_le_bytes([hdr[16], hdr[17], hdr[18], hdr[19]]) as usize;
+    if payload_len > 0 {
+        let mut payload = vec![0u8; payload_len.min(4_000_000)];
+        stream.read_exact(&mut payload).map_err(|e| format!("read payload: {}", e))?;
+    }
+    Ok(cmd)
+}
+
+/// Broadcast raw TX bytes trực tiếp đến một PKT testnet peer.
+fn pkt_broadcast_sync(raw: &[u8], peer: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::net::ToSocketAddrs;
+
+    let addr = peer.to_socket_addrs()
+        .map_err(|e| format!("resolve {}: {}", peer, e))?
+        .next()
+        .ok_or_else(|| format!("cannot resolve {}", peer))?;
+
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
+        .map_err(|e| format!("connect: {}", e))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
+
+    // → Version
+    stream.write_all(&pkt_frame("version", &pkt_version_payload()))
+        .map_err(|e| format!("send version: {}", e))?;
+
+    // ← Version + Verack  (send Verack on receiving their Version)
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut got_version = false;
+    let mut got_verack  = false;
+    while !(got_version && got_verack) {
+        if std::time::Instant::now() > deadline { return Err("handshake timeout".into()); }
+        match pkt_recv_cmd(&mut stream)?.as_str() {
+            "version" => {
+                got_version = true;
+                stream.write_all(&pkt_frame("verack", &[]))
+                    .map_err(|e| format!("send verack: {}", e))?;
+            }
+            "verack" => { got_verack = true; }
+            _ => {}
+        }
+    }
+
+    // → TX
+    stream.write_all(&pkt_frame("tx", raw))
+        .map_err(|e| format!("send tx: {}", e))?;
+    stream.flush().map_err(|e| format!("flush: {}", e))?;
+
+    // ← wait 3s for "reject"
+    stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
+    loop {
+        match pkt_recv_cmd(&mut stream) {
+            Ok(cmd) if cmd == "reject" => return Err("rejected by peer".into()),
+            Ok(_)  => {}
+            Err(_) => break, // timeout = no reject = OK
+        }
+    }
+    Ok(())
+}
+
+/// Broadcast raw hex TX trực tiếp đến PKT testnet peer (không qua HTTP server).
 #[tauri::command]
-async fn tx_broadcast(node_url: String, raw_hex: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/api/testnet/tx/broadcast", base(&node_url));
-    let client = reqwest::Client::new();
-    let resp = client.post(&url)
-        .json(&serde_json::json!({"raw_hex": raw_hex}))
-        .send().await
-        .map_err(|e| e.to_string())?;
-    resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+async fn tx_broadcast(_node_url: String, raw_hex: String) -> Result<serde_json::Value, String> {
+    let raw = hex::decode(raw_hex.trim()).map_err(|e| format!("hex decode: {}", e))?;
+
+    // Compute SHA256d TXID (display: reversed)
+    let txid = {
+        use sha2::Sha256;
+        let h1 = Sha256::digest(&raw);
+        let h2 = Sha256::digest(&h1);
+        let mut b: [u8; 32] = h2.into();
+        b.reverse();
+        hex::encode(b)
+    };
+
+    tokio::task::spawn_blocking(move || pkt_broadcast_sync(&raw, PKT_DEFAULT_PEER))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|_| serde_json::json!({"txid": txid, "status": "broadcast"}))
 }
 
 // ── Sync control commands ──────────────────────────────────────────────────────

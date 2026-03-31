@@ -151,6 +151,7 @@ mod pkt_peer_set;
 mod pkt_mempool;
 mod pkt_checkpoints;
 mod pkt_mempool_bridge;
+mod pkt_snapshot;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -289,6 +290,9 @@ fn main() {
         }
         Some("utxosync") => {
             pkt_utxo_sync::cmd_utxo_sync(&args[2..].to_vec());
+        }
+        Some("snapshot") => {
+            pkt_snapshot::cmd_snapshot(&args[2..].to_vec());
         }
         Some("explorer-testnet") => {
             pkt_explorer_api::cmd_explorer_status();

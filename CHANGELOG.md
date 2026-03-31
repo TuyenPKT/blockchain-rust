@@ -4,6 +4,31 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.7 — UTXO Snapshot (2026-03-31)
+
+### Added
+- `src/pkt_snapshot.rs` — Dump/load toàn bộ UTXO set (fast bootstrap không cần IBD):
+  - `SnapshotHeader { version, height, tip_hash, utxo_count, created_at_unix }` — dòng đầu NDJSON
+  - `dump_snapshot(utxo_db, output_path)` — scan "utxo:*" prefix qua `raw_db()`, ghi NDJSON
+  - `load_snapshot(input_path, utxo_db)` — batch-delete UTXOs cũ, insert từng entry, restore height + tip_hash
+  - `snapshot_info(path)` — đọc chỉ header dòng đầu (không parse toàn file)
+  - `cmd_snapshot(args)` — CLI: `snapshot dump [out]`, `snapshot load <file>`, `snapshot info <file>`
+- `main.rs` — dispatch `snapshot` → `cmd_snapshot`
+
+### Files
+- `src/pkt_snapshot.rs` — module mới
+- `src/main.rs` — thêm `mod pkt_snapshot` + dispatch
+
+### Tests
+- +21 tests (header roundtrip, dump file/count/lines, info errors, roundtrip utxo_count/height/tip_hash/values, load clear old, version mismatch, empty/nonexistent file)
+
+### Breaking / Gotcha
+- tip_hash trong header là display format (reversed SHA256d hex); `load_snapshot` re-reverse trước khi `set_tip_hash()`
+- `load_snapshot` xoá tất cả "utxo:*" keys trước khi insert — không merge với dữ liệu cũ
+- File size ~ 200 bytes/UTXO (JSON) — 1M UTXOs ≈ 200 MB; cân nhắc compress nếu cần
+
+---
+
 ## v23.6 — Wire Mempool Bridge (2026-03-30)
 
 ### Added

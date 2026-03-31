@@ -1309,7 +1309,6 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/analytics",             get(ps_analytics))
         .route("/api/testnet/block/:height",         get(ps_block_detail))
         .route("/api/testnet/tx/:txid",              get(ps_tx_detail))
-        .route("/api/testnet/tx/broadcast",          post(ps_tx_broadcast))
         .route("/api/testnet/txs",                   get(ps_txs_list))
         .route("/api/testnet/search",                get(ps_search))
         .route("/api/testnet/label/:script",         get(ps_label))
