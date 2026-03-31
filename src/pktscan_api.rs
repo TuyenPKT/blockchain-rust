@@ -904,7 +904,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::openapi::openapi_router())
         .merge(crate::sdk_gen::sdk_router())
         .merge(crate::graphql::graphql_router(Arc::clone(&state)))
-        .merge(crate::webhook::webhook_router(crate::webhook::open_default()))
+        .merge(crate::webhook::webhook_router(crate::webhook::open_default(), Arc::clone(&auth_db)))
         .merge(crate::write_api::write_router(Arc::clone(&state), Arc::clone(&contract_db)))
         .merge(crate::scam_registry::risk_router(crate::scam_registry::open_default()))
         .merge(crate::address_watch::watch_router(
@@ -919,7 +919,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::pkt_testnet_web::testnet_web_router()) // v15.6: /api/testnet/* + /static/testnet.js
         .merge(crate::pkt_rpc::rpc_router())               // v19.2: POST /rpc JSON-RPC 2.0
         .merge(crate::key_api::key_router(auth_db_keys))  // v19.9: GET/POST/DELETE /api/keys
-        .merge(crate::web_serve::web_router())             // web/: ServeDir /web/** + /address/:a + /block/:h + /rx/:id
+        .merge(crate::web_serve::web_router(Arc::clone(&auth_db))) // web/: ServeDir /web/** + /address/:a + /block/:h + /rx/:id
         .layer(middleware::from_fn_with_state(
             Arc::clone(&audit_db),
             crate::audit_log::audit_middleware,

@@ -365,10 +365,14 @@ async fn delete_webhook(
     }
 }
 
-pub fn webhook_router(db: WebhookDb) -> Router {
+pub fn webhook_router(db: WebhookDb, auth: crate::api_auth::AuthDb) -> Router {
     Router::new()
         .route("/api/webhooks",     post(register_webhook).get(list_webhooks))
         .route("/api/webhooks/:id", delete(delete_webhook))
+        .layer(axum::middleware::from_fn_with_state(
+            auth,
+            crate::api_auth::require_write_middleware,
+        ))
         .with_state(db)
 }
 

@@ -255,6 +255,60 @@ fn unix_now() -> u64 {
 /// - No header  → allow (public read access)
 /// - Header present, valid → allow, attach role extension
 /// - Header present, invalid → 401 Unauthorized
+/// Extract API key từ `X-Api-Key` header hoặc `?api_key=` query param.
+fn extract_api_key(request: &Request<Body>) -> Option<String> {
+    // Header takes priority
+    if let Some(v) = request.headers().get("x-api-key") {
+        return v.to_str().ok().map(|s| s.to_string());
+    }
+    // Fallback: ?api_key= query param (browser friendly)
+    let query = request.uri().query().unwrap_or("");
+    query.split('&').find_map(|part| {
+        let mut kv = part.splitn(2, '=');
+        match (kv.next(), kv.next()) {
+            (Some("api_key"), Some(v)) if !v.is_empty() => Some(v.to_string()),
+            _ => None,
+        }
+    })
+}
+
+/// Strict middleware: yêu cầu API key với Write hoặc Admin role.
+/// Trả 401 nếu không có key, 403 nếu key không đủ quyền.
+/// Dùng cho webhook API routes và trang webhooks HTML.
+pub async fn require_write_middleware(
+    State(store): State<AuthDb>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Response {
+    match extract_api_key(&request) {
+        None => (
+            StatusCode::UNAUTHORIZED,
+            [("content-type", "application/json")],
+            "{\"error\":\"API key required — X-Api-Key header or ?api_key= param\"}",
+        ).into_response(),
+        Some(key) => {
+            let guard = store.lock().await;
+            match guard.validate(&key) {
+                None => (
+                    StatusCode::UNAUTHORIZED,
+                    [("content-type", "application/json")],
+                    "{\"error\":\"invalid API key\"}",
+                ).into_response(),
+                Some(role) if !role.can_write() => (
+                    StatusCode::FORBIDDEN,
+                    [("content-type", "application/json")],
+                    "{\"error\":\"Write role required\"}",
+                ).into_response(),
+                Some(role) => {
+                    request.extensions_mut().insert(role.clone());
+                    drop(guard);
+                    next.run(request).await
+                }
+            }
+        }
+    }
+}
+
 pub async fn auth_middleware(
     State(store): State<AuthDb>,
     mut request: Request<Body>,
