@@ -152,6 +152,7 @@ mod pkt_mempool;
 mod pkt_checkpoints;
 mod pkt_mempool_bridge;
 mod pkt_snapshot;
+mod pkt_fullnode;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -293,6 +294,9 @@ fn main() {
         }
         Some("snapshot") => {
             pkt_snapshot::cmd_snapshot(&args[2..].to_vec());
+        }
+        Some("fullnode") => {
+            pkt_fullnode::cmd_fullnode(&args[2..].to_vec());
         }
         Some("explorer-testnet") => {
             pkt_explorer_api::cmd_explorer_status();

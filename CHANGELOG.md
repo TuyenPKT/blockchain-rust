@@ -4,6 +4,41 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v23.8 — Full Node Mode (2026-03-31)
+
+### Added
+- `src/pkt_fullnode.rs` — Chạy sync + web server một process:
+  - `FullnodeConfig { port, peer, mainnet }` + `Default` (8081, testnet seed)
+  - `parse_fullnode_args(args)` — type-based: số u16 → port, `host:port` → peer, `--mainnet` flag; thứ tự không quan trọng
+  - `spawn_sync_with_exe(exe, peer, mainnet) → Result<Child>` — testable, explicit exe path
+  - `spawn_sync_process(peer, mainnet)` — dùng current binary
+  - `start_watcher(child, peer, mainnet)` — background thread: check mỗi 10s, restart sau 5s nếu exit
+  - `cmd_fullnode(args)` — spawn sync child → start watcher → `pktscan_api::serve(port)` blocking → kill child on exit
+- `main.rs` — dispatch `fullnode` → `cmd_fullnode`
+
+### Files
+- `src/pkt_fullnode.rs` — module mới
+- `src/main.rs` — `mod pkt_fullnode` + dispatch
+
+### Tests
+- +17 tests (defaults, custom port/peer, mainnet flag, order-independent args, port edge cases, nonexistent binary returns err)
+
+### Breaking / Gotcha
+- Sync chạy là OS subprocess riêng — DB write lock tách biệt, tránh RocksDB conflict với web read-only
+- Watcher thread không daemon — nếu pktscan_api exits bất thường, watcher tiếp tục chạy cho đến khi process thoát
+- Thay thế cho 2 systemd services: `pktscan.service` + sync service → 1 service dùng `fullnode`
+
+### Usage
+```bash
+# Thay thế cho pktscan.service + sync.service
+blockchain-rust fullnode 8081 seed.testnet.oceif.com:8333
+
+# Mainnet
+blockchain-rust fullnode 8080 --mainnet
+```
+
+---
+
 ## v23.7 — UTXO Snapshot (2026-03-31)
 
 ### Added
