@@ -1,0 +1,18 @@
+[Unit]
+Description=PKT Full Node (sync + API)
+After=network.target
+
+[Service]
+Type=simple
+User=tuyenpkt
+WorkingDirectory=/home/tuyenpkt/blockchain-rust
+ExecStart=/home/tuyenpkt/blockchain-rust/target/release/blockchain-rust fullnode 8081 seed.testnet.oceif.com:8333
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fullnode
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
