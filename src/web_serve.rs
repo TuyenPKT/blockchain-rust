@@ -102,13 +102,16 @@ async fn serve_webhooks_page(
 <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0d1117;color:#c9d1d9}
 .box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:32px;max-width:400px;width:100%;text-align:center}
 input{width:100%;padding:8px 12px;margin:12px 0;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;box-sizing:border-box}
-button{width:100%;padding:10px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer}
+button{width:100%;padding:10px;border:none;border-radius:6px;color:#fff;cursor:pointer;margin-top:6px}
+.btn-access{background:#238636}.btn-back{background:#21262d;border:1px solid #30363d}
 </style></head><body>
 <div class="box"><h2>🔐 Webhooks</h2><p>API key required</p>
 <form onsubmit="location.href='/webhooks?api_key='+document.getElementById('k').value;return false">
 <input id="k" type="password" placeholder="Paste API key…" autofocus>
-<button type="submit">Access</button>
-</form></div></body></html>"#,
+<button type="submit" class="btn-access">Access</button>
+</form>
+<button class="btn-back" onclick="history.length>1?history.back():location.href='/'">← Back</button>
+</div></body></html>"#,
         ).into_response()
     }
 }
