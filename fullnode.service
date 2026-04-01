@@ -1,6 +1,7 @@
 [Unit]
 Description=PKT Full Node (sync + API)
-After=network.target
+After=network.target blockchain-node.service
+Wants=blockchain-node.service
 
 [Service]
 Type=simple
