@@ -5,7 +5,7 @@
 //! 2. UTXO existence  — every non-coinbase input references a known unspent output
 //! 3. No in-block double-spend — same (txid, vout) not spent twice in one block
 //! 4. Value conservation — sum(inputs) >= sum(outputs) for non-coinbase txs
-//! 5. Merkle root     — recompute from txids and compare to header's merkle_root
+//! 5. Merkle root     — SHA256d tree over `wire_txid` values (same as `pkt_block_sync`)
 //!
 //! Script-sig verification (OP_CHECKSIG) is deferred to v23.1.
 
@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use crate::pkt_sync::SyncError;
 use crate::pkt_utxo_sync::{UtxoSyncDb, WireTx, wire_txid};
 use crate::pkt_wire::WireBlockHeader;
+use sha2::{Digest, Sha256};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -74,35 +75,33 @@ pub struct BlockValidation {
 
 // ── Merkle root ───────────────────────────────────────────────────────────────
 
-/// PKT uses blake3(blake3(data)) as its double-hash (same role as SHA256d in Bitcoin).
-fn pkt_double_hash(data: &[u8]) -> [u8; 32] {
-    let first = blake3::hash(data);
-    *blake3::hash(first.as_bytes()).as_bytes()
+/// Bitcoin-style double SHA-256 (must match `pkt_block_sync::merkle_root` and `wire_txid`).
+fn sha256d(data: &[u8]) -> [u8; 32] {
+    let h1 = Sha256::digest(data);
+    Sha256::digest(h1).into()
 }
 
-/// Compute merkle root from a list of txids (each [u8; 32], little-endian as stored).
-/// Uses PKT double-hash (blake3^2) instead of SHA256d.
+/// Merkle root from wire txids (SHA256d pairs), identical to block sync.
 pub fn compute_merkle_root(txids: &[[u8; 32]]) -> [u8; 32] {
     if txids.is_empty() {
         return [0u8; 32];
     }
-    let mut layer: Vec<[u8; 32]> = txids.to_vec();
-    while layer.len() > 1 {
-        // Duplicate last element if odd count (Bitcoin/PKT convention)
-        if layer.len() % 2 == 1 {
-            let last = *layer.last().unwrap();
-            layer.push(last);
+    let mut row: Vec<[u8; 32]> = txids.to_vec();
+    while row.len() > 1 {
+        if row.len() % 2 == 1 {
+            row.push(*row.last().unwrap());
         }
-        let mut next = Vec::with_capacity(layer.len() / 2);
-        for pair in layer.chunks(2) {
-            let mut combined = [0u8; 64];
-            combined[..32].copy_from_slice(&pair[0]);
-            combined[32..].copy_from_slice(&pair[1]);
-            next.push(pkt_double_hash(&combined));
-        }
-        layer = next;
+        row = row
+            .chunks(2)
+            .map(|pair| {
+                let mut buf = [0u8; 64];
+                buf[..32].copy_from_slice(&pair[0]);
+                buf[32..].copy_from_slice(&pair[1]);
+                sha256d(&buf)
+            })
+            .collect();
     }
-    layer[0]
+    row[0]
 }
 
 // ── Core validation ───────────────────────────────────────────────────────────
