@@ -278,6 +278,13 @@ _Mục tiêu: validate toàn bộ chain locally — không trust peer, không tr
 - [x] v23.7 — **UTXO Snapshot**: `src/pkt_snapshot.rs` — NDJSON format (line 1 = `SnapshotHeader{version,height,tip_hash,utxo_count,created_at_unix}`, rest = `UtxoEntry`); `dump_snapshot(utxo_db, path)` scan "utxo:*" prefix via `raw_db()` iterator; `load_snapshot(path, utxo_db)` batch-delete cũ + insert từng entry + restore height/tip_hash; `snapshot_info(path)` đọc header only; CLI `snapshot dump/load/info`; +21 tests
 - [x] v23.8 — **Full Node Mode**: `src/pkt_fullnode.rs` — `FullnodeConfig{port,peer,mainnet}`, `parse_fullnode_args()` (type-based detection: u16→port, host:port→peer, --mainnet flag), `spawn_sync_with_exe(exe,peer,mainnet)→Result<Child>`, `spawn_sync_process()`, `start_watcher(child,peer,mainnet)` auto-restart; `cmd_fullnode`: spawn sync subprocess (DB write lock riêng) + start_watcher thread + `pktscan_api::serve(port)` blocking; cleanup kill child on exit; +17 tests
 
+#### Các fix bảo mật (post v23.8)
+- ~~**`POST /api/testnet/sync/start` không auth**~~ — đã fix: require Write role (`require_write_middleware`)
+- ~~**`?api_key=` trong URL**~~ — đã fix: `require_write_middleware` chỉ đọc header, không query param
+- ~~**`~/.pkt/api_keys.json` permissions**~~ — đã fix: `chmod 600` tự động trong `ApiKeyStore::save()`
+- **`/api/testnet/utxos/:s`** — đã fix: decode bech32/Base58 trước, fallback raw script_hex
+- **`pkt_validate.rs` Merkle root** — đã fix: đổi sang SHA256d (khớp `pkt_block_sync` và `wire_txid`)
+
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain
 

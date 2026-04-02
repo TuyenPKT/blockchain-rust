@@ -147,6 +147,12 @@ impl ApiKeyStore {
             .map_err(|e| format!("serialize: {e}"))?;
         std::fs::write(&self.path, json)
             .map_err(|e| format!("write: {e}"))?;
+        // chmod 600: chỉ owner đọc/ghi — tránh key lộ với user khác trên cùng hệ thống
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600));
+        }
         Ok(())
     }
 
@@ -202,37 +208,11 @@ impl ApiKeyStore {
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
-/// Generate a random 32-byte key encoded as 64-char lowercase hex.
+/// Generate a random 32-byte key encoded as 64-char lowercase hex (OS CSPRNG).
 pub fn generate_raw_key() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    // Use entropy from SystemTime + stack address
+    use rand_core::{OsRng, RngCore};
     let mut bytes = [0u8; 32];
-    let now_nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-
-    // Mix multiple entropy sources via blake3
-    let mut hasher = DefaultHasher::new();
-    now_nanos.hash(&mut hasher);
-    let seed1 = hasher.finish();
-
-    std::thread::sleep(std::time::Duration::from_nanos(1));
-    let now2 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(1);
-    now2.hash(&mut hasher);
-    let seed2 = hasher.finish();
-
-    // blake3 keyed hash for 32 bytes
-    let h1 = blake3::hash(&seed1.to_le_bytes());
-    let h2 = blake3::hash(&seed2.to_le_bytes());
-    bytes[..16].copy_from_slice(&h1.as_bytes()[..16]);
-    bytes[16..].copy_from_slice(&h2.as_bytes()[..16]);
-
+    OsRng.fill_bytes(&mut bytes);
     hex::encode(bytes)
 }
 
@@ -275,16 +255,21 @@ fn extract_api_key(request: &Request<Body>) -> Option<String> {
 /// Strict middleware: yêu cầu API key với Write hoặc Admin role.
 /// Trả 401 nếu không có key, 403 nếu key không đủ quyền.
 /// Dùng cho webhook API routes và trang webhooks HTML.
+/// Chỉ chấp nhận X-Api-Key header — không đọc ?api_key= để tránh key lộ qua log.
 pub async fn require_write_middleware(
     State(store): State<AuthDb>,
     mut request: Request<Body>,
     next: Next,
 ) -> Response {
-    match extract_api_key(&request) {
+    // Header only — không fallback query param
+    let key_opt = request.headers().get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    match key_opt {
         None => (
             StatusCode::UNAUTHORIZED,
             [("content-type", "application/json")],
-            "{\"error\":\"API key required — X-Api-Key header or ?api_key= param\"}",
+            "{\"error\":\"API key required — X-Api-Key header\"}",
         ).into_response(),
         Some(key) => {
             let guard = store.lock().await;

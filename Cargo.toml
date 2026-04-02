@@ -69,7 +69,7 @@ cust = { version = "0.3", optional = true }
 # v9.0.1: Ed25519 HD Wallet (SLIP-0010)
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 zeroize = { version = "1", features = ["derive"] }
-rand_core = { version = "0.6", features = ["std"] }
+rand_core = { version = "0.6", features = ["std", "getrandom"] }
 # v14.0: Terminal UI dashboard
 ratatui = "0.26"
 crossterm = "0.27"

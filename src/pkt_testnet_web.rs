@@ -342,7 +342,22 @@ async fn ps_utxos(
     match ps.open() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
         Some((_sdb, udb)) => {
-            let utxos = crate::pkt_explorer_api::query_utxos(&udb, &script, 100);
+            // Nếu input là bech32/Base58 address, decode sang script_hex trước
+            let script_wire   = any_addr_to_script_hex(&script);
+            let script_legacy = any_addr_to_script_hex_legacy(&script);
+            let mut utxos = Vec::new();
+            if let Some(ref s) = script_wire {
+                utxos = crate::pkt_explorer_api::query_utxos(&udb, s, 500).unwrap_or_default();
+            }
+            if utxos.is_empty() {
+                if let Some(ref s) = script_legacy {
+                    utxos = crate::pkt_explorer_api::query_utxos(&udb, s, 500).unwrap_or_default();
+                }
+            }
+            // Fallback: coi input là raw script_hex
+            if utxos.is_empty() && script_wire.is_none() {
+                utxos = crate::pkt_explorer_api::query_utxos(&udb, &script, 500).unwrap_or_default();
+            }
             Json(json!({"utxos": utxos})).into_response()
         }
     }
@@ -792,8 +807,19 @@ async fn ps_tx_broadcast(
     use std::net::TcpStream;
     use std::time::Duration;
 
+    /// ~1 MiB wire payload sau decode — đủ cho TX lớn, tránh DoS bộ nhớ từ hex khổng lồ.
+    const MAX_BROADCAST_HEX: usize = 2_000_000;
+    let hex_str = body.raw_hex.trim();
+    if hex_str.len() > MAX_BROADCAST_HEX {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "raw_hex exceeds maximum size"})),
+        )
+            .into_response();
+    }
+
     // 1. Decode hex
-    let raw = match hex::decode(body.raw_hex.trim()) {
+    let raw = match hex::decode(hex_str) {
         Ok(b) => b,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("hex decode: {}", e)}))).into_response(),
     };
@@ -1289,6 +1315,17 @@ pub fn testnet_web_router() -> Router {
         mempool_path: crate::pkt_mempool_sync::default_mempool_db_path(),
         label_path:   crate::pkt_labels::default_label_db_path(),
     };
+    let auth = crate::api_auth::ApiKeyStore::load_default();
+
+    // sync/start + sync/stop: require Write role (fork process từ xa — cần bảo vệ)
+    let sync_control = Router::new()
+        .route("/api/testnet/sync/start", post(ps_sync_start))
+        .route("/api/testnet/sync/stop",  post(ps_sync_stop))
+        .layer(axum::middleware::from_fn_with_state(
+            auth,
+            crate::api_auth::require_write_middleware,
+        ));
+
     Router::new()
         .route("/static/testnet.js", get(serve_testnet_js))
         .route("/api/testnet/sync-status", get(ps_sync_status))
@@ -1314,9 +1351,8 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/label/:script",         get(ps_label))
         .route("/api/testnet/address/:s/export.csv", get(ps_export_address))
         .route("/api/testnet/blocks/export.csv",     get(ps_export_blocks))
-        .route("/api/testnet/sync/start",            post(ps_sync_start))
-        .route("/api/testnet/sync/stop",             post(ps_sync_stop))
         .route("/api/testnet/sync/proc-status",      get(ps_sync_proc_status))
+        .merge(sync_control)
         .with_state(ps)
 }
 
