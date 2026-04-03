@@ -31,6 +31,7 @@ export function Node({ nodeUrl }: NodeProps) {
   const [syncBusy, setSyncBusy]       = useState(false);
   const [syncPeer, setSyncPeer]       = useState(DEFAULT_SYNC_PEER);
   const [syncMsg, setSyncMsg]         = useState("");
+  const [syncApiKey, setSyncApiKey]   = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -80,7 +81,7 @@ export function Node({ nodeUrl }: NodeProps) {
     setSyncMsg("");
     try {
       const result = await invoke<{ started?: boolean; error?: string; pid?: number }>(
-        "start_node_sync", { nodeUrl, peerAddr: syncPeer.trim() || undefined }
+        "start_node_sync", { nodeUrl, peerAddr: syncPeer.trim() || undefined, apiKey: syncApiKey }
       );
       if (result.error) { setSyncMsg(result.error); }
       else { setSyncRunning(true); setSyncMsg(result.pid ? `PID ${result.pid}` : "Started"); }
@@ -93,7 +94,7 @@ export function Node({ nodeUrl }: NodeProps) {
     setSyncMsg("");
     try {
       const result = await invoke<{ stopped?: boolean; error?: string }>(
-        "stop_node_sync", { nodeUrl }
+        "stop_node_sync", { nodeUrl, apiKey: syncApiKey }
       );
       if (result.error) { setSyncMsg(result.error); }
       else { setSyncRunning(false); setSyncMsg("Stopped"); }
@@ -191,6 +192,21 @@ export function Node({ nodeUrl }: NodeProps) {
                 borderRadius: 6, padding: "6px 10px", color: colors.text,
                 fontFamily: fonts.mono, fontSize: 12, outline: "none",
                 opacity: syncRunning ? 0.5 : 1,
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: colors.muted, flexShrink: 0 }}>API Key:</span>
+            <input
+              type="password"
+              value={syncApiKey}
+              onChange={e => setSyncApiKey(e.target.value)}
+              placeholder="Write-role API key"
+              style={{
+                flex: 1, background: colors.surface2, border: `1px solid ${colors.border}`,
+                borderRadius: 6, padding: "6px 10px", color: colors.text,
+                fontFamily: fonts.mono, fontSize: 12, outline: "none",
               }}
             />
           </div>

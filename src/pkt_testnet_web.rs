@@ -65,6 +65,15 @@ async fn ps_sync_start(
         Ok(p) => p,
         Err(e) => return Json(json!({"error": format!("cannot get exe path: {}", e)})).into_response(),
     };
+    // Kiểm tra binary tồn tại — nếu không (binary đã rebuild/replace sau khi service start)
+    // trả lỗi rõ ràng thay vì "No such file or directory"
+    if !exe.exists() {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({
+            "error": "binary not found at runtime path — sync is likely managed by fullnode service",
+            "exe": exe.display().to_string(),
+            "hint": "use `systemctl status fullnode` to check sync status"
+        }))).into_response();
+    }
     match std::process::Command::new(&exe).args(["sync", &peer]).spawn() {
         Ok(child) => {
             let pid = child.id();

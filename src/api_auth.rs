@@ -230,32 +230,8 @@ fn unix_now() -> u64 {
 
 // ─── Axum middleware ──────────────────────────────────────────────────────────
 
-/// Axum middleware — validate `X-API-Key` header if present.
-///
-/// - No header  → allow (public read access)
-/// - Header present, valid → allow, attach role extension
-/// - Header present, invalid → 401 Unauthorized
-/// Extract API key từ `X-Api-Key` header hoặc `?api_key=` query param.
-fn extract_api_key(request: &Request<Body>) -> Option<String> {
-    // Header takes priority
-    if let Some(v) = request.headers().get("x-api-key") {
-        return v.to_str().ok().map(|s| s.to_string());
-    }
-    // Fallback: ?api_key= query param (browser friendly)
-    let query = request.uri().query().unwrap_or("");
-    query.split('&').find_map(|part| {
-        let mut kv = part.splitn(2, '=');
-        match (kv.next(), kv.next()) {
-            (Some("api_key"), Some(v)) if !v.is_empty() => Some(v.to_string()),
-            _ => None,
-        }
-    })
-}
-
-/// Strict middleware: yêu cầu API key với Write hoặc Admin role.
-/// Trả 401 nếu không có key, 403 nếu key không đủ quyền.
-/// Dùng cho webhook API routes và trang webhooks HTML.
-/// Chỉ chấp nhận X-Api-Key header — không đọc ?api_key= để tránh key lộ qua log.
+/// Yêu cầu API key (Write hoặc Admin) qua header `X-Api-Key` — không dùng query string.
+/// 401 nếu thiếu/sai key, 403 nếu role không đủ.
 pub async fn require_write_middleware(
     State(store): State<AuthDb>,
     mut request: Request<Body>,
@@ -294,6 +270,13 @@ pub async fn require_write_middleware(
     }
 }
 
+/// Validate `X-API-Key` nếu client gửi (read path).
+///
+/// - Không có header → cho qua (public read)
+/// - Header hợp lệ → gắn `ApiRole` vào request
+/// - Header sai → 401
+///
+/// Chỉ đọc header — không hỗ trợ `?api_key=` (tránh lộ key qua log/Referer).
 pub async fn auth_middleware(
     State(store): State<AuthDb>,
     mut request: Request<Body>,

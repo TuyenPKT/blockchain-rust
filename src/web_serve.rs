@@ -15,13 +15,12 @@
 //! Nginx rewrite: /blockchain-rust/web/** → /web/** trước khi proxy vào port 8080.
 
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use std::collections::HashMap;
 use tower_http::services::ServeDir;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,16 +77,14 @@ async fn serve_playground() -> impl IntoResponse {
 async fn serve_webhooks_page(
     State(auth): State<crate::api_auth::AuthDb>,
     headers: HeaderMap,
-    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    // Check X-Api-Key header or ?api_key= query param
-    let key = headers.get("x-api-key")
+    let key = headers
+        .get("x-api-key")
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .or_else(|| params.get("api_key").cloned());
+        .map(|s| s.to_string());
 
     let authorized = match &key {
-        None    => false,
+        None => false,
         Some(k) => auth.lock().await.validate(k).is_some(),
     };
 
@@ -97,7 +94,7 @@ async fn serve_webhooks_page(
         (
             StatusCode::UNAUTHORIZED,
             [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            r#"<!DOCTYPE html><html><head><title>Webhooks — Auth Required</title>
+            r##"<!DOCTYPE html><html><head><title>Webhooks — Auth Required</title>
 <meta name="robots" content="noindex,nofollow">
 <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0d1117;color:#c9d1d9}
 .box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:32px;max-width:400px;width:100%;text-align:center}
@@ -105,13 +102,23 @@ input{width:100%;padding:8px 12px;margin:12px 0;background:#21262d;border:1px so
 button{width:100%;padding:10px;border:none;border-radius:6px;color:#fff;cursor:pointer;margin-top:6px}
 .btn-access{background:#238636}.btn-back{background:#21262d;border:1px solid #30363d}
 </style></head><body>
-<div class="box"><h2>🔐 Webhooks</h2><p>API key required</p>
-<form onsubmit="location.href='/webhooks?api_key='+document.getElementById('k').value;return false">
+<div class="box"><h2>🔐 Webhooks</h2><p>Paste key — sent only via <code>X-API-Key</code> header (not URL).</p>
 <input id="k" type="password" placeholder="Paste API key…" autofocus>
-<button type="submit" class="btn-access">Access</button>
-</form>
+<button type="button" class="btn-access" id="go">Access</button>
 <button class="btn-back" onclick="history.length>1?history.back():location.href='/'">← Back</button>
-</div></body></html>"#,
+</div>
+<script>
+document.getElementById('go').onclick=function(){
+ var k=document.getElementById('k').value;
+ fetch('/webhooks',{headers:{'X-API-Key':k}}).then(function(r){
+  if(!r.ok){alert('Invalid API key');return Promise.reject();}
+  return r.text();
+ }).then(function(html){
+  if(html){document.open();document.write(html);document.close();}
+ }).catch(function(){});
+};
+</script>
+</body></html>"##,
         ).into_response()
     }
 }

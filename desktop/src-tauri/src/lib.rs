@@ -284,17 +284,32 @@ async fn get_json_safe(url: &str) -> Result<serde_json::Value, String> {
 }
 
 /// Start sync process on the node server.
+/// `api_key`: Write-role key — required vì route đã được bảo vệ bởi require_write_middleware.
 #[tauri::command]
-async fn start_node_sync(node_url: String, peer_addr: Option<String>) -> Result<serde_json::Value, String> {
+async fn start_node_sync(node_url: String, peer_addr: Option<String>, api_key: String) -> Result<serde_json::Value, String> {
     let peer = peer_addr.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
     let url = format!("{}/api/testnet/sync/start?peer={}", base(&node_url), urlencoding::encode(&peer));
-    post_json(&url).await
+    let resp = client()?.post(&url)
+        .header("x-api-key", &api_key)
+        .send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if text.is_empty() { return Ok(serde_json::json!({"status": status.as_u16()})); }
+    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
 }
 
 /// Stop running sync process on the node server.
+/// `api_key`: Write-role key — required vì route đã được bảo vệ bởi require_write_middleware.
 #[tauri::command]
-async fn stop_node_sync(node_url: String) -> Result<serde_json::Value, String> {
-    post_json(&format!("{}/api/testnet/sync/stop", base(&node_url))).await
+async fn stop_node_sync(node_url: String, api_key: String) -> Result<serde_json::Value, String> {
+    let url = format!("{}/api/testnet/sync/stop", base(&node_url));
+    let resp = client()?.post(&url)
+        .header("x-api-key", &api_key)
+        .send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if text.is_empty() { return Ok(serde_json::json!({"status": status.as_u16()})); }
+    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
 }
 
 /// Get sync process status (running / not running).
