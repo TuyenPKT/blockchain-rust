@@ -5,7 +5,7 @@ import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
 import {
   fetchRichList, fetchMempool,
-  shortHash, timeAgo,
+  shortHash, timeAgo, PACKETS_PER_PKT,
   type RichHolder, type MempoolTx,
 } from "../api";
 
@@ -98,7 +98,7 @@ function Leaderboard({
         const rank    = h.rank ?? i + 1;
         const addr    = h.address ?? "unknown";
         const bal     = h.balance ?? 0;
-        const pkt     = (bal / 1e9).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        const pkt     = (bal / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 });
         const pct     = h.pct ?? 0;
 
         return (
@@ -300,7 +300,7 @@ function MempoolTable({
                   {txid !== "—" ? shortHash(txid) : "—"}
                 </td>
                 <td style={{ padding: "11px 16px", fontFamily: fonts.mono, color: colors.purple }}>
-                  {fee > 0 ? (fee / 1e9).toFixed(6) : "—"}
+                  {fee > 0 ? (fee / PACKETS_PER_PKT).toFixed(6) : "—"}
                 </td>
                 <td style={{ padding: "11px 16px" }}>
                   <span style={{
@@ -344,9 +344,9 @@ function SummaryBar({
     }}>
       {[
         { label: "Top Holders",    value: holderCount.toLocaleString(),              color: colors.accent },
-        { label: "Total Supply",   value: (totalSupply / 1e9).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT", color: colors.blue },
+        { label: "Total Supply",   value: (totalSupply / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT", color: colors.blue },
         { label: "Mempool Count",  value: mempoolCount.toLocaleString(),             color: colors.green },
-        { label: "Mempool Fees",   value: (totalFee / 1e9).toFixed(4) + " PKT",     color: colors.purple },
+        { label: "Mempool Fees",   value: (totalFee / PACKETS_PER_PKT).toFixed(4) + " PKT",     color: colors.purple },
       ].map(({ label, value, color }) => (
         <div key={label} style={{
           background: colors.surface, border: `1px solid ${colors.border}`,

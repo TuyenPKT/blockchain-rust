@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
-import { fetchTxDetail, shortHash, timeAgo, type TxDetail as TxDetailType, type TxInput, type TxOutput } from "../api";
+import { fetchTxDetail, shortHash, timeAgo, PACKETS_PER_PKT, type TxDetail as TxDetailType, type TxInput, type TxOutput } from "../api";
 
 interface TxDetailProps {
   nodeUrl: string;
@@ -94,7 +94,7 @@ function InputRow({ inp, onAddr }: { inp: TxInput; onAddr: (addr: string) => voi
       {inp.amount !== undefined && (
         <span style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13,
           color: colors.text, flexShrink: 0 }}>
-          {(inp.amount / 1e9).toFixed(4)} PKT
+          {(inp.amount / PACKETS_PER_PKT).toFixed(4)} PKT
         </span>
       )}
     </div>
@@ -133,7 +133,7 @@ function OutputRow({ out, onAddr }: { out: TxOutput; onAddr: (addr: string) => v
       {out.amount !== undefined && (
         <span style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13,
           color: colors.green, flexShrink: 0 }}>
-          {(out.amount / 1e9).toFixed(4)} PKT
+          {(out.amount / PACKETS_PER_PKT).toFixed(4)} PKT
         </span>
       )}
     </div>
@@ -161,7 +161,7 @@ function FlowBar({ tx }: { tx: TxDetailType }) {
           Total Input
         </div>
         <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 18, color: colors.text }}>
-          {inTotal > 0 ? (inTotal / 1e9).toFixed(4) : "—"}
+          {inTotal > 0 ? (inTotal / PACKETS_PER_PKT).toFixed(4) : "—"}
           <span style={{ fontSize: 12, color: colors.muted, marginLeft: 4 }}>PKT</span>
         </div>
       </div>
@@ -180,7 +180,7 @@ function FlowBar({ tx }: { tx: TxDetailType }) {
           Total Output
         </div>
         <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 18, color: colors.green }}>
-          {(outTotal / 1e9).toFixed(4)}
+          {(outTotal / PACKETS_PER_PKT).toFixed(4)}
           <span style={{ fontSize: 12, color: colors.muted, marginLeft: 4 }}>PKT</span>
         </div>
       </div>
@@ -191,7 +191,7 @@ function FlowBar({ tx }: { tx: TxDetailType }) {
             Fee
           </div>
           <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 18, color: colors.purple }}>
-            {(fee / 1e9).toFixed(6)}
+            {(fee / PACKETS_PER_PKT).toFixed(6)}
             <span style={{ fontSize: 12, color: colors.muted, marginLeft: 4 }}>PKT</span>
           </div>
         </div>

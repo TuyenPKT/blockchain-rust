@@ -4,7 +4,7 @@ import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
-import { fetchBalance, fetchAddressUtxos, AddressUtxo } from "../api";
+import { fetchBalance, fetchAddressUtxos, AddressUtxo, PACKETS_PER_PKT } from "../api";
 
 interface WalletProps {
   nodeUrl: string;
@@ -155,8 +155,8 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
     setSending(true);
     setSendResult(null);
     try {
-      const amtSat  = Math.round(parseFloat(sendAmt)  * 1e9);
-      const feeSat  = Math.round(parseFloat(sendFee)  * 1e9);
+      const amtSat  = Math.round(parseFloat(sendAmt)  * PACKETS_PER_PKT);
+      const feeSat  = Math.round(parseFloat(sendFee)  * PACKETS_PER_PKT);
       if (!amtSat || amtSat <= 0) { setSendResult({ ok: false, msg: "Amount không hợp lệ" }); setSending(false); return; }
 
       const utxoData = await fetchAddressUtxos(nodeUrl, wallet.address);
@@ -215,7 +215,7 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
     setSending(false);
   }
 
-  const pkt = balance !== null ? (balance / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
+  const pkt = balance !== null ? (balance / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
 
   // ── No wallet ──
 

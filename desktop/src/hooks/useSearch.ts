@@ -1,6 +1,6 @@
 // useSearch.ts — v20.4: global search hook with debounce + localStorage recents
 import { useState, useRef, useCallback, useEffect } from "react";
-import { searchQuery } from "../api";
+import { searchQuery, PACKETS_PER_PKT } from "../api";
 
 const RECENT_KEY = "pktscan_recent_searches";
 const MAX_RECENTS = 8;
@@ -62,7 +62,7 @@ function parseResults(raw: unknown, q: string): SearchResultItem[] {
     items.push({
       raw: r, type: "address",
       label: String(r["address"]),
-      sub:   r["balance"] !== undefined ? `${r["balance"]} PKT` : "address",
+      sub:   r["balance"] !== undefined ? `${(Number(r["balance"]) / PACKETS_PER_PKT).toFixed(2)} PKT` : "address",
     });
   }
   // TX

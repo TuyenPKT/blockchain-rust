@@ -1,6 +1,9 @@
 // api.ts — IPC bridge to Tauri commands
 import { invoke } from "@tauri-apps/api/core";
 
+/** 1 PKT = 2^30 packets (not 10^9) */
+export const PACKETS_PER_PKT = 1_073_741_824;
+
 export interface NetworkSummary {
   height?:           number;
   hashrate?:         number;

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
-import { fetchBlockDetail, shortHash, timeAgo, type BlockDetail, type TxDetail } from "../api";
+import { fetchBlockDetail, shortHash, timeAgo, PACKETS_PER_PKT, type BlockDetail, type TxDetail } from "../api";
 
 interface BlockDetailProps {
   nodeUrl:   string;
@@ -93,7 +93,7 @@ function TxRow({ tx, onTx }: { tx: TxDetail; onTx: (txid: string) => void }) {
             color: colors.purple, padding: "2px 8px", borderRadius: 4,
             background: `${colors.purple}18`, border: `1px solid ${colors.purple}33`,
           }}>
-            fee {(tx.fee / 1e9).toFixed(6)} PKT
+            fee {(tx.fee / PACKETS_PER_PKT).toFixed(6)} PKT
           </span>
         </div>
       )}
@@ -101,7 +101,7 @@ function TxRow({ tx, onTx }: { tx: TxDetail; onTx: (txid: string) => void }) {
       {/* Total output */}
       <div style={{ textAlign: "right", flexShrink: 0, minWidth: 90 }}>
         <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13, color: colors.green }}>
-          {(outTotal / 1e9).toFixed(4)}
+          {(outTotal / PACKETS_PER_PKT).toFixed(4)}
         </div>
         <div style={{ fontSize: 10, color: colors.muted }}>PKT out</div>
       </div>
@@ -206,7 +206,7 @@ export function BlockDetail({ nodeUrl, height, onBack, onTx }: BlockDetailProps)
             )}
             {feeTotal !== undefined && (
               <div style={chipStyle(colors.purple)}>
-                fee {(feeTotal / 1e9).toFixed(4)} PKT
+                fee {(feeTotal / PACKETS_PER_PKT).toFixed(4)} PKT
               </div>
             )}
           </div>
@@ -239,7 +239,7 @@ export function BlockDetail({ nodeUrl, height, onBack, onTx }: BlockDetailProps)
               <MetaRow label="Size"       value={block.size ? `${block.size.toLocaleString()} bytes` : undefined} />
               <MetaRow label="Difficulty" value={block.difficulty !== undefined ? Number(block.difficulty).toExponential(3) : undefined} />
               <MetaRow label="Miner"      value={block.miner}      mono />
-              <MetaRow label="Total Fees" value={feeTotal !== undefined ? `${(feeTotal / 1e9).toFixed(6)} PKT` : undefined} accent />
+              <MetaRow label="Total Fees" value={feeTotal !== undefined ? `${(feeTotal / PACKETS_PER_PKT).toFixed(6)} PKT` : undefined} accent />
             </div>
           </Panel>
 

@@ -6,7 +6,7 @@ import { Panel } from "../components/Panel";
 import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
 import {
   fetchBalance, fetchAddressTxs, fetchAddressUtxos,
-  timeAgo, shortHash,
+  timeAgo, shortHash, PACKETS_PER_PKT,
   type AddressTx, type AddressUtxo,
 } from "../api";
 
@@ -134,7 +134,7 @@ function BalanceHero({
     });
   }
 
-  const pkt = (animated / 1e9).toFixed(4);
+  const pkt = (animated / PACKETS_PER_PKT).toFixed(4);
 
   return (
     <div style={{
@@ -264,7 +264,7 @@ function TxTable({
             )}
             {txs.map((tx, i) => {
               const id  = tx.txid ?? tx.hash ?? "—";
-              const amt = tx.amount !== undefined ? (tx.amount / 1e9).toFixed(4) : "—";
+              const amt = tx.amount !== undefined ? (tx.amount / PACKETS_PER_PKT).toFixed(4) : "—";
               const positive = (tx.amount ?? 0) >= 0;
               return (
                 <tr key={i} style={{ borderBottom: `1px solid ${colors.border}`, transition: "background .15s" }}
@@ -352,7 +352,7 @@ function UtxoList({ utxos, loading }: { utxos: AddressUtxo[]; loading: boolean }
             {utxos.length} unspent output{utxos.length !== 1 ? "s" : ""}
           </span>
           <span style={{ fontFamily: fonts.mono, fontSize: 13, color: colors.green, fontWeight: 700 }}>
-            {(total / 1e9).toFixed(4)} PKT
+            {(total / PACKETS_PER_PKT).toFixed(4)} PKT
           </span>
         </div>
       )}
@@ -388,7 +388,7 @@ function UtxoList({ utxos, loading }: { utxos: AddressUtxo[]; loading: boolean }
                   {u.vout ?? "—"}
                 </td>
                 <td style={{ padding: "11px 16px", fontFamily: fonts.mono, fontWeight: 700, color: colors.green }}>
-                  {u.amount !== undefined ? (u.amount / 1e9).toFixed(4) : "—"}
+                  {u.amount !== undefined ? (u.amount / PACKETS_PER_PKT).toFixed(4) : "—"}
                 </td>
                 <td style={{ padding: "11px 16px", fontFamily: fonts.mono, color: colors.accent }}>
                   {u.height !== undefined ? `#${u.height.toLocaleString()}` : "—"}

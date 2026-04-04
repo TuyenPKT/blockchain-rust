@@ -4,7 +4,7 @@ import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
-import { fetchSummary, fmtHashrate, type NetworkSummary } from "../api";
+import { fetchSummary, fmtHashrate, PACKETS_PER_PKT, type NetworkSummary } from "../api";
 
 interface NodeProps { nodeUrl: string; }
 
@@ -77,7 +77,7 @@ export function Node({ nodeUrl }: NodeProps) {
 
   function fmtPkt(sat: number) {
     if (!sat) return "—";
-    return (sat / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT";
+    return (sat / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT";
   }
 
   function shortHash(h: string) {
