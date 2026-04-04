@@ -1,43 +1,78 @@
-# Build artifacts
+# ── Rust ──────────────────────────────────────────────────────────────────────
 target/
+**/*.rs.bk
+# Cargo.lock is committed for binaries, ignored for libraries
+# This is a binary project — keep Cargo.lock tracked (remove this line if needed)
 
-# IDE / tools
+# ── IDE / tools ───────────────────────────────────────────────────────────────
 .claude/
 .idea/
 .vscode/
 *.iml
+*.swp
+*.swo
+*~
 
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
-# Rust
-**/*.rs.bk
-Cargo.lock
-
-# JS/TS SDK
-sdk-js/node_modules/
-sdk-js/dist/
-sdk-js/*.tsbuildinfo
-
-# Local data / wallets / keys
+# ── Secrets / credentials ─────────────────────────────────────────────────────
 *.key
 *.pem
 *.env
+.env
 .env.*
 *.secret
+api_keys.json
+secrets.json
+*.p12
+*.pfx
 
-# RocksDB / node data
-data/
-db/
-rocksdb/
+# ── Node / JS ─────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+*.tsbuildinfo
+.npm
+.yarn/cache
+.pnp.*
 
-# Desktop app build artifacts
+# ── Desktop (Tauri) ───────────────────────────────────────────────────────────
 desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+desktop/.tauri/
 
-# Logs
+# ── JS/TS SDK ─────────────────────────────────────────────────────────────────
+sdk-js/node_modules/
+sdk-js/dist/
+sdk-js/*.tsbuildinfo
+
+# ── RocksDB / node data ───────────────────────────────────────────────────────
+data/
+db/
+rocksdb/
+*.pkt/
+.pkt/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
+logs/
 audit.log
+npm-debug.log*
+yarn-debug.log*
+
+# ── Test / coverage ───────────────────────────────────────────────────────────
+coverage/
+*.lcov
+tarpaulin-report.html
+
+# ── Temp ──────────────────────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig
