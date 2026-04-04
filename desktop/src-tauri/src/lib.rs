@@ -261,16 +261,7 @@ async fn tx_broadcast(_node_url: String, raw_hex: String) -> Result<serde_json::
 
 // ── Sync control commands ──────────────────────────────────────────────────────
 
-/// POST to a node URL and return JSON, with graceful fallback for non-JSON bodies.
-async fn post_json(url: &str) -> Result<serde_json::Value, String> {
-    let resp = client()?.post(url).send().await.map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if text.is_empty() {
-        return Ok(serde_json::json!({"status": status.as_u16()}));
-    }
-    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
-}
+
 
 /// GET JSON with graceful fallback for non-JSON bodies.
 async fn get_json_safe(url: &str) -> Result<serde_json::Value, String> {

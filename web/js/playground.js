@@ -123,9 +123,17 @@ const ENDPOINTS = [
 // ── State ──────────────────────────────────────────────────────────────────────
 let currentEp = ENDPOINTS[0];
 
+// ── Base path (hỗ trợ deploy dưới sub-path như /blockchain-rust/) ──────────────
+function getBasePath() {
+  const m = window.location.pathname.match(/^(\/[^/]+\/)/);
+  if (m && m[1] !== '/') return m[1].replace(/\/$/, '');
+  return '';
+}
+
 // ── Build URL ──────────────────────────────────────────────────────────────────
 function buildApiUrl(ep, values) {
-  let path = ep.path;
+  const base = getBasePath();
+  let path = base + ep.path;
   const query = [];
   for (const p of ep.params) {
     const val = (values[p.name] || '').trim();
