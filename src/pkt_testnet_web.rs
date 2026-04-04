@@ -465,18 +465,29 @@ async fn ps_addr_by_base58(
     Path(addr):    Path<String>,
     Query(params): Query<AddrTxsParams>,
 ) -> impl IntoResponse {
-    let script = match address_to_script_hex(&addr) {
-        Some(s) => s,
-        None    => return (StatusCode::BAD_REQUEST,
-                           Json(json!({"error":"invalid address"}))).into_response(),
-    };
+    let script_wire   = any_addr_to_script_hex(&addr);
+    let script_legacy = any_addr_to_script_hex_legacy(&addr);
+    if script_wire.is_none() && script_legacy.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid address"}))).into_response();
+    }
     let adb = match ps.open_addr() {
         None    => return (StatusCode::SERVICE_UNAVAILABLE,
                            Json(json!({"error":"address index not ready"}))).into_response(),
         Some(d) => d,
     };
-    let balance = adb.get_balance(&script).unwrap_or(0);
-    let limit   = params.limit.unwrap_or(50).min(200);
+    // Thử wire format trước, fallback legacy nếu balance = 0
+    let (script, balance) = {
+        let wire_bal = script_wire.as_ref()
+            .map(|s| adb.get_balance(s).unwrap_or(0)).unwrap_or(0);
+        if wire_bal > 0 {
+            (script_wire.unwrap(), wire_bal)
+        } else {
+            let leg_script = script_legacy.unwrap_or_else(|| script_wire.unwrap_or_default());
+            let leg_bal = adb.get_balance(&leg_script).unwrap_or(0);
+            (leg_script, leg_bal)
+        }
+    };
+    let limit = params.limit.unwrap_or(50).min(200);
     let txs: Vec<_> = adb.get_tx_history(&script, params.cursor, limit)
         .unwrap_or_default()
         .iter()
