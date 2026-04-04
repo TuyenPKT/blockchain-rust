@@ -125,9 +125,15 @@ let currentEp = ENDPOINTS[0];
 
 // ── Base path (hỗ trợ deploy dưới sub-path như /blockchain-rust/) ──────────────
 function getBasePath() {
-  const m = window.location.pathname.match(/^(\/[^/]+\/)/);
-  if (m && m[1] !== '/') return m[1].replace(/\/$/, '');
-  return '';
+  // Lấy path của script này để suy ra base (vd: /blockchain-rust/js/playground.js → /blockchain-rust)
+  const scripts = document.querySelectorAll('script[src]');
+  for (const s of scripts) {
+    const m = s.src.match(/^https?:\/\/[^/]+(\/[^/]+)\/js\/playground\.js/);
+    if (m) return m[1];
+  }
+  // Fallback: từ pathname hiện tại
+  const m = window.location.pathname.match(/^(\/[^/]+)\//);
+  return (m && m[1] !== '') ? m[1] : '';
 }
 
 // ── Build URL ──────────────────────────────────────────────────────────────────
