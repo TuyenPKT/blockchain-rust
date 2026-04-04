@@ -144,7 +144,8 @@ function getValues(ep) {
   const v = {};
   for (const p of ep.params) {
     const el = document.getElementById(`p-${p.name}`);
-    v[p.name] = el ? el.value : '';
+    // Dùng placeholder làm default nếu input trống
+    v[p.name] = el ? (el.value.trim() || el.placeholder || '') : '';
   }
   return v;
 }
