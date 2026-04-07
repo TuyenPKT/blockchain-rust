@@ -65,8 +65,7 @@ pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
 
 // ── Genesis block ───────────────────────────────────────────────────────────
 
-/// Genesis block hash mainnet OCEIF — set sau khi chạy mine-genesis
-/// Placeholder cho đến khi mine xong
+/// Genesis block hash mainnet OCEIF — mined 2026-04-07
 /// Mined: cargo run -- mine-genesis "OCEIF mainnet genesis 2026 — ..."
 pub const MAINNET_GENESIS_HASH: &str =
     "00000ccc1a0ff73c2050c13af51956439c3c4f8be40c8e98753386f4a4f896d2";

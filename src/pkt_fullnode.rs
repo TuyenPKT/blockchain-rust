@@ -24,6 +24,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// Recover from Mutex PoisonError thay vì panic.
+macro_rules! lock_or_recover {
+    ($mutex:expr) => {
+        $mutex.lock().unwrap_or_else(|p| p.into_inner())
+    };
+}
+
 const DEFAULT_PORT:         u16  = 8081;
 const DEFAULT_PEER:         &str = "seed.testnet.oceif.com:8333";
 const WATCHER_INTERVAL_SECS: u64 = 10;
@@ -104,7 +111,7 @@ fn start_watcher(
                 std::thread::sleep(Duration::from_secs(WATCHER_INTERVAL_SECS));
 
                 let status_str = {
-                    let mut g = child.lock().unwrap();
+                    let mut g = lock_or_recover!(child);
                     g.try_wait().ok().flatten().map(|s| s.to_string())
                 };
 
@@ -116,7 +123,7 @@ fn start_watcher(
                     match spawn_sync_process(&peer, mainnet) {
                         Ok(new_child) => {
                             println!("[fullnode] sync restarted — pid={}", new_child.id());
-                            *child.lock().unwrap() = new_child;
+                            *lock_or_recover!(child) = new_child;
                         }
                         Err(e) => eprintln!("[fullnode] respawn failed: {}", e),
                     }
@@ -157,8 +164,8 @@ pub fn cmd_fullnode(args: &[String]) {
     rt.block_on(crate::pktscan_api::serve(db, cfg.port));
 
     // 4. Cleanup: kill sync on exit
-    let _ = sync_child.lock().unwrap().kill();
-    let _ = sync_child.lock().unwrap().wait();
+    let _ = lock_or_recover!(sync_child).kill();
+    let _ = lock_or_recover!(sync_child).wait();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

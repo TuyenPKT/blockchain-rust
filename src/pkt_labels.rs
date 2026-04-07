@@ -40,8 +40,6 @@ pub static PRESETS: &[(&str, &str, &str, bool)] = &[
     ("pSEHPyBk", "OCEIF Treasury",      "system",   true),
     // OCEIF mining pool v1 (mainnet)
     ("p7LMkZBs", "OCEIF Pool v1",       "miner",    true),
-    // Testnet genesis coinbase recipient (placeholder — replace when known)
-    ("pGTESTNE", "Testnet Genesis",      "system",   true),
     // Common burn pattern: address starting with all-zero hash160
     // Represented as first character after version byte being "1" in base58
     ("p111111",  "Burn Address",         "burn",     true),
