@@ -20,7 +20,7 @@ jobs:
       cli:     ${{ steps.detect.outputs.cli }}
       desktop: ${{ steps.detect.outputs.desktop }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2   # cần commit trước để so sánh
       - name: Detect changed paths
@@ -56,7 +56,7 @@ jobs:
     name: Rust tests (blockchain-rust)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
       - name: Install system deps
@@ -74,7 +74,7 @@ jobs:
     name: TypeScript strict check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -93,7 +93,7 @@ jobs:
     name: Rust build (pktscan-desktop)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
       - name: Install system deps
@@ -139,7 +139,7 @@ jobs:
             rust-targets: "x86_64-unknown-linux-gnu"
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-targets }}
