@@ -19,6 +19,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::thread;
 
+/// Lock a Mutex, recovering from poison by using the inner value.
+/// A poisoned Mutex means another thread panicked while holding the lock —
+/// the data may be in an inconsistent state, but for node operations
+/// (read chain, update peer list) it is safer to continue than to crash.
+macro_rules! lock_or_recover {
+    ($mutex:expr) => {
+        $mutex.lock().unwrap_or_else(|p| p.into_inner())
+    };
+}
+
 use crate::pkt_wire::{PktMsg, VersionMsg, TESTNET_MAGIC, MAINNET_MAGIC, PROTOCOL_VERSION};
 use crate::pkt_peer::{send_msg, recv_msg, PeerError};
 use crate::pkt_relay::{RelayHub, SeenHashes, wire_block_hash};
@@ -260,7 +270,7 @@ fn handle_peer(
     );
 
     {
-        let mut locked = peers.lock().unwrap();
+        let mut locked = lock_or_recover!(peers);
         locked.push(peer.clone());
         println!("[pkt-node] total peers: {}", locked.len());
     }
@@ -298,7 +308,7 @@ fn handle_peer(
     // SeenHashes: seed từ BLAKE3 hashes hiện tại của chain (dạng bytes).
     let mut seen: SeenHashes = SeenHashes::new(8192);
     {
-        let bc = chain.lock().unwrap();
+        let bc = lock_or_recover!(chain);
         for blk in &bc.chain {
             if let Ok(bytes) = hex::decode(&blk.hash) {
                 if bytes.len() == 32 {
@@ -326,7 +336,7 @@ fn handle_peer(
                     // NOT our BLAKE3 block hashes. Must walk chain computing wire hashes
                     // to find the correct resume point.
                     let headers = {
-                        let bc = chain.lock().unwrap();
+                        let bc = lock_or_recover!(chain);
                         let locator_set: std::collections::HashSet<[u8; 32]> =
                             locator_hashes.iter().copied().collect();
 
@@ -358,7 +368,7 @@ fn handle_peer(
                     println!("[pkt-node] → Headers({}) to {}", count, addr);
                 }
                 PktMsg::GetData { items } => {
-                    let bc = chain.lock().unwrap();
+                    let bc = lock_or_recover!(chain);
                     for item in &items {
                         if item.inv_type != crate::pkt_wire::INV_MSG_BLOCK { continue; }
                         // Find block by wire hash: walk chain computing SHA256d wire hashes
@@ -394,7 +404,7 @@ fn handle_peer(
                 PktMsg::GetAddr => {
                     // Respond with Addr containing currently connected peers
                     let peer_addrs: Vec<crate::pkt_wire::NetAddr> = {
-                        let locked = peers.lock().unwrap();
+                        let locked = lock_or_recover!(peers);
                         locked.iter()
                             .filter_map(|p| crate::pkt_wire::NetAddr::from_addr_str(&p.addr))
                             .collect()
@@ -488,7 +498,7 @@ fn handle_peer(
 
     // Remove peer from active list + relay hub
     {
-        let mut locked = peers.lock().unwrap();
+        let mut locked = lock_or_recover!(peers);
         locked.retain(|p| p.addr != addr);
         println!("[pkt-node] total peers: {}", locked.len());
     }
@@ -615,7 +625,7 @@ fn handle_template_client(
         let msg  = match Message::deserialize(line.as_bytes()) { Some(m) => m, None => break };
         let reply = match msg {
             Message::GetTemplate => {
-                let bc       = chain.lock().unwrap();
+                let bc       = lock_or_recover!(chain);
                 let height   = bc.chain.len() as u64;
                 let prev     = bc.chain.last().map(|b| b.hash.clone())
                                 .unwrap_or_else(|| "0".repeat(64));
@@ -644,11 +654,11 @@ fn handle_template_client(
             Message::NewBlock { block } => {
                 // Lấy BLAKE3 hash trước khi commit để relay
                 let block_hash_hex = block.hash.clone();
-                let mut bc = chain.lock().unwrap();
+                let mut bc = lock_or_recover!(chain);
                 bc.commit_mined_block(block);
                 let h = bc.chain.len() as u64;
                 drop(bc);
-                if let Err(e) = crate::storage::save_blockchain(&chain.lock().unwrap()) {
+                if let Err(e) = crate::storage::save_blockchain(&lock_or_recover!(chain)) {
                     eprintln!("[template] save error: {}", e);
                 }
                 // Relay block hash tới tất cả connected peers
@@ -666,7 +676,7 @@ fn handle_template_client(
                 Message::Height { height: h }
             }
             Message::GetBlocks { from_index } => {
-                let bc = chain.lock().unwrap();
+                let bc = lock_or_recover!(chain);
                 let blocks = bc.chain.iter()
                     .skip(from_index as usize)
                     .cloned()
@@ -700,7 +710,7 @@ pub fn cmd_pkt_node(args: &[String]) {
     let cfg   = parse_node_args(args);
     let chain = Arc::new(Mutex::new(crate::storage::load_or_new()));
     {
-        let bc = chain.lock().unwrap();
+        let bc = lock_or_recover!(chain);
         println!("[pkt-node] starting on port {} ({})", cfg.port, cfg.network);
         println!("[pkt-node] chain loaded: height={}", bc.chain.len().saturating_sub(1));
     }
