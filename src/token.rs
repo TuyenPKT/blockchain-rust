@@ -202,7 +202,7 @@ impl TokenRegistry {
 
 pub fn cmd_token_info() {
     let mut registry = TokenRegistry::new();
-    registry.create_token("PKT", "PacketCrypt Token", "PKT", 9, 21_000_000_000_000_000, "alice").unwrap();
+    registry.create_token("PKT", "PKT Token", "PKT", 9, 21_000_000_000_000_000, "alice").unwrap();
     println!("=== Token Info ===");
     let token = registry.tokens.get("PKT").unwrap();
     println!("Name:         {}", token.name);

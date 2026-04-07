@@ -1,14 +1,12 @@
 #![allow(dead_code)]
 //! v13.2 — PKT Bandwidth Incentive Layer
 //!
-//! PKT Cash khuyến khích routing bandwidth thật sự qua mạng:
+//! OCEIF Bandwidth Incentive Layer — khuyến khích routing bandwidth thật sự qua mạng:
 //!   - Nodes submit `BandwidthProof` — chứng minh đã route packets
 //!   - `AnnouncerPool` tích lũy reward từ block reward
 //!   - Cuối mỗi epoch, pool phân phối reward tỉ lệ theo bytes đã route
 //!   - `RouteAnnouncement` — node công bố khả năng routing đến destination
 //!   - `BandwidthLedger` — per-node accounting: packets, bytes, earned
-//!
-//! Tham chiếu: https://pkt.cash/docs/pkt-cash-whitepaper.pdf
 
 use std::collections::HashMap;
 

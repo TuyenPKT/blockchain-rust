@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-/// v4.1 — PacketCrypt PoW (simplified educational implementation)
+/// v4.1 — OCEIF PoW (bandwidth-hard announcement mining)
 ///
-/// PacketCrypt là thuật toán PoW bandwidth-hard của PKT Cash.
+/// Thuật toán PoW bandwidth-hard của OCEIF network.
 ///
 /// Cơ chế:
 ///   1. Announcement Miners tạo "announcements" — mỗi ann prove computation + bandwidth
@@ -10,8 +10,6 @@
 ///   3. Càng nhiều announcements → độ khó block càng giảm
 ///      effective_bits = base_bits - floor(log2(ann_count + 1))
 ///   4. Block hash commit vào announcement Merkle root
-///
-/// Tham chiếu: https://github.com/cjdelisle/PacketCrypt
 
 
 // ─── Difficulty helpers ────────────────────────────────────────────────────────
@@ -72,7 +70,7 @@ impl Announcement {
     /// Tính hash của announcement (không dùng stored work_hash)
     pub fn compute_hash(parent: &[u8; 32], key: &[u8; 32], nonce: u64) -> [u8; 32] {
         let mut h = blake3::Hasher::new();
-        h.update(b"PacketCrypt_Ann_v1:");
+        h.update(b"OCEIF_Ann_v1:");
         h.update(parent);
         h.update(key);
         h.update(&nonce.to_le_bytes());
@@ -214,7 +212,7 @@ impl PcBlock {
         nonce: u64,
     ) -> String {
         let mut h = blake3::Hasher::new();
-        h.update(b"PacketCrypt_Block_v1:");
+        h.update(b"OCEIF_Block_v1:");
         h.update(&height.to_le_bytes());
         h.update(prev_hash.as_bytes());
         h.update(miner_address.as_bytes());

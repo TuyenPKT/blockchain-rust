@@ -136,7 +136,7 @@ pub fn default_registry() -> MultiChainRegistry {
     reg.register(pkt, ChainMeta {
         chain_type:  ChainType::Pkt,
         rpc_url:     Some("https://oceif.com/blockchain-rust/api".into()),
-        description: "PKT Cash mainnet".into(),
+        description: "PKT Mainnet (OCEIF)".into(),
     });
 
     // ETH chain (light client mirror)
@@ -191,7 +191,7 @@ fn setup_pkt_eth_ibc(reg: &mut MultiChainRegistry) {
     reg.chains.insert("pkt-mainnet".into(), (pkt_back, ChainMeta {
         chain_type:  ChainType::Pkt,
         rpc_url:     Some("https://oceif.com/blockchain-rust/api".into()),
-        description: "PKT Cash mainnet".into(),
+        description: "PKT Mainnet (OCEIF)".into(),
     }));
     reg.chains.insert("eth-mainnet".into(), (eth_back, ChainMeta {
         chain_type:  ChainType::Ethereum,

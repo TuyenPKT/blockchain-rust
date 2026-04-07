@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! v13.3 — PKT Address Format
 //!
-//! Bech32/Bech32m encoding cho PKT Cash addresses (không cần crate ngoài):
+//! Bech32/Bech32m encoding cho PKT addresses (không cần crate ngoài):
 //!   - HRP "pkt"  → PKT mainnet
 //!   - HRP "tpkt" → PKT testnet
 //!   - HRP "rpkt" → PKT regtest

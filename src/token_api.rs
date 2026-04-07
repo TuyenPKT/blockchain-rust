@@ -220,7 +220,7 @@ mod tests {
 
     fn populated_db() -> TokenDb {
         let mut reg = TokenRegistry::new();
-        reg.create_token("PKT", "PacketCrypt", "PKT", 9, 1_000_000, "alice").unwrap();
+        reg.create_token("PKT", "PKT Token", "PKT", 9, 1_000_000, "alice").unwrap();
         reg.create_token("USDT", "Tether USD", "USDT", 6, 5_000_000, "bob").unwrap();
         reg.mint("PKT", "charlie", 50_000).unwrap();
         reg.mint("PKT", "dave", 10_000).unwrap();

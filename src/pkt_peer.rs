@@ -753,7 +753,7 @@ mod tests {
         let info = PeerInfo {
             addr: "127.0.0.1:64765".to_string(),
             version: 70015,
-            user_agent: "/pktd:1.6.1/".to_string(),
+            user_agent: "/pktscan:1.0/".to_string(),
             start_height: 850000,
             services: 1,
         };

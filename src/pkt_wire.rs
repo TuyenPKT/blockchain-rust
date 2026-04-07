@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! v15.0 — PKT Wire Protocol
 //!
-//! Implement pktd P2P message format (dựa trên Bitcoin wire protocol).
+//! PKT Wire Protocol — P2P message format (dựa trên Bitcoin wire protocol).
 //!
 //! Message frame:
 //!   [4 bytes magic] [12 bytes command] [4 bytes length LE] [4 bytes checksum] [payload]
@@ -11,23 +11,22 @@
 //! VarInt   = Bitcoin compact integer encoding
 //!
 //! Tài liệu: https://en.bitcoin.it/wiki/Protocol_documentation
-//! PKT fork: pktd (github.com/pkt-cash/pktd) — magic bytes PKT-specific
 
 use sha2::{Digest, Sha256};
 
 // ── Network magic bytes ───────────────────────────────────────────────────────
 
 /// PKT testnet magic — PktTestNet = 0x070911fc (little-endian on wire)
-/// Source: pkt-cash/pktd wire/protocol/protocol.go
+/// PKT OCEIF wire protocol constants
 pub const TESTNET_MAGIC: [u8; 4] = [0xfc, 0x11, 0x09, 0x07];
 
 /// PKT mainnet magic — PktMainNet = 0x082f00fc (little-endian on wire)
-/// Source: pkt-cash/pktd wire/protocol/protocol.go
+/// PKT OCEIF wire protocol constants
 pub const MAINNET_MAGIC: [u8; 4] = [0xfc, 0x00, 0x2f, 0x08];
 
 // ── Protocol constants ────────────────────────────────────────────────────────
 
-/// PKT protocol version — Source: pkt-cash/pktd wire/protocol/protocol.go
+/// PKT protocol version
 pub const PROTOCOL_VERSION: u32 = 70013;
 pub const SERVICES_NODE:    u64 = 1;      // NODE_NETWORK
 pub const COMMAND_LEN:      usize = 12;

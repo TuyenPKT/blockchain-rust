@@ -238,7 +238,7 @@ fn print_help() {
     println!("    cargo run -- token balance  <id> <address>");
     println!();
     println!("  Examples:");
-    println!("    cargo run -- token create PKT 'PacketCrypt' PKT 9 21000000000000000 myaddr");
+    println!("    cargo run -- token create PKT 'PKT Token' PKT 9 21000000000000000 myaddr");
     println!("    cargo run -- token mint   PKT myaddr 1000000000");
     println!("    cargo run -- token transfer PKT myaddr friendaddr 500000000");
     println!("    cargo run -- token balance PKT myaddr");
@@ -255,7 +255,7 @@ mod tests {
 
     fn make_registry() -> TokenRegistry {
         let mut reg = TokenRegistry::new();
-        reg.create_token("PKT", "PacketCrypt", "PKT", 9, 1_000_000_000, "owner1")
+        reg.create_token("PKT", "PKT Token", "PKT", 9, 1_000_000_000, "owner1")
             .unwrap();
         reg
     }

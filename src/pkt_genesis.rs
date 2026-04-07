@@ -1,15 +1,12 @@
 #![allow(dead_code)]
 //! v13.4 — PKT Testnet Genesis Params
 //!
-//! Định nghĩa các tham số mạng PKT Cash:
+//! Định nghĩa các tham số mạng PKT (OCEIF):
 //!   - Đơn vị tiền: paklet (1 PKT = 2^30 paklets)
 //!   - Block reward: 4096 PKT/block, giảm 50% mỗi 1,048,576 blocks (~2 năm)
 //!   - Block time: 60 giây
-//!   - Network Steward nhận 20% block reward (pkt_steward.rs)
+//!   - Treasury nhận 20% block reward (pkt_steward.rs)
 //!   - Mainnet, testnet, regtest đều có magic bytes và port riêng
-//!
-//! Tham chiếu: https://pkt.cash/pkt-cash/
-//!             https://github.com/pkt-cash/pktd
 
 // ── Coin params ─────────────────────────────────────────────────────────────
 
@@ -66,7 +63,7 @@ pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
 
 // ── Genesis block ───────────────────────────────────────────────────────────
 
-/// Genesis block hash PKT mainnet (placeholder — hash thật từ pktd source)
+/// Genesis block hash PKT mainnet (placeholder — cần mine genesis block thật)
 pub const MAINNET_GENESIS_HASH: &str =
     "000000000000000000000000000000000000000000000000000000000000001a";
 

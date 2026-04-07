@@ -136,7 +136,7 @@ impl Simulator {
 
 pub fn cmd_economics_demo() {
     let economics = TokenEconomics {
-        name: "PacketCrypt".to_string(),
+        name: "PKT".to_string(),
         symbol: "PKT".to_string(),
         max_supply: 21_000_000 * 1_000_000_000u128,
         current_supply: 0,

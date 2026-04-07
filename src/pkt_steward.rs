@@ -1,13 +1,11 @@
 #![allow(dead_code)]
 //! v13.1 — PKT Network Steward
 //!
-//! Network Steward là cơ chế quản trị đặc thù của PKT Cash:
-//!   - Một phần block reward (STEWARD_REWARD_PCT%) gửi đến địa chỉ steward
-//!   - Miners vote để thay đổi steward bằng cách ghi địa chỉ vào coinbase
-//!   - Khi candidate đạt VOTE_THRESHOLD trong VOTE_WINDOW blocks → trở thành steward mới
-//!   - Steward hiện tại có thể "burn" funds (gửi về địa chỉ đặc biệt) thay vì tích lũy
-//!
-//! Tham chiếu: https://pkt.cash/network-steward/
+//! Treasury Steward — cơ chế quản trị OCEIF:
+//!   - Một phần block reward (STEWARD_REWARD_PCT%) gửi đến địa chỉ treasury
+//!   - Miners vote để thay đổi treasury bằng cách ghi địa chỉ vào coinbase
+//!   - Khi candidate đạt VOTE_THRESHOLD trong VOTE_WINDOW blocks → trở thành treasury mới
+//!   - Treasury hiện tại có thể "burn" funds (gửi về địa chỉ đặc biệt) thay vì tích lũy
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

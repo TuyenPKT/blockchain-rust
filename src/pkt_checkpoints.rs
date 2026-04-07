@@ -8,8 +8,7 @@
 //!
 //! Wire hash = SHA256d(80-byte header) — giống Bitcoin, khác với BLAKE3 internal hash.
 //!
-//! Checkpoints PKT Testnet lấy từ pkt-cash/pktd:
-//!   https://github.com/pkt-cash/pktd/blob/master/chaincfg/chaincfg.go
+//! Checkpoints PKT Testnet (OCEIF network):
 
 use crate::pkt_wire::WireBlockHeader;
 

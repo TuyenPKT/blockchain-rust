@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-//! v13.0 — PacketCrypt PoW (spec-accurate)
+//! v13.0 — OCEIF PoW (bandwidth-hard announcement mining)
 //!
 //! Cải tiến so với v4.1 (educational):
 //!   - Compact target (nBits) như Bitcoin thay vì leading-zero bits
@@ -8,8 +8,6 @@
 //!   - Ann content items: memory-hard proof (PKT_ANN_ITEM_COUNT items × 4 bytes)
 //!   - Ann header hash đúng layout spec
 //!   - Effective target tính từ compact target thay vì simple bit shift
-//!
-//! Tham chiếu: https://github.com/cjdelisle/PacketCrypt/blob/master/docs/pcann_spec.md
 
 // ── PKT Constants ──────────────────────────────────────────────────────────────
 
@@ -22,9 +20,9 @@ pub const PKT_ANN_ITEM_COUNT: u32 = 4096;
 /// Ann version hiện tại
 pub const PKT_ANN_VERSION: u8 = 0;
 /// Domain separator cho ann header hash
-pub const PKT_ANN_DOMAIN: &[u8] = b"PacketCrypt_Ann_v1:";
+pub const PKT_ANN_DOMAIN: &[u8] = b"OCEIF_Ann_v1:";
 /// Domain separator cho block header hash
-pub const PKT_BLOCK_DOMAIN: &[u8] = b"PacketCrypt_Block_v1:";
+pub const PKT_BLOCK_DOMAIN: &[u8] = b"OCEIF_Block_v1:";
 
 // ── Compact Target (nBits) ─────────────────────────────────────────────────────
 //

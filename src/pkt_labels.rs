@@ -36,10 +36,10 @@ pub struct LabelEntry {
 // Tuple: (address_prefix, label, category, verified)
 
 pub static PRESETS: &[(&str, &str, &str, bool)] = &[
-    // PKT Network Steward — treasury/burn address (mainnet)
-    ("pSEHPyBk", "PKT Network Steward", "system",   true),
-    // PacketCrypt v1 mining pool (mainnet)
-    ("p7LMkZBs", "PacketCrypt Pool v1",  "miner",    true),
+    // OCEIF treasury address (mainnet)
+    ("pSEHPyBk", "OCEIF Treasury",      "system",   true),
+    // OCEIF mining pool v1 (mainnet)
+    ("p7LMkZBs", "OCEIF Pool v1",       "miner",    true),
     // Testnet genesis coinbase recipient (placeholder — replace when known)
     ("pGTESTNE", "Testnet Genesis",      "system",   true),
     // Common burn pattern: address starting with all-zero hash160

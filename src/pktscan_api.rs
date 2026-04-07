@@ -839,7 +839,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     let token_db: token_api::TokenDb = StdArc::new(tokio::sync::Mutex::new({
         let mut reg = TokenRegistry::new();
         let _ = reg.create_token(
-            "PKT", "PacketCrypt Token", "PKT", 9,
+            "PKT", "PKT Token", "PKT", 9,
             21_000_000_000_000_000u128, "genesis",
         );
         reg
