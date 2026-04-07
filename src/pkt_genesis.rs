@@ -55,14 +55,11 @@ pub const REGTEST_RPC_PORT:  u16 = 18443;
 // ── Bootstrap peers ─────────────────────────────────────────────────────────
 
 pub const MAINNET_BOOTSTRAP_PEERS: &[&str] = &[
-    "seed.pkt.cash:64764",
-    "seed2.pkt.cash:64764",
-    "seed3.pkt.cash:64764",
+    "seed.oceif.com:64764",
 ];
 
 pub const TESTNET_BOOTSTRAP_PEERS: &[&str] = &[
-    "testnet-seed.pkt.cash:64765",
-    "testnet-seed2.pkt.cash:64765",
+    "seed.testnet.oceif.com:8333",
 ];
 
 pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
