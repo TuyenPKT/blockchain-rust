@@ -54,36 +54,24 @@ const fn hex_byte(hi: u8, lo: u8) -> u8 {
 // Thêm checkpoint mới khi chain dài hơn — mỗi ~50,000 blocks là hợp lý.
 // Hash là SHA256d của 80-byte header, big-endian (display format).
 
+// Thêm checkpoint mới khi chain đạt ~50,000 blocks:
+//   1. Lấy hash: curl http://localhost:8081/api/testnet/block/<height> | jq .hash
+//   2. Thêm Checkpoint::from_hex(height, b"<hash>") vào đây
+//   3. cargo test && git commit && git push
+
 pub const TESTNET_CHECKPOINTS: &[Checkpoint] = &[
-    // height 0 = genesis
+    // height 0 = genesis OCEIF testnet (mined 2026-04-07)
     Checkpoint::from_hex(
         0,
-        b"000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943",
-    ),
-    // height 100_000
-    Checkpoint::from_hex(
-        100_000,
-        b"000000000001f26d0ea20c9f4bc0c74e5d9e5c8e88f7e5a5b1a1a5b5c5d5e05f",
-    ),
-    // height 200_000
-    Checkpoint::from_hex(
-        200_000,
-        b"000000000002e4d8b6a3c9f1bc2c84e5d9e5c8e88f7e5a5b1a1a5b5c5d5e06ff",
+        b"00da8943f3f7684e0b8dac45d18978666773411d6c6a818b7bd75ea1f31cc970",
     ),
 ];
 
 pub const MAINNET_CHECKPOINTS: &[Checkpoint] = &[
+    // height 0 = genesis OCEIF mainnet (mined 2026-04-07)
     Checkpoint::from_hex(
         0,
-        b"000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
-    ),
-    Checkpoint::from_hex(
-        100_000,
-        b"000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506",
-    ),
-    Checkpoint::from_hex(
-        500_000,
-        b"00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04",
+        b"00000ccc1a0ff73c2050c13af51956439c3c4f8be40c8e98753386f4a4f896d2",
     ),
 ];
 
@@ -399,14 +387,16 @@ mod tests {
 
     #[test]
     fn from_hex_parses_genesis() {
+        // OCEIF mainnet genesis hash
         let cp = Checkpoint::from_hex(
             0,
-            b"000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+            b"00000ccc1a0ff73c2050c13af51956439c3c4f8be40c8e98753386f4a4f896d2",
         );
         assert_eq!(cp.height, 0);
         assert_eq!(cp.hash[0], 0x00);
-        assert_eq!(cp.hash[30], 0xe2);
-        assert_eq!(cp.hash[31], 0x6f);
+        assert_eq!(cp.hash[1], 0x00);
+        assert_eq!(cp.hash[2], 0x0c);
+        assert_eq!(cp.hash[31], 0xd2);
     }
 
     // ── IbdBlockAction equality ───────────────────────────────────────────────

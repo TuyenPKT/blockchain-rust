@@ -67,30 +67,26 @@ pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
 
 /// Genesis block hash mainnet OCEIF — set sau khi chạy mine-genesis
 /// Placeholder cho đến khi mine xong
+/// Mined: cargo run -- mine-genesis "OCEIF mainnet genesis 2026 — ..."
 pub const MAINNET_GENESIS_HASH: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
-pub const MAINNET_GENESIS_NONCE: u32 = 0;
-pub const MAINNET_GENESIS_BITS:  u32 = 0x1f00ffff; // initial difficulty — easy start
+    "00000ccc1a0ff73c2050c13af51956439c3c4f8be40c8e98753386f4a4f896d2";
+pub const MAINNET_GENESIS_NONCE: u32 = 190223;
+pub const MAINNET_GENESIS_BITS:  u32 = 0x1f00ffff;
+pub const MAINNET_GENESIS_TIME:  u64 = 1_775_526_006; // 2026-04-07T01:40:06Z
 
-/// Genesis block hash testnet OCEIF — set sau khi chạy mine-genesis --testnet
+/// Mined: cargo run -- mine-genesis --testnet "OCEIF testnet genesis 2026"
 pub const TESTNET_GENESIS_HASH: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
-pub const TESTNET_GENESIS_NONCE: u32 = 0;
-pub const TESTNET_GENESIS_BITS:  u32 = 0x2000ffff; // testnet rất dễ
+    "00da8943f3f7684e0b8dac45d18978666773411d6c6a818b7bd75ea1f31cc970";
+pub const TESTNET_GENESIS_NONCE: u32 = 156;
+pub const TESTNET_GENESIS_BITS:  u32 = 0x2000ffff;
+pub const TESTNET_GENESIS_TIME:  u64 = 1_775_528_821; // 2026-04-07T02:27:01Z
 
-/// Regtest genesis — nonce 0 luôn đủ vì bits = max
+/// Mined: cargo run -- mine-genesis --bits 0x207fffff "OCEIF regtest genesis 2026"
 pub const REGTEST_GENESIS_HASH: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
-pub const REGTEST_GENESIS_BITS: u32 = 0x207fffff;
-
-/// UNIX timestamp genesis mainnet OCEIF — 2026-04-07T00:00:00Z
-pub const MAINNET_GENESIS_TIME: u64 = 1_744_156_800;
-
-/// UNIX timestamp genesis testnet
-pub const TESTNET_GENESIS_TIME: u64 = 1_744_156_801;
-
-/// UNIX timestamp regtest genesis (không cố định — dùng khi test)
-pub const REGTEST_GENESIS_TIME: u64 = 1_296_688_602; // giống Bitcoin regtest
+    "357e6f921e94a9952e2b0c83bbe14ea2076fde7c20886f481c021206b8764e14";
+pub const REGTEST_GENESIS_NONCE: u32 = 1;
+pub const REGTEST_GENESIS_BITS:  u32 = 0x207fffff;
+pub const REGTEST_GENESIS_TIME:  u64 = 1_775_528_821; // 2026-04-07T02:27:01Z
 
 // ── Network params struct ───────────────────────────────────────────────────
 
