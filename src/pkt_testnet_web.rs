@@ -50,6 +50,25 @@ async fn ps_sync_start(
     Query(params): Query<SyncStartParams>,
 ) -> impl IntoResponse {
     let peer = params.peer.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+    // Validate peer format: hostname:port — chặn ký tự đặc biệt
+    {
+        static PEER_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re = PEER_RE.get_or_init(|| {
+            regex::Regex::new(r"^[a-zA-Z0-9.\-]{1,253}:\d{1,5}$").unwrap()
+        });
+        if !re.is_match(&peer) {
+            return (StatusCode::BAD_REQUEST,
+                Json(json!({"error": "invalid peer format, expected host:port"}))).into_response();
+        }
+        // Validate port range
+        if let Some(port_str) = peer.split(':').last() {
+            let port: u32 = port_str.parse().unwrap_or(0);
+            if port == 0 || port > 65535 {
+                return (StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "port out of range (1-65535)"}))).into_response();
+            }
+        }
+    }
     let mut guard = match SYNC_CHILD.lock() {
         Ok(g) => g,
         Err(_) => return Json(json!({"error": "lock poisoned"})).into_response(),

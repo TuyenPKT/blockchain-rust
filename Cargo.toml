@@ -54,6 +54,8 @@ async-graphql = { version = "7", features = ["tracing"] }
 reqwest     = { workspace = true }
 # v5.6: property-based testing
 proptest = { version = "1.4", optional = true }
+# security: peer param validation
+regex = "1.11"
 # v5.7: structured logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
