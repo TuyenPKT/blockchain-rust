@@ -8,6 +8,8 @@
 //!   - Treasury nhận 20% block reward (pkt_steward.rs)
 //!   - Mainnet, testnet, regtest đều có magic bytes và port riêng
 
+use crate::pkt_sync::{compact_target_to_bytes, hash_meets_target};
+
 // ── Coin params ─────────────────────────────────────────────────────────────
 
 /// 1 PKT = 2^30 paklets (đơn vị cơ bản không chia được)
@@ -63,23 +65,29 @@ pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
 
 // ── Genesis block ───────────────────────────────────────────────────────────
 
-/// Genesis block hash PKT mainnet (placeholder — cần mine genesis block thật)
+/// Genesis block hash mainnet OCEIF — set sau khi chạy mine-genesis
+/// Placeholder cho đến khi mine xong
 pub const MAINNET_GENESIS_HASH: &str =
-    "000000000000000000000000000000000000000000000000000000000000001a";
+    "0000000000000000000000000000000000000000000000000000000000000000";
+pub const MAINNET_GENESIS_NONCE: u32 = 0;
+pub const MAINNET_GENESIS_BITS:  u32 = 0x1f00ffff; // initial difficulty — easy start
 
-/// Genesis block hash PKT testnet (placeholder)
+/// Genesis block hash testnet OCEIF — set sau khi chạy mine-genesis --testnet
 pub const TESTNET_GENESIS_HASH: &str =
-    "000000000000000000000000000000000000000000000000000000000000002b";
+    "0000000000000000000000000000000000000000000000000000000000000000";
+pub const TESTNET_GENESIS_NONCE: u32 = 0;
+pub const TESTNET_GENESIS_BITS:  u32 = 0x2000ffff; // testnet rất dễ
 
-/// Genesis block hash regtest (all-zero — mỗi lần chạy có thể khác nhau)
+/// Regtest genesis — nonce 0 luôn đủ vì bits = max
 pub const REGTEST_GENESIS_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
+pub const REGTEST_GENESIS_BITS: u32 = 0x207fffff;
 
-/// UNIX timestamp genesis block mainnet PKT (2019-08-19T00:00:00Z)
-pub const MAINNET_GENESIS_TIME: u64 = 1_566_172_800;
+/// UNIX timestamp genesis mainnet OCEIF — 2026-04-07T00:00:00Z
+pub const MAINNET_GENESIS_TIME: u64 = 1_744_156_800;
 
-/// UNIX timestamp genesis block testnet
-pub const TESTNET_GENESIS_TIME: u64 = 1_566_172_801;
+/// UNIX timestamp genesis testnet
+pub const TESTNET_GENESIS_TIME: u64 = 1_744_156_801;
 
 /// UNIX timestamp regtest genesis (không cố định — dùng khi test)
 pub const REGTEST_GENESIS_TIME: u64 = 1_296_688_602; // giống Bitcoin regtest
@@ -249,6 +257,97 @@ impl PktGenesisBlock {
         }
         Ok(())
     }
+}
+
+// ── Genesis block miner ─────────────────────────────────────────────────────
+
+/// Kết quả sau khi mine genesis block thành công
+#[derive(Debug, Clone)]
+pub struct MinedGenesis {
+    pub nonce:     u32,
+    pub hash_hex:  String,  // display order (reversed)
+    pub hash_raw:  [u8; 32], // SHA256d raw
+    pub header:    [u8; 80],
+    pub bits:      u32,
+    pub timestamp: u32,
+    pub merkle_root: [u8; 32],
+}
+
+/// Mine genesis block với difficulty `bits`.
+/// Genesis: prev_block = 0, merkle_root = SHA256d(message), version = 1.
+/// Trả về sau khi tìm được nonce hợp lệ.
+pub fn mine_genesis(bits: u32, timestamp: u32, message: &[u8]) -> MinedGenesis {
+    use sha2::{Sha256, Digest};
+
+    // merkle_root = SHA256d(message) — một coinbase message đơn giản
+    let mr_first  = Sha256::digest(message);
+    let mr_second = Sha256::digest(&mr_first);
+    let mut merkle_root = [0u8; 32];
+    merkle_root.copy_from_slice(&mr_second);
+
+    let mut header = [0u8; 80];
+    // version = 1
+    header[0..4].copy_from_slice(&1i32.to_le_bytes());
+    // prev_block = 0
+    // merkle_root
+    header[36..68].copy_from_slice(&merkle_root);
+    // timestamp
+    header[68..72].copy_from_slice(&timestamp.to_le_bytes());
+    // bits
+    header[72..76].copy_from_slice(&bits.to_le_bytes());
+
+    // Tính target từ bits
+    let target = compact_target_to_bytes(bits);
+
+    eprintln!("[genesis] Mining with bits=0x{:08x}", bits);
+    eprintln!("[genesis] Target: {}", hex::encode(target));
+
+    for nonce in 0u32..=u32::MAX {
+        header[76..80].copy_from_slice(&nonce.to_le_bytes());
+
+        let first  = Sha256::digest(&header);
+        let second = Sha256::digest(&first);
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&second);
+
+        if hash_meets_target(&hash, &target) {
+            // Display hash = reversed bytes, hex
+            let mut display = hash;
+            display.reverse();
+            let hash_hex = hex::encode(display);
+
+            eprintln!("[genesis] Found! nonce={} hash={}", nonce, hash_hex);
+            return MinedGenesis { nonce, hash_hex, hash_raw: hash, header, bits, timestamp, merkle_root };
+        }
+
+        if nonce % 1_000_000 == 0 {
+            eprint!("\r[genesis] nonce={:>12}", nonce);
+        }
+    }
+    panic!("nonce space exhausted — loosen bits");
+}
+
+/// In kết quả mine_genesis ra màn hình + dòng Rust để hardcode
+pub fn print_genesis_result(g: &MinedGenesis, message: &[u8]) {
+    println!("\n══════════════════════════════════════════");
+    println!("  OCEIF Mainnet Genesis Block");
+    println!("══════════════════════════════════════════");
+    println!("  Hash      : {}", g.hash_hex);
+    println!("  Nonce     : {}", g.nonce);
+    println!("  Bits      : 0x{:08x}", g.bits);
+    println!("  Timestamp : {} ({})", g.timestamp,
+        chrono::DateTime::from_timestamp(g.timestamp as i64, 0)
+            .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+            .unwrap_or_default());
+    println!("  MerkleRoot: {}", hex::encode({let mut m=g.merkle_root; m.reverse(); m}));
+    println!("  Message   : {:?}", String::from_utf8_lossy(message));
+    println!();
+    println!("  // Paste vào pkt_genesis.rs:");
+    println!("  pub const MAINNET_GENESIS_HASH: &str = \"{}\";", g.hash_hex);
+    println!("  pub const MAINNET_GENESIS_TIME: u64 = {};", g.timestamp);
+    println!("  pub const MAINNET_GENESIS_NONCE: u32 = {};", g.nonce);
+    println!("  pub const MAINNET_GENESIS_BITS: u32 = 0x{:08x};", g.bits);
+    println!("══════════════════════════════════════════");
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────

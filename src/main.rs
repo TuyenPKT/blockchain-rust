@@ -298,6 +298,34 @@ fn main() {
         Some("fullnode") => {
             pkt_fullnode::cmd_fullnode(&args[2..].to_vec());
         }
+        Some("mine-genesis") => {
+            // cargo run -- mine-genesis [--testnet] [--bits 0x1f00ffff] ["message"]
+            let testnet = args.iter().any(|a| a == "--testnet");
+            let bits_arg = args.windows(2)
+                .find(|w| w[0] == "--bits")
+                .and_then(|w| u32::from_str_radix(w[1].trim_start_matches("0x"), 16).ok());
+            let message_arg = args.iter().skip(2)  // skip binary + "mine-genesis"
+                .find(|a| !a.starts_with('-'))
+                .cloned();
+
+            let (bits, default_msg) = if testnet {
+                (bits_arg.unwrap_or(pkt_genesis::TESTNET_GENESIS_BITS),
+                 "OCEIF testnet genesis 2026")
+            } else {
+                (bits_arg.unwrap_or(pkt_genesis::MAINNET_GENESIS_BITS),
+                 "OCEIF mainnet genesis 2026 — The future of bandwidth is decentralized")
+            };
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as u32;
+            let message = message_arg.as_deref().unwrap_or(default_msg);
+
+            eprintln!("[mine-genesis] network={} bits=0x{:08x} timestamp={}",
+                if testnet { "testnet" } else { "mainnet" }, bits, timestamp);
+            eprintln!("[mine-genesis] message={:?}", message);
+
+            let result = pkt_genesis::mine_genesis(bits, timestamp, message.as_bytes());
+            pkt_genesis::print_genesis_result(&result, message.as_bytes());
+        }
         Some("explorer-testnet") => {
             pkt_explorer_api::cmd_explorer_status();
         }
