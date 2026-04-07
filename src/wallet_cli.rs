@@ -39,6 +39,7 @@ fn dirs_home() -> PathBuf {
 }
 
 /// Lưu wallet v12.0: 3 dòng — mnemonic / sk_hex / address
+/// Security: file được set 0600 (chỉ owner đọc được) trên Unix.
 fn save_wallet_hd(mnemonic: &str, sk_hex: &str, address: &str) -> Result<(), String> {
     let path = wallet_path();
     if let Some(parent) = path.parent() {
@@ -46,6 +47,13 @@ fn save_wallet_hd(mnemonic: &str, sk_hex: &str, address: &str) -> Result<(), Str
     }
     let content = format!("{}\n{}\n{}\n", mnemonic, sk_hex, address);
     fs::write(&path, content).map_err(|e| e.to_string())?;
+    // Security #3: restrict wallet file to owner-only read/write (Unix 0600)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("set_permissions: {e}"))?;
+    }
     Ok(())
 }
 
