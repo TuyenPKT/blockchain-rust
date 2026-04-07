@@ -389,7 +389,7 @@ mod tests {
         let db = LabelDb::open_temp().unwrap();
         let e = db.get_label_by_address("pSEHPyBk_any_suffix");
         assert!(e.is_some());
-        assert_eq!(e.unwrap().label, "PKT Network Steward");
+        assert_eq!(e.unwrap().label, "OCEIF Treasury");
     }
 
     #[test]
