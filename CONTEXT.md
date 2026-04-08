@@ -1,6 +1,6 @@
 # Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v21.0 ✅ — 0 errors, 0 warnings**
+**Version hiện tại: v24.0 ✅ — 0 errors, 0 warnings**
 
 ---
 
@@ -282,8 +282,38 @@ _Mục tiêu: validate toàn bộ chain locally — không trust peer, không tr
 - ~~**`POST /api/testnet/sync/start` không auth**~~ — đã fix: require Write role (`require_write_middleware`)
 - ~~**`?api_key=` trong URL**~~ — đã fix: `require_write_middleware` chỉ đọc header, không query param
 - ~~**`~/.pkt/api_keys.json` permissions**~~ — đã fix: `chmod 600` tự động trong `ApiKeyStore::save()`
-- **`/api/testnet/utxos/:s`** — đã fix: decode bech32/Base58 trước, fallback raw script_hex
-- **`pkt_validate.rs` Merkle root** — đã fix: đổi sang SHA256d (khớp `pkt_block_sync` và `wire_txid`)
+- ~~**`/api/testnet/utxos/:s`**~~ — đã fix: decode bech32/Base58 trước, fallback raw script_hex
+- ~~**`pkt_validate.rs` Merkle root**~~ — đã fix: đổi sang SHA256d (khớp `pkt_block_sync` và `wire_txid`)
+- ~~**`ps_addr_by_base58` balance = 0**~~ — đã fix: thử wire format trước, fallback legacy JSON-hex
+- ~~**PKT divisor sai (1e9 thay 2^30)**~~ — đã fix: `PACKETS_PER_PKT = 1_073_741_824` trong `desktop/src/api.ts`
+- ~~**OCEIF rebranding**~~ — đã fix: đổi PoW domain strings → `OCEIF_Ann_v1` / `OCEIF_Block_v1`; labels; peer user_agent; multi_chain URLs
+- ~~**Genesis block placeholder**~~ — đã mine: mainnet nonce=190223, testnet nonce=156, regtest nonce=1 (2026-04-07)
+- ~~**Mutex.lock().unwrap() trong pkt_node.rs**~~ — đã fix: macro `lock_or_recover!` 11 chỗ
+- ~~**Peer param injection**~~ — đã fix: regex validate `host:port` tại `ps_sync_start`
+- ~~**wallet.key permissions 0644**~~ — đã fix: `set_permissions(0o600)` sau khi ghi
+- ~~**Mutex.lock().unwrap() trong pkt_fullnode.rs**~~ — đã fix: macro `lock_or_recover!` 4 chỗ
+- ~~**pool_api dummy_reward = 6250**~~ — đã fix: dùng `INITIAL_BLOCK_REWARD` (4096 PKT × 2^30)
+- ~~**pkt_labels fake address pGTESTNE**~~ — đã xóa placeholder
+
+#### Checklist trước Mainnet (sau khi testnet ổn định)
+- [ ] Thêm checkpoints thực tế tại height 50k, 100k, ... (`pkt_checkpoints.rs`)
+- [ ] Xóa hoặc cập nhật `src/genesis.rs` cũ (còn "placeholder, chưa launch") — đã supersede bởi `pkt_genesis.rs`
+- [ ] Thêm địa chỉ coinbase testnet genesis thật vào `pkt_labels.rs` PRESETS (hiện đã xóa pGTESTNE)
+- [ ] Verify địa chỉ treasury/pool mainnet thật (`pSEHPyBk`, `p7LMkZBs`)
+- [ ] Verify DNS `seed.oceif.com:64764` + `seed.testnet.oceif.com:8333` resolve được
+- [ ] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics đã công bố
+- [ ] `pool_api.rs`: tính block reward đúng theo height (`block_reward_at(current_height)`) thay vì `INITIAL_BLOCK_REWARD` cố định
+- [ ] Pentest thực tế: fuzz REST API, test peer spam / eclipse attack trên testnet
+- [ ] CI: upgrade `actions/checkout@v4` → `@v5` ✅ (đã push)
+
+### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ← ĐANG LÀM
+
+- [x] v24.0 — **Node Onboarding**: `src/pkt_install.rs` — `InstallConfig`, `generate_install_sh()` (Linux x86_64/ARM64 + macOS universal, systemd + launchd), `generate_config_toml()`, `cmd_install_node()`; CLI `install-node [--mainnet] [--print-sh|--print-config]`; +17 tests
+- [ ] v24.1 — **Public Mining Pool**: Stratum endpoint public; miner stats page; `blockchain-rust pool` với config file
+- [ ] v24.2 — **Testnet Faucet**: Web UI nhận địa chỉ → gửi test PKT; rate-limit 1/IP/24h
+- [ ] v24.3 — **Developer Docs**: OpenAPI spec đầy đủ; `crates/pkt-sdk` hoàn chỉnh; quick-start guide
+- [ ] v24.4 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
+- [ ] v24.5 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, Self-Evolving Contracts, AI Consensus, Singularity Chain

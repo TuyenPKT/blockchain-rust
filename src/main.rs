@@ -153,6 +153,7 @@ mod pkt_checkpoints;
 mod pkt_mempool_bridge;
 mod pkt_snapshot;
 mod pkt_fullnode;
+mod pkt_install;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -298,6 +299,10 @@ fn main() {
         Some("fullnode") => {
             pkt_fullnode::cmd_fullnode(&args[2..].to_vec());
         }
+        Some("install-node") => {
+            // cargo run -- install-node [--mainnet] [--user <u>] [--print-sh|--print-config]
+            pkt_install::cmd_install_node(&args[2..].to_vec());
+        }
         Some("mine-genesis") => {
             // cargo run -- mine-genesis [--testnet] [--bits 0x1f00ffff] ["message"]
             let testnet = args.iter().any(|a| a == "--testnet");
@@ -425,6 +430,9 @@ fn print_help() {
     println!("    cargo run -- completions bash        sinh bash completion script");
     println!("    cargo run -- completions zsh         sinh zsh completion script");
     println!("    cargo run -- completions fish        sinh fish completion script");
+    println!("    cargo run -- install-node            hướng dẫn join OCEIF testnet (3 options)");
+    println!("    cargo run -- install-node --mainnet  hướng dẫn join mainnet");
+    println!("    cargo run -- install-node --print-sh sinh install.sh cho Linux/macOS");
     println!("    cargo test                           chạy integration tests");
     println!();
 
