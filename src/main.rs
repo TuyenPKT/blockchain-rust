@@ -432,7 +432,8 @@ fn print_help() {
     println!("    cargo run -- completions fish        sinh fish completion script");
     println!("    cargo run -- install-node            hướng dẫn join OCEIF testnet (3 options)");
     println!("    cargo run -- install-node --mainnet  hướng dẫn join mainnet");
-    println!("    cargo run -- install-node --print-sh sinh install.sh cho Linux/macOS");
+    println!("    cargo run -- install-node --print-sh  sinh install.sh cho Linux/macOS");
+    println!("    cargo run -- install-node --print-ps1 sinh install.ps1 cho Windows");
     println!("    cargo test                           chạy integration tests");
     println!();
 
