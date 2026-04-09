@@ -19,6 +19,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 use tauri::Emitter;
 use sha3::{Keccak256, Digest as Keccak256Digest};
+use hmac::{Hmac, Mac};
+use sha2::Sha512;
 
 // ── Miner global state ────────────────────────────────────────────────────────
 
@@ -875,6 +877,95 @@ fn wallet_from_privkey(privkey_hex: String, _network: String) -> Result<serde_js
     Ok(serde_json::json!({ "address": address, "pubkey_hex": pubkey }))
 }
 
+/// Khôi phục ví từ BIP39 seed phrase → EVM address (BIP44 m/44'/60'/0'/0/0).
+/// Tương thích MetaMask, Trust Wallet, Ledger (Ethereum coin type 60).
+#[tauri::command]
+fn wallet_from_mnemonic(mnemonic: String, passphrase: String) -> Result<serde_json::Value, String> {
+    let words: Vec<&str> = mnemonic.split_whitespace().collect();
+    if words.len() != 12 && words.len() != 24 {
+        return Err(format!("Seed phrase phải có 12 hoặc 24 từ (bạn nhập {} từ)", words.len()));
+    }
+
+    // BIP39: mnemonic → seed via PBKDF2-HMAC-SHA512
+    let mnemonic_bytes = mnemonic.trim().as_bytes();
+    let salt           = format!("mnemonic{}", passphrase.trim());
+    let mut seed       = [0u8; 64];
+    pbkdf2::pbkdf2_hmac::<Sha512>(mnemonic_bytes, salt.as_bytes(), 2048, &mut seed);
+
+    // BIP32: seed → master key via HMAC-SHA512("Bitcoin seed", seed)
+    let (mut sk_bytes, mut chain_code) = bip32_master(&seed)?;
+
+    // Derive m/44'/60'/0'/0/0 — coin type 60 = Ethereum/EVM
+    for (index, hardened) in [(44u32, true), (60, true), (0, true), (0, false), (0, false)] {
+        let idx = if hardened { index + 0x8000_0000 } else { index };
+        (sk_bytes, chain_code) = bip32_child_private(&sk_bytes, &chain_code, idx)?;
+    }
+
+    let secp = secp256k1::Secp256k1::new();
+    let sk   = secp256k1::SecretKey::from_slice(&sk_bytes)
+        .map_err(|e| format!("derived key lỗi: {}", e))?;
+    let pk      = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+    let address = evm_address_from_pubkey(&pk);
+    let privkey = hex::encode(sk.secret_bytes());
+    let pubkey  = hex::encode(pk.serialize());
+    Ok(serde_json::json!({ "address": address, "privkey_hex": privkey, "pubkey_hex": pubkey }))
+}
+
+/// BIP32 master key từ seed: HMAC-SHA512("Bitcoin seed", seed).
+fn bip32_master(seed: &[u8]) -> Result<([u8; 32], [u8; 32]), String> {
+    type HmacSha512 = Hmac<Sha512>;
+    let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
+        .map_err(|e| format!("HMAC init lỗi: {}", e))?;
+    mac.update(seed);
+    let result = mac.finalize().into_bytes();
+    let mut sk = [0u8; 32];
+    let mut cc = [0u8; 32];
+    sk.copy_from_slice(&result[..32]);
+    cc.copy_from_slice(&result[32..]);
+    Ok((sk, cc))
+}
+
+/// BIP32 child private key derivation.
+/// Hardened (index ≥ 0x80000000): data = 0x00 || parent_sk || index_be
+/// Normal:                         data = compressed_pubkey || index_be
+fn bip32_child_private(sk: &[u8; 32], cc: &[u8; 32], index: u32) -> Result<([u8; 32], [u8; 32]), String> {
+    use secp256k1::{Secp256k1, SecretKey, PublicKey};
+    type HmacSha512 = Hmac<Sha512>;
+
+    let mut mac = HmacSha512::new_from_slice(cc)
+        .map_err(|e| format!("HMAC init lỗi: {}", e))?;
+
+    if index >= 0x8000_0000 {
+        // Hardened
+        mac.update(&[0x00]);
+        mac.update(sk);
+    } else {
+        // Normal: dùng compressed pubkey
+        let secp = Secp256k1::new();
+        let parent_sk = SecretKey::from_slice(sk).map_err(|e| e.to_string())?;
+        let parent_pk = PublicKey::from_secret_key(&secp, &parent_sk);
+        mac.update(&parent_pk.serialize());
+    }
+    mac.update(&index.to_be_bytes());
+
+    let result = mac.finalize().into_bytes();
+    let il = &result[..32];
+    let ir = &result[32..];
+
+    // child_key = (IL + parent_key) mod n
+    let parent = secp256k1::SecretKey::from_slice(sk).map_err(|e| e.to_string())?;
+    let il_scalar = secp256k1::SecretKey::from_slice(il)
+        .map_err(|_| "IL không hợp lệ (≥ curve order)".to_string())?;
+    let child = parent.add_tweak(&secp256k1::Scalar::from(il_scalar))
+        .map_err(|e| format!("child key tweak lỗi: {}", e))?;
+
+    let mut child_bytes = [0u8; 32];
+    let mut child_cc    = [0u8; 32];
+    child_bytes.copy_from_slice(&child.secret_bytes());
+    child_cc.copy_from_slice(ir);
+    Ok((child_bytes, child_cc))
+}
+
 // ── Wallet: build + sign tx ────────────────────────────────────────────────────
 
 /// Chuẩn hoá script_pubkey hex về dạng wire P2PKH (76a914{20 bytes}88ac).
@@ -1089,6 +1180,7 @@ pub fn run() {
             peer_scan,
             wallet_generate,
             wallet_from_privkey,
+            wallet_from_mnemonic,
             wallet_tx_build,
             tx_broadcast,
             start_node_sync,

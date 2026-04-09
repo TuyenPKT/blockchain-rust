@@ -67,9 +67,12 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
   const [revealKey, setRevealKey] = useState(false);
   const [importKey, setImportKey] = useState("");
   const [importErr, setImportErr] = useState("");
-  const [removing, setRemoving]   = useState(false);
+  const [removing, setRemoving]     = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [isNew, setIsNew]         = useState(false);
+  const [isNew, setIsNew]           = useState(false);
+  const [mnemonic, setMnemonic]     = useState("");
+  const [restoring, setRestoring]   = useState(false);
+  const [restoreErr, setRestoreErr] = useState("");
 
   // Send form
   const [sendTo, setSendTo]       = useState("");
@@ -139,6 +142,28 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
       setImportKey("");
       setIsNew(false);
     } catch (e) { setImportErr(String(e)); }
+  }
+
+  async function handleRestore() {
+    setRestoreErr("");
+    const words = mnemonic.trim().split(/\s+/);
+    if (words.length !== 12 && words.length !== 24) {
+      setRestoreErr(t.wallet_restore_err_words);
+      return;
+    }
+    setRestoring(true);
+    try {
+      const result = await invoke<WalletData>("wallet_from_mnemonic", {
+        mnemonic: words.join(" "),
+        passphrase: "",
+      });
+      const w: WalletData = { ...result };
+      saveWallet(w);
+      setWallet(w);
+      setMnemonic("");
+      setIsNew(false);
+    } catch (e) { setRestoreErr(String(e)); }
+    setRestoring(false);
   }
 
   function handleRemove() {
@@ -244,7 +269,7 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
           </div>
         </Panel>
 
-        {/* Import */}
+        {/* Import private key */}
         <Panel icon="🔑" title={t.wallet_import}>
           <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
             <input
@@ -266,6 +291,37 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
               outline: `1px solid ${colors.blue}44`, transition: "all .2s",
             }}>
               {t.wallet_import_btn}
+            </button>
+          </div>
+        </Panel>
+
+        {/* Restore from seed phrase */}
+        <Panel icon="🌱" title={t.wallet_restore}>
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <textarea
+              value={mnemonic}
+              onChange={e => { setMnemonic(e.target.value); setRestoreErr(""); }}
+              placeholder={t.wallet_restore_hint}
+              rows={3}
+              style={{
+                width: "100%", boxSizing: "border-box", resize: "vertical",
+                background: colors.surface2,
+                border: `1px solid ${restoreErr ? colors.red : colors.border}`,
+                borderRadius: 8, padding: "10px 12px", color: colors.text,
+                fontFamily: fonts.mono, fontSize: 12, outline: "none",
+                lineHeight: 1.6,
+              }}
+            />
+            {restoreErr && <div style={{ fontSize: 12, color: colors.red }}>{restoreErr}</div>}
+            <button onClick={handleRestore} disabled={restoring || !mnemonic.trim()} style={{
+              padding: "11px 0", borderRadius: 10, border: "none",
+              background: restoring ? colors.surface2 : `${colors.green}22`,
+              color: restoring ? colors.muted : colors.green,
+              fontWeight: 700, fontSize: 14,
+              cursor: (restoring || !mnemonic.trim()) ? "not-allowed" : "pointer",
+              outline: `1px solid ${colors.green}44`, transition: "all .2s",
+            }}>
+              {restoring ? t.wallet_restoring : t.wallet_restore_btn}
             </button>
           </div>
         </Panel>

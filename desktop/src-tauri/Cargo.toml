@@ -22,4 +22,6 @@ hex        = { workspace = true }
 secp256k1  = { workspace = true }
 sha2       = { workspace = true }
 sha3       = "0.10"
+hmac       = "0.12"
+pbkdf2     = { version = "0.12", features = ["hmac"] }
 urlencoding = "2.1"

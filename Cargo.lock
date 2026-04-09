@@ -4828,6 +4828,8 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "hex",
+ "hmac",
+ "pbkdf2",
  "rayon",
  "reqwest 0.12.28",
  "secp256k1",
