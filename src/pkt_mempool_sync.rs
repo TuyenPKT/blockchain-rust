@@ -282,10 +282,7 @@ impl Drop for MempoolDb {
 // ── Default path ──────────────────────────────────────────────────────────────
 
 pub fn default_mempool_db_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".pkt").join("mempooldb")
+    crate::pkt_paths::mempool_db()
 }
 
 // ── Fee rate helper ───────────────────────────────────────────────────────────

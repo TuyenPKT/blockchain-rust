@@ -110,7 +110,7 @@ pub fn save_peers(path: &std::path::Path, peers: &[NetAddr]) -> std::io::Result<
 
 /// Default path for the peer list file.
 pub fn default_peers_path() -> std::path::PathBuf {
-    crate::pkt_testnet_web::home_path(".pkt/peers.txt")
+    crate::pkt_paths::peers_file()
 }
 
 // ── Inventory types ───────────────────────────────────────────────────────────

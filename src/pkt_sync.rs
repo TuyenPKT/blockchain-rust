@@ -84,10 +84,7 @@ impl SyncConfig {
 }
 
 fn default_sync_db_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".pkt").join("syncdb")
+    crate::pkt_paths::sync_db()
 }
 
 // ── SyncState ─────────────────────────────────────────────────────────────────
@@ -739,7 +736,7 @@ pub fn cmd_sync(args: &[String]) {
 
     // Mở UtxoDb, BlockDb, AddrIndexDb và MempoolDb để apply transactions
     let utxo_path    = crate::pkt_testnet_web::default_utxo_db_path();
-    let block_path   = crate::pkt_testnet_web::home_path(".pkt/blockdb");
+    let block_path   = crate::pkt_paths::block_db();
     let addr_path    = crate::pkt_addr_index::default_addr_db_path();
     let mempool_path = crate::pkt_mempool_sync::default_mempool_db_path();
 

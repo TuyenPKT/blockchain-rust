@@ -53,7 +53,7 @@ impl SnapshotHeader {
 // ── Default paths ──────────────────────────────────────────────────────────────
 
 pub fn default_utxo_db_path() -> PathBuf {
-    crate::pkt_testnet_web::default_utxo_db_path()
+    crate::pkt_paths::utxo_db()
 }
 
 fn default_snapshot_path(height: u64) -> PathBuf {

@@ -1296,14 +1296,14 @@ pub fn home_path(suffix: &str) -> PathBuf {
     PathBuf::from(home).join(suffix)
 }
 
-/// Default SyncDb path: `~/.pkt/syncdb` (matches `SyncConfig::testnet()` default).
+/// Default SyncDb path — testnet hoặc mainnet theo pkt_paths::is_mainnet().
 pub fn default_sync_db_path() -> PathBuf {
-    home_path(".pkt/syncdb")
+    crate::pkt_paths::sync_db()
 }
 
-///// Default UtxoSyncDb path: `~/.pkt/utxodb`.
+/// Default UtxoDb path — testnet hoặc mainnet theo pkt_paths::is_mainnet().
 pub fn default_utxo_db_path() -> PathBuf {
-    home_path(".pkt/utxodb")
+    crate::pkt_paths::utxo_db()
 }
 
 // ── Static JS handler ──────────────────────────────────────────────────────────

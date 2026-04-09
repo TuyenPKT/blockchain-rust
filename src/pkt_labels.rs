@@ -206,7 +206,7 @@ fn home_path(rel: &str) -> PathBuf {
 }
 
 pub fn default_label_db_path() -> PathBuf {
-    home_path(".pkt/labeldb")
+    crate::pkt_paths::label_db()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

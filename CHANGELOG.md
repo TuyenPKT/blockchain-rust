@@ -4,6 +4,37 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.2 — Network-aware Data Paths (2026-04-09)
+
+### Added
+- `src/pkt_paths.rs` — single source of truth cho tất cả paths:
+  - `set_mainnet(bool)` — đặt network flag trước mọi dispatch
+  - `is_mainnet() -> bool`
+  - `data_dir()` → `~/.pkt/testnet/` hoặc `~/.pkt/mainnet/`
+  - `sync_db()`, `utxo_db()`, `addr_index()`, `label_db()`, `block_db()`, `mempool_db()`, `reorg_db()`, `peers_file()`
+  - `wallet_key()` → `~/.pkt/wallet.key` (dùng chung, không thay đổi theo network)
+- `main.rs` — `pkt_paths::set_mainnet(args.contains("--mainnet"))` trước mọi dispatch
+- Tất cả `default_*_path()` redirect sang `pkt_paths`
+
+### Files
+- `src/pkt_paths.rs` — NEW
+- `src/pkt_sync.rs`, `pkt_testnet_web.rs`, `pkt_addr_index.rs`, `pkt_labels.rs`, `pkt_mempool_sync.rs`, `pkt_reorg.rs`, `pkt_wire.rs`, `pkt_snapshot.rs` — redirect path functions
+
+### Tests
+- +6 tests pkt_paths (total: 6)
+
+### Layout mới
+```
+~/.pkt/
+├── wallet.key          ← dùng chung
+├── testnet/            ← cargo run -- sync
+│   ├── syncdb/ utxodb/ addr_index/ labeldb/ blockdb/ mempooldb/ reorgdb/ peers.txt
+└── mainnet/            ← cargo run -- sync --mainnet
+    ├── syncdb/ utxodb/ addr_index/ labeldb/ blockdb/ mempooldb/ reorgdb/ peers.txt
+```
+
+---
+
 ## v24.1 — EVM Address Format (2026-04-08)
 
 ### Added

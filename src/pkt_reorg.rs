@@ -323,7 +323,7 @@ fn home_path(rel: &str) -> PathBuf {
 }
 
 pub fn default_reorg_db_path() -> PathBuf {
-    home_path(".pkt/reorgdb")
+    crate::pkt_paths::reorg_db()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

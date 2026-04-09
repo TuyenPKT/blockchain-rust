@@ -154,6 +154,7 @@ mod pkt_snapshot;
 mod pkt_fullnode;
 mod pkt_install;
 mod evm_address;
+mod pkt_paths;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -179,6 +180,10 @@ mod evm_address;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    // Đặt network flag TRƯỚC MỌI dispatch — các module đọc pkt_paths::is_mainnet()
+    let mainnet = args.iter().any(|a| a == "--mainnet");
+    crate::pkt_paths::set_mainnet(mainnet);
 
     match args.get(1).map(|s| s.as_str()) {
         Some("mine") => {

@@ -331,7 +331,7 @@ fn home_path(rel: &str) -> PathBuf {
 }
 
 pub fn default_addr_db_path() -> PathBuf {
-    home_path(".pkt/addrdb")
+    crate::pkt_paths::addr_index()
 }
 
 /// Rebuild all balance snapshots (bal: / rich:) by scanning utxo_db.
