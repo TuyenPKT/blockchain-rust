@@ -4,6 +4,22 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.3 — PKTScan Nav Toggle Redesign (2026-04-10)
+
+### Added
+- `desktop/src/components/Nav.tsx` — network toggle pill redesign:
+  - Container pill shape (`borderRadius: 20`), buttons `borderRadius: 16`
+  - Order: Testnet first, Mainnet second
+  - Dot indicator với glow effect trên active button
+  - Active testnet = `colors.accent` (amber), active mainnet = `colors.blue`
+  - White text on active, colored dot hint on inactive
+  - `boxShadow` glow effect: `0 1px 6px color55`
+
+### Files
+- `desktop/src/components/Nav.tsx` — network toggle section
+
+---
+
 ## v24.2 — Network-aware Data Paths (2026-04-09)
 
 ### Added

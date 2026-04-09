@@ -98,20 +98,39 @@ export function Nav({ tab, onTab, network, onNetwork, onSearchOpen, onSettings, 
 
       {/* Network toggle */}
       <div style={{
-        display: "flex", background: colors.surface2,
-        border: `1px solid ${colors.border}`, borderRadius: 8, padding: 3, gap: 3,
+        display: "flex", alignItems: "center",
+        background: colors.surface2,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 20, padding: 3, gap: 2,
       }}>
-        {(["mainnet", "testnet"] as const).map(n => (
-          <button key={n} onClick={() => onNetwork(n)} style={{
-            padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
-            fontFamily: fonts.sans, fontWeight: 600, fontSize: 13,
-            background: network === n ? (n === "mainnet" ? colors.blue : colors.accent) : "transparent",
-            color: network === n ? "#000" : colors.muted,
-            transition: "all .2s",
-          }}>
-            {n === "mainnet" ? "Mainnet" : "Testnet"}
-          </button>
-        ))}
+        {(["testnet", "mainnet"] as const).map(n => {
+          const active = network === n;
+          const isMain = n === "mainnet";
+          return (
+            <button key={n} onClick={() => onNetwork(n)} style={{
+              padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer",
+              fontFamily: fonts.sans, fontWeight: 700, fontSize: 12,
+              letterSpacing: "0.03em",
+              background: active
+                ? (isMain ? colors.blue : colors.accent)
+                : "transparent",
+              color: active ? "#fff" : colors.muted,
+              boxShadow: active ? `0 1px 6px ${isMain ? colors.blue : colors.accent}55` : "none",
+              transition: "all .18s",
+              display: "flex", alignItems: "center", gap: 5,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: active
+                  ? "#fff"
+                  : (isMain ? colors.blue + "88" : colors.accent + "88"),
+                display: "inline-block", flexShrink: 0,
+                boxShadow: active ? "0 0 4px #fff8" : "none",
+              }} />
+              {isMain ? "Mainnet" : "Testnet"}
+            </button>
+          );
+        })}
       </div>
     </nav>
   );

@@ -362,6 +362,7 @@ type ChartWindow = 50 | 100 | 200 | 500;
 const WINDOWS: ChartWindow[] = [50, 100, 200, 500];
 
 function toPoints(series: AnalyticsSeries): ChartPoint[] {
+  if (!series?.points) return [];
   return series.points.map(p => ({ x: p.height, y: p.value }));
 }
 
@@ -433,7 +434,9 @@ function ChartsPanel({ nodeUrl }: { nodeUrl: string }) {
         fetchAnalytics(nodeUrl, "block_time", win),
         fetchAnalytics(nodeUrl, "difficulty", win),
       ]);
-      setHR(hr); setBT(bt); setDiff(diff);
+      setHR(Array.isArray(hr?.points) ? hr : null);
+      setBT(Array.isArray(bt?.points) ? bt : null);
+      setDiff(Array.isArray(diff?.points) ? diff : null);
     } catch (e) { setError(String(e)); }
     finally     { setLoading(false); }
   }, [nodeUrl, win]);

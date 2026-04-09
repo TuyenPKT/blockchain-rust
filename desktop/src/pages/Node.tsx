@@ -21,6 +21,7 @@ export function Node({ nodeUrl }: NodeProps) {
   const [summary, setSummary]   = useState<NetworkSummary>({});
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError]       = useState("");
+  const [loaded, setLoaded]     = useState(false);
   const [peers, setPeers]       = useState<PeerInfo[]>([]);
   const [scanning, setScanning] = useState(false);
   const [seedAddr, setSeedAddr] = useState(DEFAULT_SEED);
@@ -34,10 +35,15 @@ export function Node({ nodeUrl }: NodeProps) {
       setError("");
     } catch (e) {
       setError(String(e));
+    } finally {
+      setLoaded(true);
     }
   }, [nodeUrl]);
 
   useEffect(() => {
+    setLoaded(false);
+    setSummary({});
+    setError("");
     refresh();
     const id = setInterval(refresh, 10_000);
     return () => clearInterval(id);
@@ -96,8 +102,8 @@ export function Node({ nodeUrl }: NodeProps) {
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
         <StatCard icon="🖧"  label={t.node_status}
-          value={error ? t.offline : synced ? t.online : t.connecting}
-          color={error ? colors.red : synced ? colors.green : colors.accent} />
+          value={!loaded ? t.connecting : error ? t.offline : synced ? t.online : t.connecting}
+          color={!loaded ? colors.accent : error ? colors.red : synced ? colors.green : colors.accent} />
         <StatCard icon="🧱" label={t.block_height2}
           value={height.toLocaleString()}
           color={colors.blue} />
@@ -132,7 +138,7 @@ export function Node({ nodeUrl }: NodeProps) {
         >
           <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 0 }}>
             {[
-              ["Status",      error ? t.offline : synced ? t.synced : t.connecting],
+              ["Status",      !loaded ? t.connecting : error ? t.offline : synced ? t.synced : t.connecting],
               ["Node URL",    nodeUrl],
               ["Height",      height.toLocaleString()],
               ["Tip Hash",    shortHash(tipHash)],
