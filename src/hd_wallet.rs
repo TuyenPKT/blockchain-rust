@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 /// BIP39: Mnemonic phrase (12/24 từ) → Seed (512-bit)
 /// BIP32: Seed → Master Key → child keys theo path
-/// BIP44: path chuẩn m/44'/0'/account'/change/index
+/// BIP44: path chuẩn m/44'/60'/account'/change/index  (coin type 60 = Ethereum/EVM)
 ///
 /// Pipeline:
 ///   entropy (128 bit) → mnemonic 12 từ → seed (PBKDF2) → master key (HMAC-SHA512)
@@ -442,20 +442,20 @@ impl HdWallet {
         HdWallet { mnemonic, master_key: master }
     }
 
-    /// BIP44: m/44'/0'/account'/0/index → external address
+    /// BIP44: m/44'/60'/account'/0/index → external address
     /// 44'  = BIP44 purpose
-    /// 0'   = Bitcoin mainnet (coin type)
+    /// 60'  = Ethereum/EVM coin type (tương thích MetaMask, Trust Wallet, Ledger)
     /// account' = account index (hardened)
     /// 0    = external chain (receiving addresses)
     /// index = address index
     pub fn get_address(&self, account: u32, index: u32) -> Wallet {
-        let path = format!("m/44'/0'/{}'/0/{}", account, index);
+        let path = format!("m/44'/60'/{}'/0/{}", account, index);
         self.master_key.derive_path(&path).to_wallet()
     }
 
-    /// BIP44: m/44'/0'/account'/1/index → internal address (change)
+    /// BIP44: m/44'/60'/account'/1/index → internal address (change)
     pub fn get_change_address(&self, account: u32, index: u32) -> Wallet {
-        let path = format!("m/44'/0'/{}'/1/{}", account, index);
+        let path = format!("m/44'/60'/{}'/1/{}", account, index);
         self.master_key.derive_path(&path).to_wallet()
     }
 

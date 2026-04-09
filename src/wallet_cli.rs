@@ -20,7 +20,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use ripemd::{Ripemd160, Digest as RipemdDigest};
 
 // ─── Wallet file format ───────────────────────────────────────────────────────
 
@@ -96,23 +95,18 @@ fn load_wallet() -> Result<(String, String), String> {
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
+/// EVM address = "0x" + EIP-55( last20( Keccak256( uncompressed_pubkey_64 ) ) )
 fn pubkey_to_address(public_key: &PublicKey) -> String {
-    let pub_bytes     = public_key.serialize(); // 33 bytes compressed
-    let sha256_hash   = blake3::hash(&pub_bytes);
-    let ripemd_hash   = Ripemd160::digest(sha256_hash.as_bytes());
-    let mut payload   = vec![0x00u8];
-    payload.extend_from_slice(&ripemd_hash);
-    let checksum_full = blake3::hash(blake3::hash(&payload).as_bytes());
-    payload.extend_from_slice(&checksum_full.as_bytes()[..4]);
-    bs58::encode(payload).into_string()
+    let compressed = public_key.serialize(); // 33 bytes
+    crate::evm_address::pubkey_to_evm_address(&compressed)
+        .unwrap_or_else(|_| "0x0000000000000000000000000000000000000000".to_string())
 }
 
-/// Cũng trả về pubkey_hash hex (40 chars) để dùng với miner
+/// Trả về 40-char lowercase hex của 20-byte EVM address (không có 0x prefix).
+/// Dùng để identify miner address trong block coinbase.
 fn pubkey_to_hash_hex(public_key: &PublicKey) -> String {
-    let pub_bytes   = public_key.serialize();
-    let sha256_hash = blake3::hash(&pub_bytes);
-    let ripemd_hash = Ripemd160::digest(sha256_hash.as_bytes());
-    hex::encode(ripemd_hash)
+    let addr = pubkey_to_address(public_key);
+    addr[2..].to_ascii_lowercase() // bỏ "0x" → 40 lowercase hex chars
 }
 
 // ─── CLI commands ─────────────────────────────────────────────────────────────
@@ -224,7 +218,7 @@ pub fn cmd_wallet_restore(args: &[String]) {
 /// cargo run -- wallet show  (v12.0: hiển thị seed phrase nếu có)
 pub fn cmd_wallet_show() {
     match load_wallet_full() {
-        Ok((mnemonic_opt, sk_hex, address)) => {
+        Ok((mnemonic_opt, sk_hex, stored_address)) => {
             let sk_bytes = match hex::decode(&sk_hex) {
                 Ok(b) => b,
                 Err(_) => { eprintln!("❌ File wallet bị hỏng (secret key không hợp lệ)"); return; }
@@ -235,7 +229,14 @@ pub fn cmd_wallet_show() {
                 Err(_) => { eprintln!("❌ File wallet bị hỏng"); return; }
             };
             let pk       = PublicKey::from_secret_key(&secp, &sk);
+            // Luôn recompute từ pubkey — đảm bảo dùng format EVM hiện tại
+            let address  = pubkey_to_address(&pk);
             let hash_hex = pubkey_to_hash_hex(&pk);
+            // Tự động migrate file cũ nếu address đã thay đổi
+            if stored_address != address {
+                let mnemonic_str = mnemonic_opt.as_deref().unwrap_or("");
+                let _ = save_wallet_hd(mnemonic_str, &sk_hex, &address);
+            }
 
             let balance_paklets = crate::storage::load_mined_balance(&hash_hex);
             let balance_pkt     = balance_paklets as f64 / 1_000_000_000.0;
@@ -294,11 +295,27 @@ pub fn cmd_wallet_address() {
     }
 }
 
-/// In private key hex ra stdout — dùng để import vào desktop app.
+/// In private key hex và địa chỉ tương ứng — verify trước khi export.
 pub fn cmd_wallet_privkey() {
     match load_wallet() {
-        Ok((sk_hex, _)) => println!("{}", sk_hex),
-        Err(e)          => eprintln!("❌ {}", e),
+        Ok((sk_hex, _)) => {
+            // Recompute address từ sk để user có thể verify
+            let sk_bytes = match hex::decode(&sk_hex) {
+                Ok(b) => b,
+                Err(_) => { eprintln!("❌ File wallet bị hỏng"); return; }
+            };
+            let secp = Secp256k1::new();
+            let address = match SecretKey::from_slice(&sk_bytes) {
+                Ok(sk) => {
+                    let pk = PublicKey::from_secret_key(&secp, &sk);
+                    pubkey_to_address(&pk)
+                }
+                Err(_) => { eprintln!("❌ File wallet bị hỏng"); return; }
+            };
+            println!("Address     : {}", address);
+            println!("Private key : {}", sk_hex);
+        }
+        Err(e) => eprintln!("❌ {}", e),
     }
 }
 

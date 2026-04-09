@@ -149,7 +149,7 @@ struct SyncStartParams {
 
 // ── Script helpers ─────────────────────────────────────────────────────────────
 
-/// Decode a JSON-hex script (custom format used by this chain) to Base58Check P2PKH address.
+/// Decode a JSON-hex script (custom format used by this chain) to EVM address.
 /// Script JSON: {"ops":["OpDup","OpHash160",{"OpPushData":[b0,b1,...,b19]},"OpEqualVerify","OpCheckSig"]}
 fn script_hex_to_address(script_hex: &str) -> Option<String> {
     let bytes = hex::decode(script_hex).ok()?;
@@ -161,23 +161,14 @@ fn script_hex_to_address(script_hex: &str) -> Option<String> {
         })
     })?;
     if hash160.len() != 20 { return None; }
-    let mut payload = vec![0x00u8]; // version byte: mainnet P2PKH
-    payload.extend_from_slice(&hash160);
-    // wallet.rs uses BLAKE3 double-hash for checksum (not SHA256)
-    let checksum = blake3::hash(blake3::hash(&payload).as_bytes());
-    payload.extend_from_slice(&checksum.as_bytes()[..4]);
-    Some(bs58::encode(payload).into_string())
+    let raw: [u8; 20] = hash160.try_into().ok()?;
+    Some(crate::evm_address::raw_to_evm_address(&raw))
 }
 
-/// Convert Base58Check P2PKH address → JSON-hex script key used by address index.
+/// Convert EVM address (`0x...`) → JSON-hex script key used by address index.
 fn address_to_script_hex(addr: &str) -> Option<String> {
-    let decoded = bs58::decode(addr).into_vec().ok()?;
-    if decoded.len() != 25 { return None; }
-    let (payload, checksum) = decoded.split_at(21);
-    let expected = blake3::hash(blake3::hash(payload).as_bytes());
-    if &expected.as_bytes()[..4] != checksum { return None; }
-    let hash160: Vec<u8> = payload[1..21].to_vec();
-    hash160_to_script_hex(&hash160)
+    let raw = crate::evm_address::parse_evm_address(addr).ok()?;
+    hash160_to_script_hex(&raw)
 }
 
 /// Build raw P2PKH scriptPubKey hex from 20-byte hash160.
@@ -203,19 +194,19 @@ fn hash160_to_script_hex_legacy(hash160: &[u8]) -> Option<String> {
     Some(hex::encode(serde_json::to_vec(&script).ok()?))
 }
 
-/// Accept any address format (bech32 tpkt1/pkt1, Base58Check, or raw script_hex)
+/// Accept any address format (EVM `0x...`, bech32, or raw script_hex)
 /// and return the script_hex key used in AddrIndexDb (raw P2PKH wire format).
 fn any_addr_to_script_hex(s: &str) -> Option<String> {
     let s = s.trim();
-    // bech32: tpkt1… / pkt1… / rpkt1…
+    // EVM address: 0x + 40 hex chars
+    if s.starts_with("0x") || s.starts_with("0X") {
+        return address_to_script_hex(s);
+    }
+    // bech32 legacy: tpkt1… / pkt1… / rpkt1…
     if s.starts_with("tpkt1") || s.starts_with("pkt1") || s.starts_with("rpkt1") {
         let pkt_addr = crate::pkt_address::decode_address(s).ok()?;
         let hash160  = pkt_addr.hash160()?;
         return hash160_to_script_hex(&hash160);
-    }
-    // Base58Check (legacy P2PKH)
-    if let Some(hex) = address_to_script_hex(s) {
-        return Some(hex);
     }
     // Passthrough: assume caller already has script_hex
     if s.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -227,15 +218,16 @@ fn any_addr_to_script_hex(s: &str) -> Option<String> {
 /// Như any_addr_to_script_hex nhưng trả legacy JSON format (data cũ trước v22.x).
 fn any_addr_to_script_hex_legacy(s: &str) -> Option<String> {
     let s = s.trim();
+    // EVM address
+    if s.starts_with("0x") || s.starts_with("0X") {
+        let raw = crate::evm_address::parse_evm_address(s).ok()?;
+        return hash160_to_script_hex_legacy(&raw);
+    }
+    // bech32 legacy
     if s.starts_with("tpkt1") || s.starts_with("pkt1") || s.starts_with("rpkt1") {
         let pkt_addr = crate::pkt_address::decode_address(s).ok()?;
         let hash160  = pkt_addr.hash160()?;
         return hash160_to_script_hex_legacy(&hash160);
-    }
-    let decoded = bs58::decode(s).into_vec().ok()?;
-    if decoded.len() == 25 {
-        let hash160 = &decoded[1..21];
-        return hash160_to_script_hex_legacy(hash160);
     }
     None
 }

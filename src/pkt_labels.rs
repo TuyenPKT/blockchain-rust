@@ -8,7 +8,11 @@
 //!   2. LabelDb (RocksDB tại `~/.pkt/labeldb`) — label tùy chỉnh
 //!
 //! ## Key schema (RocksDB)
-//!   `lbl:{script_hex}` → JSON `LabelEntry`
+//!   `lbl:{addr_or_script_hex}` → JSON `LabelEntry`
+//!
+//! ## Địa chỉ EVM (v24.1+)
+//!   Presets dùng lowercase EVM address (không có 0x prefix) để match.
+//!   Ví dụ: `"5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"` → preset
 //!
 //! ## API
 //!   GET /api/testnet/label/:script  → LabelEntry | 404
@@ -32,23 +36,29 @@ pub struct LabelEntry {
 
 // ── Preset labels ─────────────────────────────────────────────────────────────
 //
-// Khớp theo tiền tố Base58Check address.
-// Tuple: (address_prefix, label, category, verified)
+// Khớp theo EVM address (lowercase, không có 0x prefix).
+// Tuple: (address_or_prefix, label, category, verified)
+//
+// TODO: cập nhật với địa chỉ EVM thực tế khi deploy mainnet/testnet.
 
 pub static PRESETS: &[(&str, &str, &str, bool)] = &[
-    // OCEIF treasury address (mainnet)
-    ("pSEHPyBk", "OCEIF Treasury",      "system",   true),
-    // OCEIF mining pool v1 (mainnet)
-    ("p7LMkZBs", "OCEIF Pool v1",       "miner",    true),
-    // Common burn pattern: address starting with all-zero hash160
-    // Represented as first character after version byte being "1" in base58
-    ("p111111",  "Burn Address",         "burn",     true),
+    // Burn address: all-zero EVM address (không ai có private key)
+    ("0000000000000000000000000000000000000000", "Burn Address", "burn", true),
+    // Burn address variant: dead address (EVM convention)
+    ("000000000000000000000000000000000000dead", "Dead Address",  "burn", true),
 ];
 
-/// Look up preset label by Base58Check address (exact prefix match).
+/// Look up preset label by EVM address.
+/// Input: có thể là "0x..." hoặc 40-char hex không có prefix.
 pub fn preset_by_address(addr: &str) -> Option<LabelEntry> {
-    for (prefix, label, category, verified) in PRESETS {
-        if addr.starts_with(prefix) {
+    // Normalize: bỏ "0x" nếu có, lowercase
+    let normalized = addr.strip_prefix("0x")
+        .or_else(|| addr.strip_prefix("0X"))
+        .unwrap_or(addr)
+        .to_ascii_lowercase();
+
+    for (preset_addr, label, category, verified) in PRESETS {
+        if normalized.starts_with(&preset_addr.to_ascii_lowercase()) {
             return Some(LabelEntry {
                 label:    label.to_string(),
                 category: category.to_string(),
@@ -235,8 +245,23 @@ mod tests {
     // ── preset_by_address ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_preset_burn_address() {
-        let e = preset_by_address("p111111xxxx");
+    fn test_preset_burn_address_zero() {
+        // All-zero EVM address
+        let e = preset_by_address("0x0000000000000000000000000000000000000000");
+        assert!(e.is_some());
+        assert_eq!(e.unwrap().category, "burn");
+    }
+
+    #[test]
+    fn test_preset_burn_address_without_prefix() {
+        let e = preset_by_address("0000000000000000000000000000000000000000");
+        assert!(e.is_some());
+        assert_eq!(e.unwrap().category, "burn");
+    }
+
+    #[test]
+    fn test_preset_dead_address() {
+        let e = preset_by_address("0x000000000000000000000000000000000000dead");
         assert!(e.is_some());
         let e = e.unwrap();
         assert_eq!(e.category, "burn");
@@ -244,27 +269,21 @@ mod tests {
     }
 
     #[test]
-    fn test_preset_network_steward() {
-        let e = preset_by_address("pSEHPyBkxxxxxx");
-        assert!(e.is_some());
-        assert_eq!(e.unwrap().category, "system");
-    }
-
-    #[test]
     fn test_preset_no_match() {
-        assert!(preset_by_address("pZZZZZZZ").is_none());
+        assert!(preset_by_address("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed").is_none());
     }
 
     #[test]
     fn test_preset_verified_flag() {
-        let e = preset_by_address("p7LMkZBsxxx").unwrap();
+        let e = preset_by_address("0x0000000000000000000000000000000000000000").unwrap();
         assert!(e.verified);
     }
 
     #[test]
-    fn test_preset_miner_category() {
-        let e = preset_by_address("p7LMkZBsxxx").unwrap();
-        assert_eq!(e.category, "miner");
+    fn test_preset_case_insensitive() {
+        // EVM addresses nên match case-insensitive
+        let e = preset_by_address("0X000000000000000000000000000000000000DEAD");
+        assert!(e.is_some());
     }
 
     // ── LabelDb open / read / write ───────────────────────────────────────────
@@ -344,8 +363,9 @@ mod tests {
         let _g = DB_LOCK.lock().unwrap();
         let db = LabelDb::open_temp().unwrap();
         // Even if DB has a label for the same address, preset wins
-        db.set_label("p111111xxxx", "Custom", "other", false).unwrap();
-        let e = db.get_label_for("somescript", Some("p111111xxxx")).unwrap();
+        let burn = "0x0000000000000000000000000000000000000000";
+        db.set_label(burn, "Custom", "other", false).unwrap();
+        let e = db.get_label_for("somescript", Some(burn)).unwrap();
         assert_eq!(e.category, "burn"); // preset
     }
 
@@ -385,9 +405,9 @@ mod tests {
     fn test_get_label_by_address_preset() {
         let _g = DB_LOCK.lock().unwrap();
         let db = LabelDb::open_temp().unwrap();
-        let e = db.get_label_by_address("pSEHPyBk_any_suffix");
+        let e = db.get_label_by_address("0x0000000000000000000000000000000000000000");
         assert!(e.is_some());
-        assert_eq!(e.unwrap().label, "OCEIF Treasury");
+        assert_eq!(e.unwrap().label, "Burn Address");
     }
 
     #[test]

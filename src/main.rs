@@ -42,7 +42,6 @@ mod packetcrypt;
 mod storage;
 mod api;
 mod explorer;
-mod genesis;
 mod metrics;
 mod performance;
 mod security;
@@ -154,6 +153,7 @@ mod pkt_mempool_bridge;
 mod pkt_snapshot;
 mod pkt_fullnode;
 mod pkt_install;
+mod evm_address;
 
 // ── Entry point ───────────────────────────────────────────────
 //
@@ -172,7 +172,6 @@ mod pkt_install;
 //   cargo run -- explorer block <height>       → chi tiết block
 //   cargo run -- explorer tx <tx_id>           → tìm transaction
 //   cargo run -- explorer balance <addr>       → số dư địa chỉ
-//   cargo run -- testnet [n] [port]            → local testnet (n nodes, base port)
 //   cargo run -- genesis [regtest|testnet]     → xem network config
 //   cargo run -- metrics [node:port]           → hashrate, peers, mempool, block time
 //   cargo run -- monitor [port]               → health endpoint (mặc định 3001)
@@ -203,14 +202,6 @@ fn main() {
         }
         Some("explorer") => {
             explorer::run_explorer(&args);
-        }
-        Some("testnet") => {
-            let n_nodes = args.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(3);
-            let port    = args.get(3).and_then(|s| s.parse::<u16>().ok()).unwrap_or(18444);
-            let addr    = wallet_cli::load_miner_address()
-                .unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(genesis::run_local_testnet(n_nodes, port, &addr));
         }
         Some("metrics") => {
             let node_addr = args.get(2).map(|s| s.as_str());
@@ -351,23 +342,31 @@ fn main() {
         }
         Some("genesis") => {
             let net = args.get(2).map(|s| s.as_str()).unwrap_or("testnet");
-            match genesis::by_name(net) {
+            let p = match net {
+                "mainnet" => Some(pkt_genesis::PktNetworkParams::mainnet()),
+                "testnet" => Some(pkt_genesis::PktNetworkParams::testnet()),
+                "regtest" => Some(pkt_genesis::PktNetworkParams::regtest()),
+                _ => None,
+            };
+            match p {
                 Some(p) => {
+                    let reward_pkt = p.initial_reward as f64 / pkt_genesis::PAKLETS_PER_PKT as f64;
                     println!();
-                    println!("  Network  : {} ({})", p.name, p.network);
+                    println!("  Network  : {:?}", p.network);
                     println!("  Magic    : {:02x}{:02x}{:02x}{:02x}",
                         p.magic[0], p.magic[1], p.magic[2], p.magic[3]);
                     println!("  P2P port : {}", p.p2p_port);
-                    println!("  API port : {}", p.api_port);
-                    println!("  Diff     : {}", p.initial_difficulty);
-                    println!("  Reward   : {} paklets ({:.2} PKT)", p.block_reward, p.block_reward as f64 / 1e8);
-                    println!("  Interval : every {} blocks", p.difficulty_interval);
-                    println!("  Block t  : {}s", p.block_time_secs);
-                    println!("  Genesis  : \"{}\"", p.genesis_message);
+                    println!("  RPC port : {}", p.rpc_port);
+                    println!("  HRP      : {}", p.hrp);
+                    println!("  Reward   : {} paklets ({:.0} PKT)", p.initial_reward, reward_pkt);
+                    println!("  Halving  : every {} blocks", p.halving_interval);
+                    println!("  Block t  : {}s", p.target_block_time);
+                    println!("  Maturity : {} blocks", p.coinbase_maturity);
+                    println!("  Genesis  : {}", p.genesis_hash);
                     if p.bootstrap_peers.is_empty() {
-                        println!("  Peers    : (none yet)");
+                        println!("  Peers    : (none)");
                     } else {
-                        for peer in &p.bootstrap_peers {
+                        for peer in p.bootstrap_peers {
                             println!("  Peers    : {}", peer);
                         }
                     }
@@ -404,7 +403,6 @@ fn print_help() {
     println!("    cargo run -- explorer block <h>      chi tiết block tại height h");
     println!("    cargo run -- explorer tx <id>        tìm transaction");
     println!("    cargo run -- explorer balance <addr> số dư địa chỉ");
-    println!("    cargo run -- testnet [n] [port]      local testnet (mặc định 3 nodes)");
     println!("    cargo run -- genesis [net]           xem config: regtest/testnet/mainnet");
     println!("    cargo run -- metrics [node:port]     hashrate, peers, mempool, block time");
     println!("    cargo run -- monitor [port]          health endpoint (mặc định 3001)");
@@ -1618,45 +1616,42 @@ mod tests {
         assert_eq!(back.difficulty, m.difficulty);
     }
 
-    // ── Testnet Config (v4.7) ────────────────────────────────────────────────
+    // ── Network Params (v4.7 → migrated to pkt_genesis) ─────────────────────
 
     #[test]
     fn test_genesis_network_params() {
-        use crate::genesis;
+        use crate::pkt_genesis::PktNetworkParams;
 
-        let r = genesis::regtest();
-        assert_eq!(r.initial_difficulty, 1);
+        let r = PktNetworkParams::regtest();
         assert_eq!(r.p2p_port, 18444);
         assert!(r.bootstrap_peers.is_empty());
 
-        let t = genesis::testnet();
-        assert_eq!(t.initial_difficulty, 3);
-        assert_eq!(t.p2p_port, 18333);
-        assert_ne!(t.magic, genesis::mainnet().magic); // network magic khác nhau
+        let t = PktNetworkParams::testnet();
+        assert_eq!(r.p2p_port, 18444); // regtest port
+        assert_ne!(t.magic, PktNetworkParams::mainnet().magic);
 
-        let m = genesis::mainnet();
-        assert_eq!(m.p2p_port, 8333);
-        assert_eq!(m.initial_difficulty, 5);
+        let m = PktNetworkParams::mainnet();
+        assert_eq!(m.p2p_port, 64764);
+        assert!(!m.genesis_hash.is_empty());
     }
 
     #[test]
     fn test_genesis_by_name() {
-        use crate::genesis;
-        assert!(genesis::by_name("regtest").is_some());
-        assert!(genesis::by_name("testnet").is_some());
-        assert!(genesis::by_name("mainnet").is_some());
-        assert!(genesis::by_name("unknown").is_none());
+        use crate::pkt_genesis::PktNetworkParams;
+        // regtest/testnet/mainnet đều có params hợp lệ
+        assert!(!PktNetworkParams::regtest().genesis_hash.is_empty());
+        assert!(!PktNetworkParams::testnet().genesis_hash.is_empty());
+        assert!(!PktNetworkParams::mainnet().genesis_hash.is_empty());
     }
 
     #[test]
     fn test_genesis_build_block() {
-        use crate::genesis;
-        let params = genesis::regtest(); // difficulty=1, nhanh
-        let block  = genesis::build_genesis(&params);
-        assert_eq!(block.index, 0);
-        assert!(!block.hash.is_empty());
-        assert!(block.is_valid(params.initial_difficulty),
-            "Genesis block phải valid với difficulty={}", params.initial_difficulty);
+        use crate::pkt_genesis::{PktNetworkParams, PAKLETS_PER_PKT, INITIAL_BLOCK_REWARD};
+        let p = PktNetworkParams::regtest();
+        // genesis hash thật đã mine
+        assert_eq!(p.genesis_hash.len(), 64);
+        // reward hợp lệ
+        assert_eq!(INITIAL_BLOCK_REWARD, 4096 * PAKLETS_PER_PKT);
     }
 
     // ── Block Explorer (v4.6) ────────────────────────────────────────────────

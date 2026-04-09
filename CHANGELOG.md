@@ -4,6 +4,50 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.1 — EVM Address Format (2026-04-08)
+
+### Added
+- Địa chỉ `0x...` tương thích ETH/BNB — Keccak-256 + EIP-55 checksum
+- Quy trình: compressed pubkey (33B) → uncompressed (64B, no prefix) → Keccak256 → last 20B → EIP-55
+- `src/evm_address.rs` — module mới:
+  - `pubkey_to_evm_address(&[u8]) -> Result<String>` — chấp nhận 33 hoặc 65-byte pubkey
+  - `raw_to_evm_address(&[u8; 20]) -> String` — EIP-55 checksum
+  - `parse_evm_address(&str) -> Result<[u8; 20]>` — validate + parse
+  - `is_valid_evm_address(&str) -> bool`
+  - `normalize_evm_address(&str) -> Option<String>` — lowercase, bỏ EIP-55
+- `wallet.rs` — `Wallet::pubkey_to_address()` dùng EVM format
+- `wallet_cli.rs` — `pubkey_to_address()` + `pubkey_to_hash_hex()` dùng EVM format
+- `pkt_labels.rs` — cập nhật PRESETS sang EVM address format (burn/dead addresses)
+- `Cargo.toml` — thêm `sha3 = "0.10"` (Keccak256)
+
+### Files
+- `src/evm_address.rs` — NEW
+- `src/wallet.rs` — removed Base58Check, replaced with EVM
+- `src/wallet_cli.rs` — removed RIPEMD160/bs58, replaced with Keccak256
+- `src/pkt_labels.rs` — PRESETS migrated to EVM format
+
+### Tests
+- +14 tests evm_address (total: 14)
+- pkt_labels tests cập nhật EVM (total: 23)
+
+### Breaking
+- Địa chỉ PKT thay đổi hoàn toàn: `p...` / `pkt1...` → `0x...` (40 hex + EIP-55)
+- Wallet file cũ (v4.0/v12.0) lưu địa chỉ cũ — cần tạo lại ví: `cargo run -- wallet new`
+
+---
+
+## v24.0 — Node Onboarding (2026-04-08)
+
+### Added
+- `src/pkt_install.rs` — install script generator
+- `--print-sh` (Linux systemd + macOS launchd), `--print-ps1` (Windows New-Service), `--print-config`
+- `main.rs` — dispatch `install-node`
+
+### Files
+- `src/pkt_install.rs` — NEW (25 tests)
+
+---
+
 ## v23.8 — Full Node Mode (2026-03-31)
 
 ### Added

@@ -248,19 +248,19 @@ impl PeerDiscovery {
 
 // ─── Convenience factory ──────────────────────────────────────────────────────
 
-/// Tạo PeerDiscovery từ NetworkParams (dùng bootstrap_peers làm DNS seeds).
-pub fn from_network(params: &crate::genesis::NetworkParams) -> PeerDiscovery {
+/// Tạo PeerDiscovery từ PktNetworkParams (dùng bootstrap_peers làm DNS seeds).
+pub fn from_network(params: &crate::pkt_genesis::PktNetworkParams) -> PeerDiscovery {
     let seeds: Vec<&str> = params.bootstrap_peers.iter()
-        .map(|s| {
+        .map(|s: &&str| {
             // Strip port — chỉ lấy hostname phần
-            s.split(':').next().unwrap_or(s.as_str())
+            s.split(':').next().unwrap_or(s)
         })
         .collect();
     PeerDiscovery::new(&seeds, params.p2p_port)
 }
 
 /// Bootstrap peers cho node khởi động: DNS + store, không PEX (nhanh).
-pub fn quick_bootstrap(params: &crate::genesis::NetworkParams) -> Vec<String> {
+pub fn quick_bootstrap(params: &crate::pkt_genesis::PktNetworkParams) -> Vec<String> {
     from_network(params).bootstrap()
 }
 

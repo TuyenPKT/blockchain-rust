@@ -693,14 +693,14 @@ async fn get_txs_csv(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Convert 20-byte pubkey hash → Base58Check address (version byte 0x00).
-/// Cùng logic với Wallet::pubkey_to_address nhưng nhận sẵn hash bytes.
+/// Convert 20-byte pubkey hash → EVM address (`0x...` EIP-55 checksummed).
 fn pubkey_hash_to_address(hash20: &[u8]) -> String {
-    let mut payload = vec![0x00u8];
-    payload.extend_from_slice(hash20);
-    let checksum = blake3::hash(blake3::hash(&payload).as_bytes());
-    payload.extend_from_slice(&checksum.as_bytes()[..4]);
-    bs58::encode(payload).into_string()
+    if hash20.len() != 20 {
+        return "0x0000000000000000000000000000000000000000".to_string();
+    }
+    let mut raw = [0u8; 20];
+    raw.copy_from_slice(hash20);
+    crate::evm_address::raw_to_evm_address(&raw)
 }
 
 /// Extract pubkey hash bytes from a P2PKH/P2WPKH script_pubkey.

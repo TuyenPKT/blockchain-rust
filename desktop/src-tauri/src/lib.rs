@@ -18,8 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 use tauri::Emitter;
-use sha2::Digest as _;
-use ripemd::Ripemd160;
+use sha3::{Keccak256, Digest as Keccak256Digest};
 
 // ── Miner global state ────────────────────────────────────────────────────────
 
@@ -584,42 +583,24 @@ fn submit_block_tcp(node_addr: &str, block: serde_json::Value) -> Result<u64, St
     Ok(v["Height"]["height"].as_u64().unwrap_or(0))
 }
 
-/// Giải mã địa chỉ PKT: bech32 (tpkt1/pkt1), Base58Check (legacy P2PKH), hoặc hex.
+/// Giải mã địa chỉ PKT: EVM (0x...), hex 40-char, hoặc bech32 legacy.
 fn parse_miner_address(addr: &str) -> Result<Vec<u8>, String> {
     let a = addr.trim();
-    if a.starts_with("pkt1") || a.starts_with("tpkt1") || a.starts_with("rpkt1") {
-        return decode_bech32_witprog(a);
+    // EVM address: 0x + 40 hex chars
+    if a.starts_with("0x") || a.starts_with("0X") {
+        return parse_evm_address(a).map(|b| b.to_vec());
     }
-    // Hex pubkey_hash (40 hex chars = 20 bytes)
+    // Hex pubkey_hash (40 hex chars = 20 bytes, no prefix)
     if a.len() == 40 && a.chars().all(|c| c.is_ascii_hexdigit()) {
         return hex::decode(a).map_err(|e| format!("địa chỉ không hợp lệ: {}", e));
     }
-    // Fallback: Base58Check (legacy P2PKH — starts with '1', 'p', 'm', 'n', etc.)
-    decode_base58check(a)
+    // bech32 legacy: tpkt1/pkt1/rpkt1
+    if a.starts_with("pkt1") || a.starts_with("tpkt1") || a.starts_with("rpkt1") {
+        return decode_bech32_witprog(a);
+    }
+    Err(format!("địa chỉ không hợp lệ: {}", a))
 }
 
-/// Giải mã Base58Check → 20-byte pubkey_hash (bỏ version byte và 4-byte checksum).
-fn decode_base58check(addr: &str) -> Result<Vec<u8>, String> {
-    const ALPHA: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    // Kết quả P2PKH luôn là 25 bytes: 1 version + 20 hash + 4 checksum
-    let mut out = [0u8; 25];
-    for c in addr.bytes() {
-        let digit = ALPHA.iter().position(|&x| x == c)
-            .ok_or_else(|| format!("địa chỉ không hợp lệ: ký tự '{}' không thuộc Base58", c as char))?
-            as u32;
-        let mut carry = digit;
-        for byte in out.iter_mut().rev() {
-            carry += (*byte as u32) * 58;
-            *byte = (carry & 0xff) as u8;
-            carry >>= 8;
-        }
-        if carry != 0 {
-            return Err("địa chỉ Base58 quá lớn".to_string());
-        }
-    }
-    // out[0] = version, out[1..21] = pubkey_hash, out[21..25] = checksum
-    Ok(out[1..21].to_vec())
-}
 
 fn decode_bech32_witprog(addr: &str) -> Result<Vec<u8>, String> {
     const CHARSET: &[u8] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
@@ -836,58 +817,60 @@ async fn peer_scan(seed_addr: String) -> Result<Vec<PeerInfo>, String> {
 // ── Wallet ────────────────────────────────────────────────────────────────────
 
 /// PKT hash160: RIPEMD160(blake3(pubkey)) — khác Bitcoin (dùng blake3 thay SHA256).
-fn pkt_hash160(data: &[u8]) -> [u8; 20] {
-    let b3   = blake3::hash(data);
-    let ripe = Ripemd160::digest(b3.as_bytes());
-    let mut out = [0u8; 20];
-    out.copy_from_slice(&ripe);
+/// Derive EVM address từ compressed secp256k1 pubkey (33 bytes).
+/// Pipeline: compressed → uncompressed 64B → Keccak256 → last 20B → EIP-55.
+fn evm_address_from_pubkey(pk: &secp256k1::PublicKey) -> String {
+    let uncompressed = pk.serialize_uncompressed(); // 65 bytes: 0x04 + X + Y
+    let hash: [u8; 32] = Keccak256::digest(&uncompressed[1..]).into(); // hash 64 bytes
+    let raw = &hash[12..]; // last 20 bytes
+    eip55_checksum(raw)
+}
+
+/// EIP-55: Keccak256(lowercase_hex) → capitalize nếu nibble ≥ 8.
+fn eip55_checksum(raw20: &[u8]) -> String {
+    let hex_lower = hex::encode(raw20);
+    let chk: [u8; 32] = Keccak256::digest(hex_lower.as_bytes()).into();
+    let mut out = String::with_capacity(42);
+    out.push_str("0x");
+    for (i, c) in hex_lower.chars().enumerate() {
+        let nibble = if i % 2 == 0 { chk[i / 2] >> 4 } else { chk[i / 2] & 0x0f };
+        out.push(if nibble >= 8 { c.to_ascii_uppercase() } else { c });
+    }
     out
 }
 
-/// PKT P2PKH address: Base58Check( 0x00 + hash160, checksum = blake3(blake3(payload))[0..4] ).
-fn pkt_address(hash20: &[u8]) -> String {
-    let mut payload = vec![0x00u8];
-    payload.extend_from_slice(hash20);
-    let chk = blake3::hash(blake3::hash(&payload).as_bytes());
-    payload.extend_from_slice(&chk.as_bytes()[..4]);
-    bs58::encode(payload).into_string()
-}
-
-/// Decode PKT Base58Check → hash160 (20 bytes). Không verify checksum (dùng cho script lookup).
-fn decode_pkt_address(addr: &str) -> Result<[u8; 20], String> {
-    let bytes = bs58::decode(addr).into_vec()
-        .map_err(|e| format!("Base58 decode lỗi: {}", e))?;
-    if bytes.len() != 25 {
-        return Err(format!("địa chỉ không hợp lệ: {} bytes (cần 25)", bytes.len()));
+/// Parse EVM address `0x...` → [u8; 20].
+fn parse_evm_address(addr: &str) -> Result<[u8; 20], String> {
+    let hex = addr.strip_prefix("0x").or_else(|| addr.strip_prefix("0X"))
+        .ok_or_else(|| format!("địa chỉ EVM phải bắt đầu bằng 0x: {addr}"))?;
+    if hex.len() != 40 {
+        return Err(format!("địa chỉ EVM phải có 40 ký tự hex, got {}", hex.len()));
     }
-    let mut h = [0u8; 20];
-    h.copy_from_slice(&bytes[1..21]);
-    Ok(h)
+    let bytes = hex::decode(hex).map_err(|e| format!("hex decode lỗi: {e}"))?;
+    bytes.try_into().map_err(|_| "slice error".to_string())
 }
 
-/// Tạo ví PKT mới: secp256k1 keypair → P2PKH Base58Check address.
+/// Tạo ví PKT mới: secp256k1 keypair → EVM address (Keccak256 + EIP-55).
 #[tauri::command]
 fn wallet_generate(_network: String) -> Result<serde_json::Value, String> {
     let secp = secp256k1::Secp256k1::new();
     let (secret_key, public_key) = secp.generate_keypair(&mut secp256k1::rand::thread_rng());
-    let hash    = pkt_hash160(&public_key.serialize());
-    let address = pkt_address(&hash);
+    let address = evm_address_from_pubkey(&public_key);
     let privkey = hex::encode(secret_key.secret_bytes());
     let pubkey  = hex::encode(public_key.serialize());
     Ok(serde_json::json!({ "address": address, "privkey_hex": privkey, "pubkey_hex": pubkey }))
 }
 
-/// Khôi phục ví từ private key hex → P2PKH Base58Check address.
+/// Khôi phục ví từ private key hex → EVM address.
 #[tauri::command]
 fn wallet_from_privkey(privkey_hex: String, _network: String) -> Result<serde_json::Value, String> {
     let bytes = hex::decode(privkey_hex.trim())
         .map_err(|_| "private key hex không hợp lệ".to_string())?;
-    let secp   = secp256k1::Secp256k1::new();
-    let sk     = secp256k1::SecretKey::from_slice(&bytes)
+    let secp = secp256k1::Secp256k1::new();
+    let sk   = secp256k1::SecretKey::from_slice(&bytes)
         .map_err(|e| format!("private key lỗi: {}", e))?;
-    let pk     = secp256k1::PublicKey::from_secret_key(&secp, &sk);
-    let hash   = pkt_hash160(&pk.serialize());
-    let address = pkt_address(&hash);
+    let pk      = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+    let address = evm_address_from_pubkey(&pk);
     let pubkey  = hex::encode(pk.serialize());
     Ok(serde_json::json!({ "address": address, "pubkey_hex": pubkey }))
 }
@@ -1070,9 +1053,9 @@ fn write_tx_output(buf: &mut Vec<u8>, value: u64, script: &[u8]) {
     buf.extend_from_slice(script);
 }
 
-/// Decode PKT P2PKH address → 25-byte scriptPubKey (OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG).
+/// Decode EVM address → 25-byte scriptPubKey (OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG).
 fn addr_to_p2pkh_script(addr: &str) -> Result<Vec<u8>, String> {
-    let hash20 = decode_pkt_address(addr)?;
+    let hash20 = parse_evm_address(addr)?;
     let mut script = Vec::with_capacity(25);
     script.push(0x76); // OP_DUP
     script.push(0xa9); // OP_HASH160
@@ -1123,16 +1106,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pkt_address_matches_cli() {
-        // privkey từ ~/.pkt/wallet.key — địa chỉ CLI là 18114ap3q4FsitFbpEe2aig4FJyMpKGGrK
-        let privkey_hex = "01ba03f773968bb837ac7e52d549345fe4d776103608b7516161d3e3efa1c311";
-        let bytes = hex::decode(privkey_hex).unwrap();
-        let secp  = secp256k1::Secp256k1::new();
-        let sk    = secp256k1::SecretKey::from_slice(&bytes).unwrap();
-        let pk    = secp256k1::PublicKey::from_secret_key(&secp, &sk);
-        let hash  = pkt_hash160(&pk.serialize());
-        let addr  = pkt_address(&hash);
-        assert_eq!(addr, "18114ap3q4FsitFbpEe2aig4FJyMpKGGrK");
+    fn test_evm_address_format() {
+        let secp = secp256k1::Secp256k1::new();
+        let mut sk_bytes = [1u8; 32];
+        sk_bytes[31] = 7;
+        let sk = secp256k1::SecretKey::from_slice(&sk_bytes).unwrap();
+        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let addr = evm_address_from_pubkey(&pk);
+        assert!(addr.starts_with("0x"), "EVM address phải bắt đầu bằng 0x");
+        assert_eq!(addr.len(), 42, "0x + 40 hex chars");
+    }
+
+    #[test]
+    fn test_parse_evm_address_roundtrip() {
+        let secp = secp256k1::Secp256k1::new();
+        let mut sk_bytes = [1u8; 32];
+        sk_bytes[31] = 3;
+        let sk = secp256k1::SecretKey::from_slice(&sk_bytes).unwrap();
+        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let addr  = evm_address_from_pubkey(&pk);
+        let raw   = parse_evm_address(&addr).unwrap();
+        let back  = eip55_checksum(&raw);
+        assert_eq!(addr, back, "EIP-55 phải idempotent");
     }
 
     #[test]
