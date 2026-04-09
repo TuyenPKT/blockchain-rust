@@ -647,8 +647,9 @@ mod tests {
     fn test_wallet_address_format() {
         use crate::wallet::Wallet;
         let w = Wallet::new();
-        assert!(w.address.starts_with('1'));
-        assert!(w.address.len() >= 25 && w.address.len() <= 34);
+        // EVM address: "0x" + 40 hex chars = 42 chars total
+        assert!(w.address.starts_with("0x"), "address phải bắt đầu bằng 0x: {}", w.address);
+        assert_eq!(w.address.len(), 42, "EVM address phải có 42 ký tự");
     }
 
     #[test]

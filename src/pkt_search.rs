@@ -218,10 +218,11 @@ mod tests {
     }
 
     #[test]
-    fn test_search_labels_preset_miner() {
-        let results = search_labels("miner", None);
+    fn test_search_labels_preset_burn_category() {
+        // PRESETS hiện tại: burn address + dead address (category = "burn")
+        let results = search_labels("burn", None);
         assert!(!results.is_empty());
-        assert!(results.iter().any(|(_, _, cat, _)| cat == "miner"));
+        assert!(results.iter().any(|(_, _, cat, _)| cat == "burn"));
     }
 
     #[test]
