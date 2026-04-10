@@ -17,8 +17,8 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  nodeUrlTestnet: "https://oceif.com/blockchain-rust",
-  nodeUrlMainnet: "https://oceif.com/blockchain-rust",
+  nodeUrlTestnet: "http://127.0.0.1:21019",
+  nodeUrlMainnet: "http://127.0.0.1:21020",
   currency:       "PKT",
   language:       "en",
   theme:          "auto",

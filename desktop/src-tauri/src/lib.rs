@@ -1,15 +1,14 @@
-//! pktscan-desktop — Tauri backend (v21.0)
+//! pktscan-desktop — Tauri backend (v25.0)
 //!
-//! IPC commands expose PKTScan REST API tới React frontend qua invoke().
+//! Embedded node: pkt_core chạy axum API server local tại 127.0.0.1:21019
+//! Frontend fetch() trực tiếp → không proxy, không fake.
 //!
-//! Commands:
-//!   get_summary(node_url)                    → NetworkSummary JSON
-//!   get_blocks(node_url, limit)              → block headers JSON
-//!   get_balance(node_url, address)           → balance JSON
-//!   search(node_url, query)                  → search results JSON
-//!   start_mine(address, node_addr, threads)  → spawn real blake3 PoW miner
-//!   stop_mine()                              → stop miner
-//!   mine_status()                            → bool
+//! IPC commands (real only):
+//!   start_mine / stop_mine / mine_status    → blake3 PoW miner
+//!   peer_scan                               → scan PKT peers
+//!   wallet_generate / wallet_from_privkey / wallet_from_mnemonic
+//!   wallet_tx_build / tx_broadcast
+//!   start_sync / stop_sync / is_sync_running → embedded node sync
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -21,106 +20,92 @@ use tauri::Emitter;
 use sha3::{Keccak256, Digest as Keccak256Digest};
 use hmac::{Hmac, Mac};
 use sha2::Sha512;
+use axum;
 
-// ── Miner global state ────────────────────────────────────────────────────────
+// ── Global state ──────────────────────────────────────────────────────────────
 
 static MINER_RUNNING: AtomicBool = AtomicBool::new(false);
 static MINER_STOP:    AtomicBool = AtomicBool::new(false);
+static SYNC_RUNNING:  AtomicBool = AtomicBool::new(false);
+static SYNC_STOP:     AtomicBool = AtomicBool::new(false);
 
-const TIMEOUT_SECS: u64 = 10;
+pub const EMBEDDED_API_PORT: u16 = 21019;
 
-fn client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
-        .build()
-        .map_err(|e| e.to_string())
+// ── Embedded node API server ──────────────────────────────────────────────────
+
+/// Spawn embedded axum API server tại 127.0.0.1:21019.
+/// Đọc dữ liệu trực tiếp từ local RocksDB (~/.pkt/testnet/).
+fn spawn_embedded_server(mainnet: bool) {
+    pkt_core::pkt_paths::set_mainnet(mainnet);
+    std::thread::spawn(move || {
+        // Đảm bảo data dir tồn tại
+        let data_dir = pkt_core::pkt_paths::data_dir();
+        if let Err(e) = std::fs::create_dir_all(&data_dir) {
+            eprintln!("[PKTScan] Cannot create data dir {:?}: {}", data_dir, e);
+            return;
+        }
+
+        let rt = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(r)  => r,
+            Err(e) => { eprintln!("[PKTScan] Tokio runtime error: {}", e); return; }
+        };
+
+        rt.block_on(async move {
+            let addr = format!("127.0.0.1:{}", EMBEDDED_API_PORT);
+
+            // Port đã bị dùng? Không panic, log và thoát thread.
+            let listener = match tokio::net::TcpListener::bind(&addr).await {
+                Ok(l)  => l,
+                Err(e) => {
+                    eprintln!("[PKTScan] Cannot bind {} (port busy?): {}", addr, e);
+                    return;
+                }
+            };
+
+            // Mở DB — catch panic để không crash cả app
+            let router = match std::panic::catch_unwind(|| {
+                pkt_core::pkt_testnet_web::testnet_web_router()
+            }) {
+                Ok(r)  => r,
+                Err(_) => {
+                    eprintln!("[PKTScan] API router init failed (DB corrupt?)");
+                    return;
+                }
+            };
+
+            eprintln!("[PKTScan] Embedded API server → http://{}", addr);
+            if let Err(e) = axum::serve(listener, router).await {
+                eprintln!("[PKTScan] API server stopped: {}", e);
+            }
+        });
+    });
 }
 
-async fn get_json(url: &str) -> Result<serde_json::Value, String> {
-    let resp = client()?
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    resp.json::<serde_json::Value>()
-        .await
-        .map_err(|e| e.to_string())
-}
+// ── Sync control commands ─────────────────────────────────────────────────────
 
-fn base(node_url: &str) -> String {
-    node_url.trim_end_matches('/').to_string()
-}
-
-// ── IPC Commands ──────────────────────────────────────────────────────────────
-
-/// Fetch network summary: height, hashrate, mempool, block time…
+/// Bắt đầu sync blockchain từ peer vào local DB.
 #[tauri::command]
-async fn get_summary(node_url: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/summary", base(&node_url))).await
+async fn start_sync(peer: Option<String>) -> Result<String, String> {
+    if SYNC_RUNNING.load(Ordering::SeqCst) {
+        return Err("Sync đang chạy".into());
+    }
+    let peer = peer.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+    SYNC_STOP.store(false, Ordering::SeqCst);
+    SYNC_RUNNING.store(true, Ordering::SeqCst);
+    std::thread::spawn(move || {
+        pkt_core::pkt_sync::cmd_sync(&[peer]);
+        SYNC_RUNNING.store(false, Ordering::SeqCst);
+    });
+    Ok(format!("Sync started → seed.testnet.oceif.com:8333"))
 }
 
-/// Fetch recent block headers (paginated).
+/// Trả về true nếu sync đang chạy.
 #[tauri::command]
-async fn get_blocks(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/headers?limit={}", base(&node_url), limit)).await
-}
-
-/// Fetch PKT balance for an address.
-#[tauri::command]
-async fn get_balance(node_url: String, address: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/balance/{}", base(&node_url), address)).await
-}
-
-/// Search: block height, txid, or address.
-#[tauri::command]
-async fn search(node_url: String, query: String) -> Result<serde_json::Value, String> {
-    let q = urlencoding::encode(&query);
-    get_json(&format!("{}/api/testnet/search?q={}", base(&node_url), q)).await
-}
-
-/// Fetch analytics time-series: metric = hashrate | block_time | difficulty
-#[tauri::command]
-async fn get_analytics(node_url: String, metric: String, window: u32) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/analytics?metric={}&window={}", base(&node_url), metric, window)).await
-}
-
-/// Fetch TX history for an address (paginated).
-#[tauri::command]
-async fn get_address_txs(node_url: String, address: String, page: u32, limit: u32) -> Result<serde_json::Value, String> {
-    let a = urlencoding::encode(&address);
-    get_json(&format!("{}/api/testnet/address/{}/txs?page={}&limit={}", base(&node_url), a, page, limit)).await
-}
-
-/// Fetch UTXO list for an address.
-#[tauri::command]
-async fn get_address_utxos(node_url: String, address: String) -> Result<serde_json::Value, String> {
-    let a = urlencoding::encode(&address);
-    get_json(&format!("{}/api/testnet/address/{}/utxos", base(&node_url), a)).await
-}
-
-/// Fetch top PKT holders (rich list).
-#[tauri::command]
-async fn get_rich_list(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/richlist?limit={}", base(&node_url), limit)).await
-}
-
-/// Fetch mempool pending transactions.
-#[tauri::command]
-async fn get_mempool(node_url: String, limit: u32) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/mempool?limit={}", base(&node_url), limit)).await
-}
-
-/// Fetch full block detail by height (includes TX list).
-#[tauri::command]
-async fn get_block_detail(node_url: String, height: u64) -> Result<serde_json::Value, String> {
-    get_json(&format!("{}/api/testnet/block/{}", base(&node_url), height)).await
-}
-
-/// Fetch full TX detail by txid (includes inputs + outputs).
-#[tauri::command]
-async fn get_tx_detail(node_url: String, txid: String) -> Result<serde_json::Value, String> {
-    let t = urlencoding::encode(&txid);
-    get_json(&format!("{}/api/testnet/tx/{}", base(&node_url), t)).await
+fn is_sync_running() -> bool {
+    SYNC_RUNNING.load(Ordering::SeqCst)
 }
 
 // ── PKT wire broadcast (direct TCP — không qua HTTP server) ───────────────────
@@ -260,55 +245,6 @@ async fn tx_broadcast(_node_url: String, raw_hex: String) -> Result<serde_json::
         .map(|_| serde_json::json!({"txid": txid, "status": "broadcast"}))
 }
 
-// ── Sync control commands ──────────────────────────────────────────────────────
-
-
-
-/// GET JSON with graceful fallback for non-JSON bodies.
-async fn get_json_safe(url: &str) -> Result<serde_json::Value, String> {
-    let resp = client()?.get(url).send().await.map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if text.is_empty() {
-        return Ok(serde_json::json!({"status": status.as_u16()}));
-    }
-    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
-}
-
-/// Start sync process on the node server.
-/// `api_key`: Write-role key — required vì route đã được bảo vệ bởi require_write_middleware.
-#[tauri::command]
-async fn start_node_sync(node_url: String, peer_addr: Option<String>, api_key: String) -> Result<serde_json::Value, String> {
-    let peer = peer_addr.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
-    let url = format!("{}/api/testnet/sync/start?peer={}", base(&node_url), urlencoding::encode(&peer));
-    let resp = client()?.post(&url)
-        .header("x-api-key", &api_key)
-        .send().await.map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if text.is_empty() { return Ok(serde_json::json!({"status": status.as_u16()})); }
-    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
-}
-
-/// Stop running sync process on the node server.
-/// `api_key`: Write-role key — required vì route đã được bảo vệ bởi require_write_middleware.
-#[tauri::command]
-async fn stop_node_sync(node_url: String, api_key: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/api/testnet/sync/stop", base(&node_url));
-    let resp = client()?.post(&url)
-        .header("x-api-key", &api_key)
-        .send().await.map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if text.is_empty() { return Ok(serde_json::json!({"status": status.as_u16()})); }
-    serde_json::from_str(&text).map_err(|_| format!("HTTP {}: {}", status, text.chars().take(120).collect::<String>()))
-}
-
-/// Get sync process status (running / not running).
-#[tauri::command]
-async fn get_sync_proc_status(node_url: String) -> Result<serde_json::Value, String> {
-    get_json_safe(&format!("{}/api/testnet/sync/proc-status", base(&node_url))).await
-}
 
 // ── Miner commands ────────────────────────────────────────────────────────────
 
@@ -1161,31 +1097,26 @@ fn addr_to_p2pkh_script(addr: &str) -> Result<Vec<u8>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Khởi động embedded API server (testnet mặc định)
+    spawn_embedded_server(false);
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            get_summary,
-            get_blocks,
-            get_balance,
-            search,
-            get_analytics,
-            get_address_txs,
-            get_address_utxos,
-            get_block_detail,
-            get_tx_detail,
-            get_rich_list,
-            get_mempool,
+            // Sync
+            start_sync,
+            is_sync_running,
+            // Miner
             start_mine,
             stop_mine,
             mine_status,
+            // Network
             peer_scan,
+            // Wallet
             wallet_generate,
             wallet_from_privkey,
             wallet_from_mnemonic,
             wallet_tx_build,
             tx_broadcast,
-            start_node_sync,
-            stop_node_sync,
-            get_sync_proc_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PKTScan desktop");

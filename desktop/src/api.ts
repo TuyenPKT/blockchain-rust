@@ -1,5 +1,12 @@
-// api.ts — IPC bridge to Tauri commands
-import { invoke } from "@tauri-apps/api/core";
+// api.ts — v25.0: fetch() trực tiếp đến embedded local API server
+// Không dùng invoke() cho data — frontend gọi thẳng http://127.0.0.1:21019
+
+async function api<T>(nodeUrl: string, path: string): Promise<T> {
+  const base = nodeUrl.replace(/\/$/, "");
+  const resp = await fetch(`${base}${path}`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
 
 /** 1 PKT = 2^30 packets (not 10^9) */
 export const PACKETS_PER_PKT = 1_073_741_824;
@@ -37,19 +44,19 @@ export interface SearchResult {
 }
 
 export async function fetchSummary(nodeUrl: string): Promise<NetworkSummary> {
-  return invoke<NetworkSummary>("get_summary", { nodeUrl });
+  return api<NetworkSummary>(nodeUrl, "/api/testnet/summary");
 }
 
 export async function fetchBlocks(nodeUrl: string, limit = 10): Promise<{ blocks?: BlockHeader[]; headers?: BlockHeader[] }> {
-  return invoke("get_blocks", { nodeUrl, limit });
+  return api(nodeUrl, `/api/testnet/headers?limit=${limit}`);
 }
 
 export async function fetchBalance(nodeUrl: string, address: string): Promise<unknown> {
-  return invoke("get_balance", { nodeUrl, address });
+  return api(nodeUrl, `/api/testnet/balance/${encodeURIComponent(address)}`);
 }
 
 export async function searchQuery(nodeUrl: string, query: string): Promise<unknown> {
-  return invoke("search", { nodeUrl, query });
+  return api(nodeUrl, `/api/testnet/search?q=${encodeURIComponent(query)}`);
 }
 
 export interface AnalyticsPoint {
@@ -70,7 +77,7 @@ export async function fetchAnalytics(
   metric: "hashrate" | "block_time" | "difficulty",
   window = 100,
 ): Promise<AnalyticsSeries> {
-  return invoke("get_analytics", { nodeUrl, metric, window });
+  return api<AnalyticsSeries>(nodeUrl, `/api/testnet/analytics?metric=${metric}&window=${window}`);
 }
 
 export interface AddressTx {
@@ -99,14 +106,14 @@ export async function fetchAddressTxs(
   page = 0,
   limit = 20,
 ): Promise<{ txs?: AddressTx[]; total?: number; page?: number }> {
-  return invoke("get_address_txs", { nodeUrl, address, page, limit });
+  return api(nodeUrl, `/api/testnet/address/${encodeURIComponent(address)}/txs?page=${page}&limit=${limit}`);
 }
 
 export async function fetchAddressUtxos(
   nodeUrl: string,
   address: string,
 ): Promise<{ utxos?: AddressUtxo[]; error?: string }> {
-  return invoke("get_address_utxos", { nodeUrl, address });
+  return api(nodeUrl, `/api/testnet/address/${encodeURIComponent(address)}/utxos`);
 }
 
 export interface TxInput {
@@ -156,11 +163,11 @@ export interface BlockDetail {
 }
 
 export async function fetchBlockDetail(nodeUrl: string, height: number): Promise<BlockDetail> {
-  return invoke("get_block_detail", { nodeUrl, height });
+  return api<BlockDetail>(nodeUrl, `/api/testnet/block/${height}`);
 }
 
 export async function fetchTxDetail(nodeUrl: string, txid: string): Promise<TxDetail> {
-  return invoke("get_tx_detail", { nodeUrl, txid });
+  return api<TxDetail>(nodeUrl, `/api/testnet/tx/${encodeURIComponent(txid)}`);
 }
 
 export interface RichHolder {
@@ -187,14 +194,14 @@ export async function fetchRichList(
   nodeUrl: string,
   limit = 100,
 ): Promise<{ holders?: RichHolder[]; total_supply?: number }> {
-  return invoke("get_rich_list", { nodeUrl, limit });
+  return api(nodeUrl, `/api/testnet/richlist?limit=${limit}`);
 }
 
 export async function fetchMempool(
   nodeUrl: string,
   limit = 50,
 ): Promise<{ txs?: MempoolTx[]; count?: number; total_fee?: number }> {
-  return invoke("get_mempool", { nodeUrl, limit });
+  return api(nodeUrl, `/api/testnet/mempool?limit=${limit}`);
 }
 
 export function fmtHashrate(h: number): string {

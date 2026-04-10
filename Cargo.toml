@@ -27,6 +27,14 @@ name = "blockchain-rust"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "pkt_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "blockchain-rust"
+path = "src/main.rs"
+
 [dependencies]
 sha2        = { workspace = true }
 hex         = { workspace = true }

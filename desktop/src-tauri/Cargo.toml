@@ -25,3 +25,5 @@ sha3       = "0.10"
 hmac       = "0.12"
 pbkdf2     = { version = "0.12", features = ["hmac"] }
 urlencoding = "2.1"
+axum       = { version = "0.7", features = ["ws"] }
+pkt_core   = { path = "../..", package = "blockchain-rust" }
