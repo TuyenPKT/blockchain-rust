@@ -4,31 +4,31 @@
 //! Single source of truth cho tất cả đường dẫn DB/file của PKT node.
 //!
 //! ## Layout
-//! ```
+//! ```text
 //! ~/.pkt/
-//! ├── wallet.key          ← dùng chung (không đổi theo network)
-//! ├── testnet/            ← default (không có --mainnet)
-//! │   ├── syncdb/
-//! │   ├── utxodb/
-//! │   ├── addr_index/
-//! │   ├── labeldb/
-//! │   ├── blockdb/
-//! │   ├── mempooldb/
-//! │   ├── reorgdb/
-//! │   └── peers.txt
-//! └── mainnet/            ← khi set_mainnet(true)
-//!     ├── syncdb/
-//!     ├── ...
+//! +-- wallet.key          (dùng chung, không đổi theo network)
+//! +-- testnet/            (default, không có --mainnet)
+//! |   +-- syncdb/
+//! |   +-- utxodb/
+//! |   +-- addr_index/
+//! |   +-- labeldb/
+//! |   +-- blockdb/
+//! |   +-- mempooldb/
+//! |   +-- reorgdb/
+//! |   +-- peers.txt
+//! +-- mainnet/            (khi set_mainnet(true))
+//!     +-- syncdb/
+//!     +-- ...
 //! ```
 //!
-//! ## Sử dụng
-//! ```rust
-//! // Trong main.rs — đặt trước tất cả dispatch:
+//! ## Su dung
+//! ```rust,ignore
+//! // Trong main.rs -- dat truoc tat ca dispatch:
 //! pkt_paths::set_mainnet(args.contains(&"--mainnet".to_string()));
 //!
-//! // Trong các module:
-//! let path = pkt_paths::sync_db();      // ~/.pkt/testnet/syncdb
-//! let path = pkt_paths::utxo_db();      // ~/.pkt/testnet/utxodb
+//! // Trong cac module:
+//! let path = pkt_paths::sync_db();   // ~/.pkt/testnet/syncdb
+//! let path = pkt_paths::utxo_db();   // ~/.pkt/testnet/utxodb
 //! ```
 
 use std::path::PathBuf;
