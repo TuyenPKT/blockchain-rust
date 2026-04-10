@@ -1108,7 +1108,9 @@ mod tests {
 
     #[test]
     fn test_storage_save_and_load_chain() {
-        let _lock = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock  = STORAGE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _mlock = crate::pkt_paths::MAINNET_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::pkt_paths::set_mainnet(false);
         use crate::storage;
         use crate::chain::Blockchain;
 

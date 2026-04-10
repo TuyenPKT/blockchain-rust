@@ -31,7 +31,7 @@ fn pkt_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(".pkt")
 }
-fn db_path() -> PathBuf { pkt_dir().join("db") }
+fn db_path() -> PathBuf { crate::pkt_paths::data_dir().join("db") }
 
 fn open_db() -> Result<DB, String> {
     let path = db_path();

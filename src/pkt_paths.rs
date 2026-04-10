@@ -82,7 +82,12 @@ pub fn peers_file() -> PathBuf { data_dir().join("peers.txt")  }
 
 pub fn wallet_key() -> PathBuf { pkt_root().join("wallet.key") }
 
-// ── Tests ──────────────────────────────────────────────────────────────────────
+// ── Test helpers ─────────────────────────────────────────────────────────────
+
+/// Mutex dùng để serialize các test thay đổi IS_MAINNET global.
+/// Các test trong crate khác cũng phải acquire lock này trước khi đổi set_mainnet().
+#[cfg(test)]
+pub static MAINNET_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 // ── Pure path helpers cho tests (không đụng global state) ────────────────────
 
@@ -94,8 +99,7 @@ fn data_dir_for(mainnet: bool) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Dùng helper pure để tránh race condition với AtomicBool trong tests song song
+    // Dùng lock ở module-level để các crate khác cũng có thể acquire
 
     #[test]
     fn test_testnet_paths() {
@@ -146,12 +150,12 @@ mod tests {
 
     #[test]
     fn test_set_mainnet_flag() {
-        // Test AtomicBool works (sequential)
+        let _lock = super::MAINNET_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         set_mainnet(false);
         assert!(!is_mainnet());
         set_mainnet(true);
         assert!(is_mainnet());
-        set_mainnet(false);
+        set_mainnet(false); // restore
         assert!(!is_mainnet());
     }
 }
