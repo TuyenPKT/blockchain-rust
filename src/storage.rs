@@ -5,7 +5,7 @@
 /// Thay thế JSON files bằng RocksDB embedded key-value store.
 /// RocksDB: production-grade, LSM-tree, atomic batch writes, compaction.
 ///
-/// DB path: ~/.pkt/db/
+/// DB path: ~/.pkt/testnet/db/ hoặc ~/.pkt/mainnet/db/ (theo pkt_paths)
 ///
 /// Key schema:
 ///   block:{height:016x}  → serde_json bytes of Block   (zero-padded hex → lexicographic sort)
@@ -24,16 +24,7 @@ use crate::transaction::TxOutput;
 
 // ─── DB path ──────────────────────────────────────────────────────────────────
 
-fn pkt_dir() -> PathBuf {
-    // Unix: $HOME  |  Windows: %USERPROFILE%  |  fallback: current dir
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".pkt")
-}
-
-fn db_path() -> PathBuf { pkt_dir().join("db") }
+fn db_path() -> PathBuf { crate::pkt_paths::data_dir().join("db") }
 
 fn open_db() -> Result<DB, String> {
     let path = db_path();

@@ -990,8 +990,17 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/admin/logs?date=YYYY-MM-DD&limit=100  (admin role only — v10.1)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
     println!();
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("[pktscan] ERROR: Cannot bind to {addr}: {e}");
+            eprintln!("[pktscan] Port may already be in use. Exiting.");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = axum::serve(listener, app).await {
+        eprintln!("[pktscan] Server error: {e}");
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
