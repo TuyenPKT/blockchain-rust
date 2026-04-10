@@ -71,6 +71,8 @@ impl Default for CorsConfig {
                 "http://localhost:3000".to_string(),
                 "http://localhost:8080".to_string(),
                 "https://pktscan.io".to_string(),
+                "tauri://localhost".to_string(),
+                "https://tauri.localhost".to_string(),
             ],
         }
     }
