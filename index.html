@@ -8,20 +8,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
   <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=18.2">
-
 </head>
 <body>
 
 <!-- ═══ TICKER ═══════════════════════════════════════════════════ -->
 <div class="ticker-bar" aria-hidden="true">
-  <div class="ticker-inner" id="tickerInner">
-    <!-- filled by JS -->
-  </div>
+  <div class="ticker-inner" id="tickerInner"></div>
 </div>
 
 <!-- ═══ NAV ══════════════════════════════════════════════════════ -->
 <nav>
-  <a class="nav-logo" href="#" onclick="showHome(); return false;">
+  <a class="nav-logo" href="/blockchain-rust/">
     <div class="nav-logo-icon">P</div>
     <span class="nav-logo-text">PKT<span>Scan</span></span>
   </a>
@@ -35,7 +32,6 @@
   <div class="nav-right">
     <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
     <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
-    <a class="nav-link" href="#stats" onclick="showStats(); return false;">Stats</a>
     <a class="nav-link" href="/blockchain-rust/playground">API</a>
     <a class="nav-link" href="/blockchain-rust/webhooks">Webhooks</a>
     <a class="nav-link" href="/blockchain-rust/dev">Developers</a>
@@ -58,143 +54,113 @@
   </div>
 </div>
 
-<!-- ═══ HOME PAGE ════════════════════════════════════════════════ -->
-<div id="home-page">
+<!-- ═══ HOME ══════════════════════════════════════════════════════ -->
 
-  <!-- Hero -->
-  <header class="hero">
-    <div class="hero-eyebrow">PKT Network Explorer</div>
-    <h1>Explore the <span>PKT</span> Blockchain</h1>
-    <p class="hero-sub">Search blocks, transactions, and addresses on the PKT network</p>
-    <div class="hero-search">
-      <input type="text" id="heroInput"
-             placeholder="Enter block height, tx hash, or PKT address…"
-             onkeydown="if(event.key==='Enter')heroSearch()" />
-      <button class="hero-search-btn" onclick="heroSearch()" aria-label="Search">🔍</button>
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-eyebrow">PKT Network Explorer</div>
+  <h1>Explore the <span>PKT</span> Blockchain</h1>
+  <p class="hero-sub">Search blocks, transactions, and addresses on the PKT network</p>
+  <div class="hero-search">
+    <input type="text" id="heroInput"
+           placeholder="Enter block height, tx hash, or PKT address…"
+           onkeydown="if(event.key==='Enter')heroSearch()" />
+    <button class="hero-search-btn" onclick="heroSearch()" aria-label="Search">🔍</button>
+  </div>
+</header>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <span class="stat-icon">📦</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Latest Block</div>
+        <div class="stat-val" id="stat-height">—</div>
+      </div>
     </div>
-  </header>
-
-  <!-- Stats bar -->
-  <div class="stats-bar">
-    <div class="stats-inner">
-      <div class="stat-item">
-        <span class="stat-icon">📦</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Latest Block</div>
-          <div class="stat-val" id="stat-height">850,412</div>
-        </div>
+    <div class="stat-item">
+      <span class="stat-icon">⏱</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Block Time</div>
+        <div class="stat-val green" id="stat-blocktime">—</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-icon">⏱</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Block Time</div>
-          <div class="stat-val green" id="stat-blocktime">60s</div>
-        </div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-icon">⚡</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Hashrate</div>
+        <div class="stat-val" id="stat-hashrate">—</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-icon">⚡</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Hashrate</div>
-          <div class="stat-val" id="stat-hashrate">4.23 PH/s</div>
-        </div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-icon">💰</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Block Reward</div>
+        <div class="stat-val pkt-color">50 PKT</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-icon">💰</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Block Reward</div>
-          <div class="stat-val pkt-color">50 PKT</div>
-        </div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-icon">🌐</span>
+      <div class="stat-body">
+        <div class="stat-lbl">UTXO Count</div>
+        <div class="stat-val" id="stat-nodes">—</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-icon">🌐</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Active Nodes</div>
-          <div class="stat-val" id="stat-nodes">2,847</div>
-        </div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-icon">💸</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Mempool</div>
+        <div class="stat-val" id="stat-txs">—</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-icon">💸</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Transactions</div>
-          <div class="stat-val" id="stat-txs">24.7M</div>
-        </div>
-      </div>
-      <div class="stat-item">
-        <span class="stat-icon">🔄</span>
-        <div class="stat-body">
-          <div class="stat-lbl">Difficulty</div>
-          <div class="stat-val" id="stat-diff">4</div>
-        </div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-icon">🔄</span>
+      <div class="stat-body">
+        <div class="stat-lbl">Difficulty</div>
+        <div class="stat-val" id="stat-diff">—</div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Main two-col -->
-  <div class="main-wrap">
-    <div class="two-col">
-
-      <!-- Latest Blocks -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <div class="panel-title-icon item-icon-block">📦</div>
-            Latest Blocks
-          </div>
-          <a class="panel-more" href="/blockchain-rust/block">View all →</a>
-        </div>
-        <div id="latestBlocks"></div>
-      </div>
-
-      <!-- Latest Transactions -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <div class="panel-title-icon item-icon-tx">💸</div>
-            Latest Transactions
-          </div>
-          <a class="panel-more" href="/blockchain-rust/rx">View all →</a>
-        </div>
-        <div id="latestTxs"></div>
-      </div>
-
-    </div>
-  </div>
-</div><!-- /home-page -->
-
-
-
-<!-- ═══ STATS PAGE ════════════════════════════════════════════════ -->
-<div id="stats-page" class="page">
-  <div class="main-wrap">
+<!-- Latest Blocks + Transactions -->
+<div class="main-wrap">
+  <div class="two-col">
     <div class="panel">
       <div class="panel-head">
         <div class="panel-title">
-          <div class="panel-title-icon" style="background:rgba(176,127,240,.15);color:var(--purple);border:1px solid rgba(176,127,240,.25);">📊</div>
-          Network Statistics
+          <div class="panel-title-icon item-icon-block">📦</div>
+          Latest Blocks
         </div>
-        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
+        <a class="panel-more" href="/blockchain-rust/block">View all →</a>
       </div>
-      <div id="statsContent"></div>
+      <div id="latestBlocks"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-icon item-icon-tx">💸</div>
+          Latest Transactions
+        </div>
+        <a class="panel-more" href="/blockchain-rust/rx">View all →</a>
+      </div>
+      <div id="latestTxs"></div>
     </div>
   </div>
-</div>
 
-<!-- ═══ BLOCK DETAIL ══════════════════════════════════════════════ -->
-<div id="block-detail" class="page">
-  <div class="main-wrap">
-    <a class="detail-back" href="/blockchain-rust/block">← Back to Blocks</a>
-    <div id="blockDetailContent"></div>
+  <!-- Network Stats -->
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-icon" style="background:rgba(176,127,240,.15);color:var(--purple);border:1px solid rgba(176,127,240,.25);">📊</div>
+        Network Statistics
+      </div>
+    </div>
+    <div id="statsContent"></div>
   </div>
 </div>
-
-<!-- ═══ TX DETAIL ═════════════════════════════════════════════════ -->
-<div id="tx-detail" class="page">
-  <div class="main-wrap">
-    <a class="detail-back" href="/blockchain-rust/rx">← Back to Transactions</a>
-    <div id="txDetailContent"></div>
-  </div>
-</div>
-
 
 <!-- ═══ FOOTER ════════════════════════════════════════════════════ -->
 <footer>
