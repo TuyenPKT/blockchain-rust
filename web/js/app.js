@@ -209,14 +209,7 @@ function showHome() {
   renderHome();
 }
 
-function showTxs() {
-  hideAll();
-  history.replaceState(null, '', '#txs');
-  document.getElementById('txs-page').classList.add('active');
-  const el = document.getElementById('allTxs');
-  el.innerHTML = '';
-  txs.forEach(tx => renderTxItem(tx, el));
-}
+
 function showStats() {
   hideAll();
   history.replaceState(null, '', '#stats');
@@ -413,7 +406,7 @@ async function heroSearch() {
 function routeFromHash() {
   const hash = location.hash;
   if (hash === '#blocks') { window.location.replace('/blockchain-rust/block'); return; }
-  if (hash === '#txs')    showTxs();
+  if (hash === '#txs')    { window.location.replace('/blockchain-rust/rx'); return; }
   else if (hash === '#stats')   showStats();
   else if (hash === '#testnet' && window.showTestnet) window.showTestnet();
   else renderHome();

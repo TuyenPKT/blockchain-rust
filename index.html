@@ -34,8 +34,8 @@
 
   <div class="nav-right">
     <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
-    <a class="nav-link" href="#" onclick="showTxs(); return false;">Transactions</a>
-    <a class="nav-link" href="#" onclick="showStats(); return false;">Stats</a>
+    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
+    <a class="nav-link" href="#stats" onclick="showStats(); return false;">Stats</a>
     <a class="nav-link" href="#" onclick="showTestnet(); return false;">Testnet</a>
     <a class="nav-link" href="/blockchain-rust/playground">API</a>
     <a class="nav-link" href="/blockchain-rust/webhooks">Webhooks</a>
@@ -153,7 +153,7 @@
             <div class="panel-title-icon item-icon-tx">💸</div>
             Latest Transactions
           </div>
-          <a class="panel-more" href="#" onclick="showTxs(); return false;">View all →</a>
+          <a class="panel-more" href="/blockchain-rust/rx">View all →</a>
         </div>
         <div id="latestTxs"></div>
       </div>
@@ -163,21 +163,6 @@
 </div><!-- /home-page -->
 
 
-<!-- ═══ TXS PAGE ══════════════════════════════════════════════════ -->
-<div id="txs-page" class="page">
-  <div class="main-wrap">
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title">
-          <div class="panel-title-icon item-icon-tx">💸</div>
-          All Transactions
-        </div>
-        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
-      </div>
-      <div id="allTxs"></div>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ STATS PAGE ════════════════════════════════════════════════ -->
 <div id="stats-page" class="page">
@@ -206,7 +191,7 @@
 <!-- ═══ TX DETAIL ═════════════════════════════════════════════════ -->
 <div id="tx-detail" class="page">
   <div class="main-wrap">
-    <div class="detail-back" onclick="showTxs()">← Back to Transactions</div>
+    <a class="detail-back" href="/blockchain-rust/rx">← Back to Transactions</a>
     <div id="txDetailContent"></div>
   </div>
 </div>
