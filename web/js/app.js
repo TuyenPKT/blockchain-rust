@@ -1,6 +1,6 @@
 /* ── CONFIG ─────────────────────────────────────────────────── */
-const TESTNET_API = 'https://testnet.oceif.com';
-const MAINNET_API = 'https://mainnet.oceif.com';
+const TESTNET_API = '/blockchain-rust/testnet';
+const MAINNET_API = '/blockchain-rust/mainnet';
 let API_BASE = '';
 
 let _network = localStorage.getItem('pkt-network') || 'testnet';
