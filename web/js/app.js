@@ -32,15 +32,16 @@ let stats  = {};
 /* ── API FETCH ──────────────────────────────────────────────── */
 async function fetchStats() {
   try {
-    const r = await fetch(`${API_BASE}/api/stats`);
+    const r = await fetch(`${API_BASE}/api/testnet/summary`);
     if (!r.ok) return;
     stats = await r.json();
+    stats.avg_block_time_s = stats.avg_block_time_s ?? stats.block_time_avg ?? 0;
     document.getElementById('stat-height').textContent    = (stats.height ?? 0).toLocaleString();
     document.getElementById('stat-blocktime').textContent = stats.avg_block_time_s
       ? Math.round(stats.avg_block_time_s) + 's' : '—';
     document.getElementById('stat-hashrate').textContent  = fmtHashrate(stats.hashrate ?? 0);
     document.getElementById('stat-nodes').textContent     = stats.utxo_count ?? '—';
-    document.getElementById('stat-txs').textContent       = stats.utxo_count ?? '—';
+    document.getElementById('stat-txs').textContent       = stats.mempool_count ?? '—';
     document.getElementById('stat-diff').textContent      = stats.difficulty ?? '—';
     buildTicker(stats);
   } catch(e) { console.warn('fetchStats', e); }
@@ -48,18 +49,18 @@ async function fetchStats() {
 
 async function fetchBlocks() {
   try {
-    const r = await fetch(`${API_BASE}/api/blocks?limit=20`);
+    const r = await fetch(`${API_BASE}/api/testnet/headers?limit=20`);
     if (!r.ok) return;
     const data = await r.json();
-    blocks = (data.blocks ?? data ?? []).map(b => ({
+    blocks = (data.headers ?? data.blocks ?? []).map(b => ({
       height:    b.index ?? b.height ?? 0,
       hash:      b.hash ?? '',
       prevHash:  b.prev_hash ?? '',
       timestamp: (b.timestamp ?? 0) * 1000,
-      txCount:   b.tx_count ?? b.transactions?.length ?? 0,
-      miner:     b.miner ?? b.miner_hash ?? '',
-      reward:    b.reward ?? 50e9,
-      difficulty: b.difficulty ?? stats.difficulty ?? 3,
+      txCount:   b.tx_count ?? 0,
+      miner:     b.miner ?? '',
+      reward:    50e9,
+      difficulty: b.difficulty ?? stats.difficulty ?? 1,
       nonce:     b.nonce ?? 0,
     }));
   } catch(e) { console.warn('fetchBlocks', e); }
@@ -67,30 +68,30 @@ async function fetchBlocks() {
 
 async function fetchTxs() {
   try {
-    const r = await fetch(`${API_BASE}/api/txs?limit=20`);
+    const r = await fetch(`${API_BASE}/api/testnet/mempool?limit=20`);
     if (!r.ok) return;
     const data = await r.json();
-    txs = (data.txs ?? data ?? []).map(t => ({
-      txid:        t.tx_id ?? t.txid ?? '',
-      blockHeight: t.block_height ?? t.block_index ?? 0,
-      timestamp:   (t.block_timestamp ?? t.timestamp ?? 0) * 1000,
-      from:        t.from ?? (t.is_coinbase ? 'coinbase' : ''),
-      to:          t.to ?? t.outputs?.[0]?.address ?? '',
-      amount:      (t.output_total ?? t.amount ?? t.total_out ?? 0) / 1e9,
+    txs = (data.txs ?? []).map(t => ({
+      txid:        t.txid ?? t.hash ?? '',
+      blockHeight: 0,
+      timestamp:   (t.timestamp ?? 0) * 1000,
+      from:        '',
+      to:          '',
+      amount:      0,
       fee:         (t.fee ?? 0) / 1e9,
-      isCoinbase:  t.is_coinbase ?? false,
+      isCoinbase:  false,
     }));
   } catch(e) { console.warn('fetchTxs', e); }
 }
 
 async function fetchBlockDetail(height) {
-  const r = await fetch(`${API_BASE}/api/block/${height}`);
+  const r = await fetch(`${API_BASE}/api/testnet/block/${height}`);
   if (!r.ok) throw new Error('not found');
   return r.json();
 }
 
 async function fetchTxDetail(txid) {
-  const r = await fetch(`${API_BASE}/api/tx/${txid}`);
+  const r = await fetch(`${API_BASE}/api/testnet/tx/${encodeURIComponent(txid)}`);
   if (!r.ok) throw new Error('not found');
   return r.json();
 }
