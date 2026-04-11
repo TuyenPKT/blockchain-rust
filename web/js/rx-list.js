@@ -6,7 +6,7 @@ const LIMIT = 50;
 
 async function loadTxs(reset) {
   if (reset) { cursor = null; }
-  let url = `${API_BASE}/api/txs?limit=${LIMIT}`;
+  let url = `${API_BASE}/api/testnet/txs?limit=${LIMIT}`;
   if (cursor !== null) url += `&cursor=${cursor}`;
   const data = await fetchJson(url);
   const list = document.getElementById('tx-list');

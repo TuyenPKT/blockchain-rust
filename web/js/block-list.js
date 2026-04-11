@@ -6,8 +6,8 @@ const LIMIT = 50;
 
 async function loadBlocks(reset) {
   if (reset) { cursor = null; }
-  let url = `${API_BASE}/api/blocks?limit=${LIMIT}`;
-  if (cursor !== null) url += `&from=${cursor}`;
+  let url = `${API_BASE}/api/testnet/headers?limit=${LIMIT}`;
+  if (cursor !== null) url += `&cursor=${cursor}`;
   const data = await fetchJson(url);
   const list = document.getElementById('blocks-list');
 
@@ -16,7 +16,7 @@ async function loadBlocks(reset) {
     return;
   }
 
-  const headers = data.blocks ?? data.headers ?? [];
+  const headers = data.headers ?? data.blocks ?? [];
 
   if (reset) list.innerHTML = '';
 
@@ -48,7 +48,6 @@ async function loadBlocks(reset) {
   });
 
   if (data.next_cursor != null) cursor = data.next_cursor;
-  else if (headers.length === LIMIT) cursor = headers[headers.length - 1].index ?? headers[headers.length - 1].height ?? null;
   document.getElementById('load-more').style.display =
     headers.length === LIMIT ? 'block' : 'none';
 }

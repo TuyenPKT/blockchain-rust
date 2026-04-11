@@ -38,7 +38,7 @@ async function init() {
 
   let t;
   try {
-    const r = await fetch(`${API_BASE}/api/tx/${txid}`);
+    const r = await fetch(`${API_BASE}/api/testnet/tx/${txid}`);
     if (!r.ok) throw new Error(r.status);
     t = await r.json();
   } catch (_) {

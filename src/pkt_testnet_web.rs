@@ -1095,8 +1095,16 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
     let (height, tip_hash, synced, utxo_count, total_value_sat) =
         match (SyncDb::open_read_only(&ps.sync_path).ok(), ps.open()) {
             (Some(sdb), Some((_, udb))) => {
-                let h      = sdb.get_sync_height().ok().flatten().unwrap_or(0);
-                let tip    = sdb.get_tip_hash().ok().flatten()
+                // get_sync_height() có thể trả None nếu chưa ghi meta — fallback đọc từ headers
+                let h = sdb.get_sync_height().ok().flatten()
+                    .or_else(|| {
+                        use crate::pkt_analytics::load_recent_headers;
+                        load_recent_headers(&sdb, 1).ok()
+                            .and_then(|v| v.into_iter().next())
+                            .map(|(h, _)| h)
+                    })
+                    .unwrap_or(0);
+                let tip = sdb.get_tip_hash().ok().flatten()
                     .map(hex::encode)
                     .unwrap_or_else(|| "0".repeat(64));
                 let synced = h > 0;
