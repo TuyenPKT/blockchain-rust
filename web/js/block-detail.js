@@ -33,7 +33,7 @@ async function init() {
   // Fetch testnet block (primary)
   let b;
   try {
-    const r = await fetch(`${API_BASE}/api/testnet/block/${h}`);
+    const r = await fetch(`${API_BASE}/api/block/${h}`);
     if (!r.ok) throw new Error(r.status);
     b = await r.json();
   } catch (_) {
