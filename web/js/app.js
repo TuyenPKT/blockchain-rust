@@ -208,14 +208,7 @@ function showHome() {
   document.getElementById('home-page').style.display = 'block';
   renderHome();
 }
-function showBlocks() {
-  hideAll();
-  history.replaceState(null, '', '#blocks');
-  document.getElementById('blocks-page').classList.add('active');
-  const el = document.getElementById('allBlocks');
-  el.innerHTML = '';
-  blocks.forEach(b => renderBlockItem(b, el));
-}
+
 function showTxs() {
   hideAll();
   history.replaceState(null, '', '#txs');
@@ -419,8 +412,8 @@ async function heroSearch() {
 /* ── INIT ────────────────────────────────────────────────────── */
 function routeFromHash() {
   const hash = location.hash;
-  if (hash === '#blocks')  showBlocks();
-  else if (hash === '#txs')     showTxs();
+  if (hash === '#blocks') { window.location.replace('/blockchain-rust/block'); return; }
+  if (hash === '#txs')    showTxs();
   else if (hash === '#stats')   showStats();
   else if (hash === '#testnet' && window.showTestnet) window.showTestnet();
   else renderHome();

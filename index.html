@@ -33,7 +33,7 @@
   </div>
 
   <div class="nav-right">
-    <a class="nav-link" href="#" onclick="showBlocks(); return false;">Blocks</a>
+    <a class="nav-link" href="/blockchain-rust/block">Blocks</a>
     <a class="nav-link" href="#" onclick="showTxs(); return false;">Transactions</a>
     <a class="nav-link" href="#" onclick="showStats(); return false;">Stats</a>
     <a class="nav-link" href="#" onclick="showTestnet(); return false;">Testnet</a>
@@ -141,7 +141,7 @@
             <div class="panel-title-icon item-icon-block">📦</div>
             Latest Blocks
           </div>
-          <a class="panel-more" href="#" onclick="showBlocks(); return false;">View all →</a>
+          <a class="panel-more" href="/blockchain-rust/block">View all →</a>
         </div>
         <div id="latestBlocks"></div>
       </div>
@@ -162,21 +162,6 @@
   </div>
 </div><!-- /home-page -->
 
-<!-- ═══ BLOCKS PAGE ═══════════════════════════════════════════════ -->
-<div id="blocks-page" class="page">
-  <div class="main-wrap">
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title">
-          <div class="panel-title-icon item-icon-block">📦</div>
-          All Blocks
-        </div>
-        <a class="panel-more" href="#" onclick="showHome(); return false;">← Home</a>
-      </div>
-      <div id="allBlocks"></div>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ TXS PAGE ══════════════════════════════════════════════════ -->
 <div id="txs-page" class="page">
@@ -213,7 +198,7 @@
 <!-- ═══ BLOCK DETAIL ══════════════════════════════════════════════ -->
 <div id="block-detail" class="page">
   <div class="main-wrap">
-    <div class="detail-back" onclick="showBlocks()">← Back to Blocks</div>
+    <a class="detail-back" href="/blockchain-rust/block">← Back to Blocks</a>
     <div id="blockDetailContent"></div>
   </div>
 </div>
