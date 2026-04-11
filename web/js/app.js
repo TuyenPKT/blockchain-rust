@@ -167,7 +167,7 @@ function renderBlockItem(b, container, clickFn) {
       <div class="item-age">${ago(secsAgo)}</div>
     </div>
   `;
-  div.onclick = clickFn || (() => showBlockDetail(b));
+  div.onclick = clickFn || (() => { window.location.href = `/blockchain-rust/block/${b.height}`; });
   container.appendChild(div);
 }
 
@@ -192,7 +192,7 @@ function renderTxItem(tx, container, clickFn) {
       <div class="item-age">${ago(secsAgo)}</div>
     </div>
   `;
-  div.onclick = clickFn || (() => showTxDetail(tx));
+  div.onclick = clickFn || (() => { window.location.href = `/blockchain-rust/rx/${tx.txid}`; });
   container.appendChild(div);
 }
 
@@ -385,7 +385,7 @@ function selectResult(i) {
   const r = results[i];
   closeSearch();
   if (r.type === 'block') {
-    showBlockDetail({ height: parseInt(r.value) });
+    window.location.href = `/blockchain-rust/block/${parseInt(r.value)}`;
   } else if (r.type === 'tx') {
     window.location.href = `${API_BASE}/rx/${encodeURIComponent(r.value)}`;
   } else if (r.type === 'address' || r.type === 'label') {
