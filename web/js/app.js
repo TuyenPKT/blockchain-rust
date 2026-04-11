@@ -58,7 +58,7 @@ async function fetchStats() {
     const r = await fetch(`${API_BASE}/api/stats`);
     if (!r.ok) return;
     stats = await r.json();
-    document.getElementById('stat-height').textContent    = (stats.height ?? 0).toLocaleString();
+    document.getElementById('stat-height').textContent    = (stats.height ?? 0).toLocaleString("en-US");
     document.getElementById('stat-blocktime').textContent = stats.avg_block_time_s
       ? Math.round(stats.avg_block_time_s) + 's' : '—';
     document.getElementById('stat-hashrate').textContent  = fmtHashrate(stats.hashrate ?? 0);
@@ -158,7 +158,7 @@ function toggleTheme() {
 /* ── TICKER ─────────────────────────────────────────────────── */
 function buildTicker(s) {
   s = s || {};
-  const height = (s.height ?? 0).toLocaleString();
+  const height = (s.height ?? 0).toLocaleString("en-US");
   const diff   = s.difficulty ?? '—';
   const hr     = fmtHashrate(s.hashrate ?? 0);
   const reward = pakletsToPkt(s.block_reward ?? 50e9);
@@ -181,7 +181,7 @@ function renderBlockItem(b, container, clickFn) {
   div.innerHTML = `
     <div class="item-icon item-icon-block">#${b.height % 1000}</div>
     <div class="item-main">
-      <div class="item-primary">#${b.height.toLocaleString()}</div>
+      <div class="item-primary">#${b.height.toLocaleString("en-US")}</div>
       <div class="item-secondary">${b.txCount} txns &nbsp;·&nbsp; Miner: <span class="addr-short">${shortAddr(b.miner)}</span></div>
     </div>
     <div class="item-right">
@@ -255,15 +255,15 @@ function showStats() {
   const rows = [
     ['Network',           'PKT Chain'],
     ['Algorithm',         'BLAKE3 PoW'],
-    ['Latest Block',      `#${(s.height ?? 0).toLocaleString()}`],
+    ['Latest Block',      `#${(s.height ?? 0).toLocaleString("en-US")}`],
     ['Block Reward',      pakletsToPkt(s.block_reward ?? 50e9)],
     ['Difficulty',        s.difficulty ?? '—'],
     ['Hashrate',          fmtHashrate(s.hashrate ?? 0)],
     ['Avg Block Time',    s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—'],
-    ['UTXO Count',        (s.utxo_count ?? 0).toLocaleString()],
+    ['UTXO Count',        (s.utxo_count ?? 0).toLocaleString("en-US")],
     ['Mempool',           (s.mempool_count ?? 0) + ' txs'],
     ['Total Supply',      pakletsToPkt(s.total_supply ?? 0)],
-    ['Block Count',       (s.block_count ?? 0).toLocaleString()],
+    ['Block Count',       (s.block_count ?? 0).toLocaleString("en-US")],
     ['P2P Port (testnet)','8333'],
     ['P2P Port (mainnet)','64764'],
     ['Signature',         'ECDSA + Dilithium (hybrid post-quantum)'],
@@ -290,15 +290,15 @@ async function showBlockDetail(b) {
     const ts = block.timestamp ? new Date(block.timestamp * 1000).toISOString() : '—';
     el.innerHTML = `
       <div class="detail-title">
-        <span>📦 Block <span style="color:var(--blue)">#${height.toLocaleString()}</span></span>
+        <span>📦 Block <span style="color:var(--blue)">#${height.toLocaleString("en-US")}</span></span>
       </div>
       <div class="panel">
-        <div class="kv-row"><div class="kv-key">Block Height</div><div class="kv-val">${height.toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Block Height</div><div class="kv-val">${height.toLocaleString("en-US")}</div></div>
         <div class="kv-row"><div class="kv-key">Hash</div><div class="kv-val">${block.hash ?? '—'}</div></div>
         <div class="kv-row"><div class="kv-key">Previous Hash</div><div class="kv-val">${block.prev_hash ?? '—'}</div></div>
         <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${ts}</div></div>
         <div class="kv-row"><div class="kv-key">Transactions</div><div class="kv-val normal">${block.tx_count ?? block.transactions?.length ?? 0}</div></div>
-        <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${(block.nonce ?? 0).toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Nonce</div><div class="kv-val">${(block.nonce ?? 0).toLocaleString("en-US")}</div></div>
         <div class="kv-row"><div class="kv-key">Difficulty</div><div class="kv-val normal">${block.difficulty ?? '—'}</div></div>
         <div class="kv-row"><div class="kv-key">Block Reward</div><div class="kv-val normal" style="color:var(--pkt)">${pakletsToPkt(block.reward ?? 50e9)}</div></div>
         <div class="kv-row"><div class="kv-key">Miner</div><div class="kv-val" style="color:var(--blue)">${addrLink(block.miner ?? block.miner_hash ?? '—')}</div></div>
@@ -327,7 +327,7 @@ async function showTxDetail(tx) {
       </div>
       <div class="panel">
         <div class="kv-row"><div class="kv-key">TxID</div><div class="kv-val">${t.tx_id ?? t.txid ?? '—'}</div></div>
-        <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${(t.block_height ?? t.block_index ?? 0).toLocaleString()}</div></div>
+        <div class="kv-row"><div class="kv-key">Block</div><div class="kv-val" style="color:var(--blue)">#${(t.block_height ?? t.block_index ?? 0).toLocaleString("en-US")}</div></div>
         <div class="kv-row"><div class="kv-key">Timestamp</div><div class="kv-val normal">${ts}</div></div>
         <div class="kv-row"><div class="kv-key">Type</div><div class="kv-val normal"><span class="badge ${isCoinbase ? 'badge-coinbase' : 'badge-tx'}">${isCoinbase ? 'coinbase' : 'transfer'}</span></div></div>
         <div class="kv-row"><div class="kv-key">From</div><div class="kv-val" style="color:var(--blue)">${isCoinbase ? 'coinbase' : addrLink(t.from ?? '—')}</div></div>

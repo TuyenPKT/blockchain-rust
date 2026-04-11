@@ -67,7 +67,7 @@ async function init() {
     ['Fee Rate',     `<span class="normal">${msat(t.fee_rate_msat_vb)}</span>`],
     ['Total Output', `<span style="color:var(--pkt);font-weight:600">${pkt(t.total_out)}</span>`],
     ['Block',        t.block_height != null
-      ? `<a href="${API_BASE}/block/${t.block_height}" style="color:var(--blue)">#${Number(t.block_height).toLocaleString()}</a>`
+      ? `<a href="${API_BASE}/block/${t.block_height}" style="color:var(--blue)">#${Number(t.block_height).toLocaleString("en-US")}</a>`
       : (t.note ? `<span class="normal" style="color:var(--muted);font-size:.82rem">${t.note}</span>` : '—')],
     ['Confirmations', t.confirmations != null ? `<span class="normal">${t.confirmations}</span>` : '—'],
   ].map(([k, v]) => `

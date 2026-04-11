@@ -34,7 +34,7 @@ async function loadBlocks(reset) {
     row.innerHTML = `
       <div class="item-icon item-icon-block">#${(b.height ?? 0) % 1000}</div>
       <div class="item-main">
-        <div class="item-primary">#${(b.height ?? 0).toLocaleString()}</div>
+        <div class="item-primary">#${(b.height ?? 0).toLocaleString("en-US")}</div>
         <div class="item-secondary mono" style="font-size:.78rem">${shortHash(b.hash ?? '')}</div>
       </div>
       <div class="item-right">

@@ -56,8 +56,8 @@
       setHtml('tn-sync-phase',
         '<span style="color:' + color + ';font-weight:700">' + phase + '</span>');
       setText('tn-sync-bar',    renderProgressBar(pct));
-      setText('tn-headers-count', (d.headers_downloaded || 0).toLocaleString());
-      setText('tn-utxo-height',   (d.utxo_height        || 0).toLocaleString());
+      setText('tn-headers-count', (d.headers_downloaded || 0).toLocaleString("en-US"));
+      setText('tn-utxo-height',   (d.utxo_height        || 0).toLocaleString("en-US"));
       setText('tn-speed',
         d.blocks_per_sec > 0 ? d.blocks_per_sec.toFixed(1) + ' blk/s' : '\u2014');
       setText('tn-eta', d.eta || '\u2014');
@@ -81,8 +81,8 @@
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
 
-      setText('tn-stat-height', (d.header_height || 0).toLocaleString());
-      setText('tn-stat-utxos',  (d.utxo_count    || 0).toLocaleString());
+      setText('tn-stat-height', (d.header_height || 0).toLocaleString("en-US"));
+      setText('tn-stat-utxos',  (d.utxo_count    || 0).toLocaleString("en-US"));
 
       // 1 PKT = 2^30 paklets = 1,073,741,824
       var pkt = ((d.total_value || 0) / 1073741824).toFixed(2);
@@ -237,7 +237,7 @@
         setHtml('tn-addr-balance', addrLabel +
           '<div style="display:flex;align-items:baseline;gap:10px;padding:8px 0 14px;border-bottom:1px solid var(--border);margin-bottom:12px">' +
             '<span style="font-size:1.3rem;font-weight:700;color:var(--pkt)">' + pktAmt + ' PKT</span>' +
-            '<span style="color:var(--muted);font-size:.8rem">' + bal.toLocaleString() + ' paklets</span>' +
+            '<span style="color:var(--muted);font-size:.8rem">' + bal.toLocaleString("en-US") + ' paklets</span>' +
           '</div>');
       }
     } catch (_) {}
@@ -348,7 +348,7 @@
           'border:1px solid rgba(255,215,0,.25);font-size:.78rem;font-weight:700">' + (i + 1) + '</div>' +
           '<div class="item-main">' +
             '<div class="item-primary mono" style="font-size:.85rem">' + display + labelHtml + '</div>' +
-            '<div class="item-secondary">' + (h.balance || 0).toLocaleString() + ' paklets</div>' +
+            '<div class="item-secondary">' + (h.balance || 0).toLocaleString("en-US") + ' paklets</div>' +
           '</div>' +
           '<div class="item-right">' +
             '<div class="item-age" style="color:var(--pkt);font-weight:600;font-size:.9rem">' + pkt + ' PKT</div>' +

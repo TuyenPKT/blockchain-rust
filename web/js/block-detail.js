@@ -26,7 +26,7 @@ async function init() {
   }
 
   const h = Number(height);
-  document.title = `Block #${h.toLocaleString()} — PKTScan`;
+  document.title = `Block #${h.toLocaleString("en-US")} — PKTScan`;
   el.innerHTML = `<a class="detail-back" href="${API_BASE}/block">← All Blocks</a>
     <div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>`;
 
@@ -38,7 +38,7 @@ async function init() {
     b = await r.json();
   } catch (_) {
     el.innerHTML = `<a class="detail-back" href="${API_BASE}/block">← All Blocks</a>
-      <div class="panel" style="padding:24px;color:var(--red)">Block #${h.toLocaleString()} not found or node offline.</div>`;
+      <div class="panel" style="padding:24px;color:var(--red)">Block #${h.toLocaleString("en-US")} not found or node offline.</div>`;
     return;
   }
 
@@ -54,12 +54,12 @@ async function init() {
   const blockTime = b.block_time_secs != null ? b.block_time_secs.toFixed(1) + 's' : '—';
   const diff      = b.difficulty != null ? b.difficulty.toFixed(4) : '—';
   const hashrate  = fmtHashrate(b.hashrate);
-  const confirms  = b.confirmations != null ? b.confirmations.toLocaleString() : '—';
+  const confirms  = b.confirmations != null ? b.confirmations.toLocaleString("en-US") : '—';
   const txids     = b.txids || [];
 
   // ── Overview KV ──────────────────────────────────────────────────────────
   const kv = [
-    ['Height',        `<span class="normal">${h.toLocaleString()}</span>`],
+    ['Height',        `<span class="normal">${h.toLocaleString("en-US")}</span>`],
     ['Hash',          `<span class="mono" style="word-break:break-all;font-size:.8rem">${b.hash || '—'}</span>`],
     ['Previous',      b.prev_hash
       ? `<a href="${API_BASE}/block/${h - 1}" class="mono" style="color:var(--blue);font-size:.8rem;word-break:break-all">${b.prev_hash}</a>`
@@ -71,7 +71,7 @@ async function init() {
     ['Difficulty',    `<span class="normal">${diff}</span>`],
     ['Hashrate',      `<span class="normal">${hashrate}</span>`],
     ['Bits',          `<span class="mono">${b.bits != null ? '0x' + (b.bits >>> 0).toString(16).padStart(8, '0') : '—'}</span>`],
-    ['Nonce',         `<span class="normal">${b.nonce != null ? b.nonce.toLocaleString() : '—'}</span>`],
+    ['Nonce',         `<span class="normal">${b.nonce != null ? b.nonce.toLocaleString("en-US") : '—'}</span>`],
     ['Version',       `<span class="normal">${b.version != null ? b.version : '—'}</span>`],
     ['Transactions',  `<span class="normal">${txids.length > 0 ? txids.length : (b.tx_count ?? '—')}</span>`],
   ].map(([k, v]) => `
@@ -101,15 +101,15 @@ async function init() {
   // ── Nav prev/next ─────────────────────────────────────────────────────────
   const nav = `
     <div style="display:flex;gap:12px;margin-top:16px">
-      ${h > 0 ? `<a href="${API_BASE}/block/${h - 1}" style="color:var(--blue);font-size:.85rem">← Block #${(h - 1).toLocaleString()}</a>` : ''}
-      <a href="${API_BASE}/block/${h + 1}" style="color:var(--blue);font-size:.85rem;margin-left:auto">Block #${(h + 1).toLocaleString()} →</a>
+      ${h > 0 ? `<a href="${API_BASE}/block/${h - 1}" style="color:var(--blue);font-size:.85rem">← Block #${(h - 1).toLocaleString("en-US")}</a>` : ''}
+      <a href="${API_BASE}/block/${h + 1}" style="color:var(--blue);font-size:.85rem;margin-left:auto">Block #${(h + 1).toLocaleString("en-US")} →</a>
     </div>`;
 
   el.innerHTML = `
     <a class="detail-back" href="${API_BASE}/block">← All Blocks</a>
 
     <div class="detail-title">
-      📦 Block <span style="color:var(--blue)">#${h.toLocaleString()}</span>
+      📦 Block <span style="color:var(--blue)">#${h.toLocaleString("en-US")}</span>
     </div>
 
     <div class="panel" style="margin-bottom:20px">${kv}</div>

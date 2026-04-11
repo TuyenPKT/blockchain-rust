@@ -34,7 +34,7 @@ async function loadTxs(reset) {
     row.innerHTML = `
       <div class="item-main">
         <div class="item-primary mono" style="font-size:.85rem">${shortHash(tx.txid ?? '')}</div>
-        <div class="item-secondary">Block #${(tx.height ?? 0).toLocaleString()}</div>
+        <div class="item-secondary">Block #${(tx.height ?? 0).toLocaleString("en-US")}</div>
       </div>
       <div class="item-right">
         <div class="item-age">${ago(secsAgo)}</div>
