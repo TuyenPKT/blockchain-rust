@@ -1,5 +1,28 @@
 /* ── CONFIG ─────────────────────────────────────────────────── */
-const API_BASE = '/blockchain-rust';
+const TESTNET_API = 'https://testnet.oceif.com';
+const MAINNET_API = 'https://mainnet.oceif.com';
+let API_BASE = '';
+
+let _network = localStorage.getItem('pkt-network') || 'testnet';
+
+function setNetwork(net) {
+  _network = net;
+  localStorage.setItem('pkt-network', net);
+  API_BASE = net === 'mainnet' ? MAINNET_API : TESTNET_API;
+  const btn = document.getElementById('networkToggle');
+  if (btn) {
+    btn.textContent  = net === 'mainnet' ? '🟡 Mainnet' : '🟢 Testnet';
+    btn.style.color  = net === 'mainnet' ? '#f59e0b' : '#10b981';
+  }
+  refreshAll();
+}
+
+function toggleNetwork() {
+  setNetwork(_network === 'testnet' ? 'mainnet' : 'testnet');
+}
+
+// Init
+API_BASE = _network === 'mainnet' ? MAINNET_API : TESTNET_API;
 
 /* ── UTILS ──────────────────────────────────────────────────── */
 function shortHash(h) { return h ? h.slice(0,10)+'…'+h.slice(-8) : '—'; }
@@ -427,6 +450,7 @@ function routeFromHash() {
 }
 
 buildTicker({});
+setNetwork(_network); // init toggle UI + load data
 refreshAll().then(() => routeFromHash());
 window.addEventListener('hashchange', () => routeFromHash());
 setInterval(refreshAll, 15000); // refresh từ API mỗi 15s
