@@ -408,7 +408,7 @@ function routeFromHash() {
   if (hash === '#blocks') { window.location.replace('/blockchain-rust/block'); return; }
   if (hash === '#txs')    { window.location.replace('/blockchain-rust/rx'); return; }
   else if (hash === '#stats')   showStats();
-  else if (hash === '#testnet' && window.showTestnet) window.showTestnet();
+  else if (hash === '#testnet') renderHome();
   else renderHome();
 }
 
