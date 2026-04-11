@@ -1,6 +1,6 @@
 /* ── CONFIG ─────────────────────────────────────────────────── */
-const TESTNET_API = '/blockchain-rust/testnet';
-const MAINNET_API = '/blockchain-rust/mainnet';
+const TESTNET_API = '/blockchain-rust';
+const MAINNET_API = '/blockchain-rust';
 let API_BASE = '';
 
 let _network = localStorage.getItem('pkt-network') || 'testnet';
