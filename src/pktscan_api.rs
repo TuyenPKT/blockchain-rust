@@ -73,6 +73,10 @@ impl Default for CorsConfig {
                 "https://pktscan.io".to_string(),
                 "tauri://localhost".to_string(),
                 "https://tauri.localhost".to_string(),
+                "https://oceif.com".to_string(),
+                "https://www.oceif.com".to_string(),
+                "https://testnet.oceif.com".to_string(),
+                "https://mainnet.oceif.com".to_string(),
             ],
         }
     }
