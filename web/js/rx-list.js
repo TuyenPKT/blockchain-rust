@@ -53,4 +53,4 @@ async function loadTxs(reset) {
 
 function loadMore() { loadTxs(false); }
 
-document.addEventListener('DOMContentLoaded', () => loadTxs(true));
+loadTxs(true);

@@ -128,4 +128,4 @@ async function init() {
     ${nav}`;
 }
 
-document.addEventListener('DOMContentLoaded', init);
+init();

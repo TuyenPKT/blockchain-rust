@@ -202,5 +202,5 @@
 
   window.openSearch = function () {};  // stub — search modal không có trên trang này
 
-  document.addEventListener('DOMContentLoaded', init);
+  init();
 })();

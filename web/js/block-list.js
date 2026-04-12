@@ -54,4 +54,4 @@ async function loadBlocks(reset) {
 
 function loadMore() { loadBlocks(false); }
 
-document.addEventListener('DOMContentLoaded', () => loadBlocks(true));
+loadBlocks(true);

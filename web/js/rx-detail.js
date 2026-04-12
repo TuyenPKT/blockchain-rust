@@ -153,4 +153,4 @@ async function init() {
     </div>`;
 }
 
-document.addEventListener('DOMContentLoaded', init);
+init();

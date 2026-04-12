@@ -69,7 +69,5 @@ async function fetchHealth() {
     </div>`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  fetchHealth();
-  setInterval(fetchHealth, REFRESH_MS);
-});
+fetchHealth();
+setInterval(fetchHealth, REFRESH_MS);
