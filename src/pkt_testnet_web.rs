@@ -783,7 +783,7 @@ async fn ps_tx_detail(
     }
 
     // ── 2. UTXO scan (confirmed tx — unspent outputs only) ──────────────────
-    if let Some((_sdb, udb)) = ps.open() {
+    if let Some((sdb, udb)) = ps.open() {
         let utxos = udb.scan_tx_outputs(&txid_lc);
         if !utxos.is_empty() {
             let outputs: Vec<Value> = utxos.iter().map(|u| {
@@ -797,19 +797,33 @@ async fn ps_tx_detail(
                 })
             }).collect();
             let total_out: u64 = utxos.iter().map(|u| u.value).sum();
+
+            // Dùng height từ UTXO để lookup block header → timestamp + confirmations
+            let block_height = utxos[0].height;
+            let timestamp: Value = if block_height > 0 {
+                match crate::pkt_explorer_api::query_header(&sdb, block_height) {
+                    Ok(Some(hdr)) => hdr["timestamp"].clone(),
+                    _ => Value::Null,
+                }
+            } else { Value::Null };
+            let tip = sdb.get_sync_height().ok().flatten().unwrap_or(0);
+            let confirmations: Value = if block_height > 0 && tip >= block_height {
+                json!(tip - block_height + 1)
+            } else { Value::Null };
+
             return Json(json!({
                 "txid":          txid_lc,
                 "status":        "confirmed",
                 "is_coinbase":   null,
                 "size":          null,
                 "fee_rate_msat_vb": null,
-                "timestamp":     null,
+                "timestamp":     timestamp,
                 "inputs":        [],
                 "outputs":       outputs,
                 "total_out":     total_out,
                 "total_out_pkt": (total_out as f64) / 1_073_741_824.0,
-                "block_height":  null,
-                "confirmations": null,
+                "block_height":  if block_height > 0 { json!(block_height) } else { Value::Null },
+                "confirmations": confirmations,
                 "note":          "confirmed tx — showing unspent outputs only",
             })).into_response();
         }
