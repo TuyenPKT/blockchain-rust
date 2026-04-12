@@ -93,32 +93,18 @@ function _footerHTML() {
 }
 
 // ── Auto-inject nav + footer ──────────────────────────────────────────────────
+// Script ở cuối body → DOM đã sẵn sàng, inject ngay không cần DOMContentLoaded
 (function injectLayout() {
-  // Detect active page from pathname
-  const path  = window.location.pathname;
-  const parts = path.split('/').filter(Boolean);
-  // /blockchain-rust/block/... → parts = ['blockchain-rust','block',...]
+  const parts      = window.location.pathname.split('/').filter(Boolean);
   const activePage = parts[1] || '';
 
-  document.addEventListener('DOMContentLoaded', function () {
-    // Inject nav if placeholder exists or body has no nav yet
-    const navEl = document.getElementById('shared-nav');
-    if (navEl) {
-      navEl.outerHTML = _navHTML(activePage);
-    } else if (!document.querySelector('nav')) {
-      document.body.insertAdjacentHTML('afterbegin', _navHTML(activePage));
-    }
+  if (!document.querySelector('nav')) {
+    document.body.insertAdjacentHTML('afterbegin', _navHTML(activePage));
+  }
+  if (!document.querySelector('footer')) {
+    document.body.insertAdjacentHTML('beforeend', _footerHTML());
+  }
 
-    // Inject footer if placeholder exists or body has no footer yet
-    const footerEl = document.getElementById('shared-footer');
-    if (footerEl) {
-      footerEl.outerHTML = _footerHTML();
-    } else if (!document.querySelector('footer')) {
-      document.body.insertAdjacentHTML('beforeend', _footerHTML());
-    }
-
-    // Apply theme to button after inject
-    const btn = document.getElementById('themeBtn');
-    if (btn) btn.textContent = (localStorage.getItem('pkt-theme') === 'light') ? '🌙' : '☀️';
-  });
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = (localStorage.getItem('pkt-theme') === 'light') ? '🌙' : '☀️';
 })();
