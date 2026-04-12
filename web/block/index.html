@@ -11,21 +11,6 @@
 </head>
 <body>
 
-<nav>
-  <a class="nav-logo" href="/blockchain-rust/">
-    <div class="nav-logo-icon">P</div>
-    <span class="nav-logo-text">PKT<span>Scan</span></span>
-  </a>
-  <div class="nav-right">
-    <a class="nav-link" style="color:var(--text)" href="/blockchain-rust/block">Blocks</a>
-    <a class="nav-link" href="/blockchain-rust/rx">Transactions</a>
-    <a class="nav-link" href="/blockchain-rust/playground">API</a>
-    <a class="nav-link" href="/blockchain-rust/webhooks">Webhooks</a>
-    <a class="nav-link" href="/blockchain-rust/dev">Developers</a>
-    <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme" id="themeBtn">☀️</button>
-  </div>
-</nav>
-
 <div class="main-wrap">
   <div class="detail-title">📦 All Blocks</div>
   <div class="panel" id="blocks-list">
@@ -35,17 +20,6 @@
     <button onclick="loadMore()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 24px;border-radius:8px;cursor:pointer;font-size:.85rem">Load more</button>
   </div>
 </div>
-
-<footer>
-  <div class="footer-inner">
-    <div class="footer-logo">
-      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
-      PKTScan
-    </div>
-    <span>PKT Blockchain Explorer — built with <a href="https://github.com/TuyenPKT/blockchain-rust">blockchain-rust</a></span>
-    <span>© 2026 PKTScan</span>
-  </div>
-</footer>
 
 <script src="/blockchain-rust/web/js/shared.js?v=19.8"></script>
 <script src="/blockchain-rust/web/js/block-list.js?v=19.8"></script>

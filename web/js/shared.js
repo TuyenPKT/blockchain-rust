@@ -13,10 +13,9 @@ function toggleTheme() {
   localStorage.setItem('pkt-theme', isLight ? '' : 'light');
 }
 (function initTheme() {
-  const t   = localStorage.getItem('pkt-theme') || '';
+  const t = localStorage.getItem('pkt-theme') || '';
   document.documentElement.setAttribute('data-theme', t);
-  const btn = document.getElementById('themeBtn');
-  if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
+  // btn not ready yet — set after inject
 })();
 
 // ── Format helpers ─────────────────────────────────────────────────────────────
@@ -53,30 +52,38 @@ function addrLink(addr) {
   return `<a href="${API_BASE}/address/${enc}" style="color:var(--blue)">${addr}</a>`;
 }
 
-// ── Shared nav HTML ───────────────────────────────────────────────────────────
-function navHTML() {
-  return `
-<nav>
+// ── Nav HTML ──────────────────────────────────────────────────────────────────
+function _navHTML(activePage) {
+  const links = [
+    ['block',     'Blocks'],
+    ['rx',        'Transactions'],
+    ['playground','API'],
+    ['webhooks',  'Webhooks'],
+    ['dev',       'Developers'],
+  ];
+  const linkHtml = links.map(([page, label]) => {
+    const active = activePage === page ? ' style="color:var(--text)"' : '';
+    return `<a class="nav-link"${active} href="${API_BASE}/${page}">${label}</a>`;
+  }).join('\n    ');
+
+  return `<nav>
   <a class="nav-logo" href="${API_BASE}/">
     <div class="nav-logo-icon">P</div>
     <span class="nav-logo-text">PKT<span>Scan</span></span>
   </a>
   <div class="nav-right">
-    <a class="nav-link" href="${API_BASE}/block">Blocks</a>
-    <a class="nav-link" href="${API_BASE}/rx">Transactions</a>
-    <a class="nav-link" href="${API_BASE}/">Stats</a>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+    ${linkHtml}
+    <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme" id="themeBtn">☀️</button>
   </div>
 </nav>`;
 }
 
 // ── Footer HTML ───────────────────────────────────────────────────────────────
-function footerHTML() {
-  return `
-<footer>
+function _footerHTML() {
+  return `<footer>
   <div class="footer-inner">
     <div class="footer-logo">
-      <span style="background:linear-gradient(135deg,#f7a133,#e07b10);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;font-family:'JetBrains Mono',monospace">P</span>
+      <div class="nav-logo-icon" style="width:24px;height:24px;font-size:11px;">P</div>
       PKTScan
     </div>
     <span>PKT Blockchain Explorer — built with <a href="https://github.com/TuyenPKT/blockchain-rust">blockchain-rust</a></span>
@@ -84,3 +91,34 @@ function footerHTML() {
   </div>
 </footer>`;
 }
+
+// ── Auto-inject nav + footer ──────────────────────────────────────────────────
+(function injectLayout() {
+  // Detect active page from pathname
+  const path  = window.location.pathname;
+  const parts = path.split('/').filter(Boolean);
+  // /blockchain-rust/block/... → parts = ['blockchain-rust','block',...]
+  const activePage = parts[1] || '';
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Inject nav if placeholder exists or body has no nav yet
+    const navEl = document.getElementById('shared-nav');
+    if (navEl) {
+      navEl.outerHTML = _navHTML(activePage);
+    } else if (!document.querySelector('nav')) {
+      document.body.insertAdjacentHTML('afterbegin', _navHTML(activePage));
+    }
+
+    // Inject footer if placeholder exists or body has no footer yet
+    const footerEl = document.getElementById('shared-footer');
+    if (footerEl) {
+      footerEl.outerHTML = _footerHTML();
+    } else if (!document.querySelector('footer')) {
+      document.body.insertAdjacentHTML('beforeend', _footerHTML());
+    }
+
+    // Apply theme to button after inject
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = (localStorage.getItem('pkt-theme') === 'light') ? '🌙' : '☀️';
+  });
+})();
