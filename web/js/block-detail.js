@@ -1,18 +1,7 @@
 // block-detail.js — v18.4 Block Detail Enhanced
 // GET /api/testnet/block/:height → header + analytics + tx list
+// API_BASE, shortHash, fmtHashrate từ shared.js
 'use strict';
-
-const API_BASE = '/blockchain-rust';
-
-function shortHash(h) { return h ? h.slice(0, 10) + '…' + h.slice(-8) : '—'; }
-function fmtHashrate(h) {
-  if (!h) return '—';
-  if (h >= 1e15) return (h / 1e15).toFixed(2) + ' PH/s';
-  if (h >= 1e12) return (h / 1e12).toFixed(2) + ' TH/s';
-  if (h >= 1e9)  return (h / 1e9).toFixed(2)  + ' GH/s';
-  if (h >= 1e6)  return (h / 1e6).toFixed(2)  + ' MH/s';
-  return h.toFixed(0) + ' H/s';
-}
 
 async function init() {
   const parts  = window.location.pathname.split('/').filter(Boolean);

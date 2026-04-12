@@ -1,10 +1,7 @@
 // rx-detail.js — v18.3 TX Detail Page
 // GET /api/testnet/tx/:txid → inputs/outputs table, fee rate, confirmations
+// API_BASE, shortHash từ shared.js
 'use strict';
-
-const API_BASE = '/blockchain-rust';
-
-function shortHash(h) { return h ? h.slice(0, 10) + '…' + h.slice(-8) : '—'; }
 function pkt(v)  { return v != null ? (v / 1_073_741_824).toFixed(8) + ' PKT' : '—'; }
 function msat(v) { return v != null ? (v / 1000).toFixed(3) + ' sat/vB' : '—'; }
 
