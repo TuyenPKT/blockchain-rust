@@ -301,6 +301,29 @@ impl AddrIndexDb {
         Ok(out)
     }
 
+    /// Tìm block height của một txid qua atx index.
+    /// Dùng khi UtxoEntry.height = 0 (data cũ pre-v22.1).
+    /// Key format: `atx:{script_hex}:{height:016x}:{txid_hex}` → "".
+    /// Returns None nếu chưa index hoặc không tìm thấy.
+    pub fn get_tx_height(&self, script_hex: &str, txid_hex: &str) -> Option<u64> {
+        let prefix = format!("atx:{}:", script_hex);
+        let suffix = format!(":{}", txid_hex);
+        let mode = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
+        for item in self.db.iterator(mode) {
+            let Ok((k, _)) = item else { break };
+            let key = std::str::from_utf8(&k).ok()?;
+            if !key.starts_with(&prefix) { break; }
+            if key.ends_with(&suffix) {
+                // "atx:{script_hex}:{height:016x}:{txid_hex}"
+                let rest = &key[prefix.len()..]; // "{height:016x}:{txid_hex}"
+                if let Some((h_str, _)) = rest.split_once(':') {
+                    return u64::from_str_radix(h_str, 16).ok();
+                }
+            }
+        }
+        None
+    }
+
     // ── Height tracking ────────────────────────────────────────────────────────
 
     pub fn get_addr_height(&self) -> Result<Option<u64>, SyncError> {

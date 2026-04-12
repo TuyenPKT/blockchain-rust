@@ -798,8 +798,19 @@ async fn ps_tx_detail(
             }).collect();
             let total_out: u64 = utxos.iter().map(|u| u.value).sum();
 
-            // Dùng height từ UTXO để lookup block header → timestamp + confirmations
-            let block_height = utxos[0].height;
+            // Tìm block height: ưu tiên utxo.height (v22.1+),
+            // fallback sang addr index (atx:{script}:{height}:{txid}) cho data cũ.
+            let block_height = {
+                let h = utxos[0].height;
+                if h > 0 {
+                    h
+                } else if let Some(adb) = ps.open_addr() {
+                    let script_hex = hex::encode(&utxos[0].script_pubkey);
+                    adb.get_tx_height(&script_hex, &txid_lc).unwrap_or(0)
+                } else {
+                    0
+                }
+            };
             let timestamp: Value = if block_height > 0 {
                 match crate::pkt_explorer_api::query_header(&sdb, block_height) {
                     Ok(Some(hdr)) => hdr["timestamp"].clone(),
