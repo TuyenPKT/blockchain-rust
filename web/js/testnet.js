@@ -44,7 +44,7 @@
 
   async function fetchSyncStatus() {
     try {
-      var r = await fetch((window.API_BASE || '') + '/api/status');
+      var r = await fetch((window.API_BASE || '') + '/api/testnet/sync-status');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
 
@@ -77,7 +77,7 @@
 
   async function fetchTestnetStats() {
     try {
-      var r = await fetch((window.API_BASE || '') + '/api/stats');
+      var r = await fetch((window.API_BASE || '') + '/api/testnet/stats');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
 
@@ -100,7 +100,7 @@
     var el = document.getElementById('tn-headers-list');
     if (!el) return;
     try {
-      var r = await fetch((window.API_BASE || '') + '/api/blocks?limit=5');
+      var r = await fetch((window.API_BASE || '') + '/api/testnet/headers?limit=5');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
       var headers = d.blocks || d.headers || [];
@@ -228,7 +228,7 @@
 
     // Fetch balance
     try {
-      var rb = await fetch((window.API_BASE || '') + '/api/balance/' + encodeURIComponent(script));
+      var rb = await fetch((window.API_BASE || '') + '/api/testnet/balance/' + encodeURIComponent(script));
       if (rb.ok) {
         var db = await rb.json();
         var bal     = db.balance || 0;
@@ -248,7 +248,7 @@
   async function tnFetchAddrTxs(reset) {
     var script = tnAddrScript;
     if (!script) return;
-    var url = (window.API_BASE || '') + '/api/address/' + encodeURIComponent(script) + '/txs?limit=20';
+    var url = (window.API_BASE || '') + '/api/testnet/address/' + encodeURIComponent(script) + '/txs?limit=20';
     if (tnAddrCursor !== null) url += '&cursor=' + tnAddrCursor;
 
     try {
@@ -312,7 +312,7 @@
     var el = document.getElementById('tn-rich-list');
     if (!el) return;
     try {
-      var r = await fetch((window.API_BASE || '') + '/api/richlist?limit=20');
+      var r = await fetch((window.API_BASE || '') + '/api/testnet/richlist?limit=20');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
       var holders = d.holders || [];
@@ -374,7 +374,7 @@
     var el = document.getElementById('tn-mempool-list');
     if (!el) return;
     try {
-      var r = await fetch((window.API_BASE || '') + '/api/mempool?limit=20');
+      var r = await fetch((window.API_BASE || '') + '/api/testnet/mempool?limit=20');
       if (!r.ok) throw new Error(r.status);
       var d = await r.json();
       var txs   = d.txs || [];
