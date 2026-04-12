@@ -798,19 +798,23 @@ async fn ps_tx_detail(
             }).collect();
             let total_out: u64 = utxos.iter().map(|u| u.value).sum();
 
-            // Tìm block height: ưu tiên utxo.height (v22.1+),
-            // fallback sang addr index (atx:{script}:{height}:{txid}) cho data cũ.
-            let block_height = {
-                let h = utxos[0].height;
-                if h > 0 {
-                    h
-                } else if let Some(adb) = ps.open_addr() {
-                    let script_hex = hex::encode(&utxos[0].script_pubkey);
-                    adb.get_tx_height(&script_hex, &txid_lc).unwrap_or(0)
-                } else {
-                    0
-                }
-            };
+            // ── Ưu tiên TX index (v24.1) → đủ size + fee_rate + height
+            let tx_meta = udb.get_tx_meta(&txid_lc).ok().flatten();
+
+            // Tìm block height: tx_meta → utxo.height → addr index
+            let block_height: u64 = tx_meta.as_ref().map(|m| m.height).filter(|&h| h > 0)
+                .or_else(|| {
+                    let h = utxos[0].height;
+                    if h > 0 { Some(h) } else { None }
+                })
+                .or_else(|| {
+                    ps.open_addr().and_then(|adb| {
+                        let script_hex = hex::encode(&utxos[0].script_pubkey);
+                        adb.get_tx_height(&script_hex, &txid_lc)
+                    })
+                })
+                .unwrap_or(0);
+
             let timestamp: Value = if block_height > 0 {
                 match crate::pkt_explorer_api::query_header(&sdb, block_height) {
                     Ok(Some(hdr)) => hdr["timestamp"].clone(),
@@ -822,20 +826,29 @@ async fn ps_tx_detail(
                 json!(tip - block_height + 1)
             } else { Value::Null };
 
+            let (size_v, fee_rate_v, is_coinbase_v) = match &tx_meta {
+                Some(m) => (
+                    json!(m.size),
+                    if m.fee_rate_msat_vb > 0 { json!(m.fee_rate_msat_vb) } else { Value::Null },
+                    json!(m.is_coinbase),
+                ),
+                None => (Value::Null, Value::Null, Value::Null),
+            };
+
             return Json(json!({
-                "txid":          txid_lc,
-                "status":        "confirmed",
-                "is_coinbase":   null,
-                "size":          null,
-                "fee_rate_msat_vb": null,
-                "timestamp":     timestamp,
-                "inputs":        [],
-                "outputs":       outputs,
-                "total_out":     total_out,
-                "total_out_pkt": (total_out as f64) / 1_073_741_824.0,
-                "block_height":  if block_height > 0 { json!(block_height) } else { Value::Null },
-                "confirmations": confirmations,
-                "note":          "confirmed tx — showing unspent outputs only",
+                "txid":             txid_lc,
+                "status":           "confirmed",
+                "is_coinbase":      is_coinbase_v,
+                "size":             size_v,
+                "fee_rate_msat_vb": fee_rate_v,
+                "timestamp":        timestamp,
+                "inputs":           [],
+                "outputs":          outputs,
+                "total_out":        total_out,
+                "total_out_pkt":    (total_out as f64) / 1_073_741_824.0,
+                "block_height":     if block_height > 0 { json!(block_height) } else { Value::Null },
+                "confirmations":    confirmations,
+                "note":             "confirmed tx — showing unspent outputs only",
             })).into_response();
         }
     }

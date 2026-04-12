@@ -16,6 +16,7 @@
 //!
 //! UTXO DB key schema (separate RocksDB instance from SyncDb):
 //!   utxo:{txid_hex}:{vout}  → JSON(UtxoEntry)
+//!   txmeta:{txid_hex}       → JSON(TxMeta)   ← v24.1: TX index
 //!   meta:utxo_height        → decimal u64 string
 //!   meta:utxo_tip_hash      → raw [u8;32]
 
@@ -78,6 +79,16 @@ pub struct UtxoEntry {
     pub script_pubkey: Vec<u8>,
     #[serde(default)]
     pub height:       u64,      // block height where UTXO was created (0 = unknown/pre-v22.1)
+}
+
+/// TX metadata stored in index (v24.1).
+/// Key: `txmeta:{txid_hex}` in UtxoSyncDb.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxMeta {
+    pub height:           u64,
+    pub size:             u32,   // serialized bytes (non-witness)
+    pub fee_rate_msat_vb: u64,   // 0 for coinbase hoặc khi không đủ UTXO data
+    pub is_coinbase:      bool,
 }
 
 // ── Wire tx encoding (for tests) ─────────────────────────────────────────────
@@ -436,6 +447,23 @@ impl UtxoSyncDb {
 
     /// Raw DB access for iteration (used by explorer queries in pkt_explorer_api).
     pub fn raw_db(&self) -> &rocksdb::DB { &self.db }
+
+    // ── TX meta index (v24.1) ─────────────────────────────────────────────────
+
+    pub fn put_tx_meta(&self, txid_hex: &str, meta: &TxMeta) -> Result<(), SyncError> {
+        let key = format!("txmeta:{}", txid_hex);
+        let val = serde_json::to_vec(meta).map_err(|e| SyncError::Db(e.to_string()))?;
+        self.db.put(key.as_bytes(), &val).map_err(|e| SyncError::Db(e.to_string()))
+    }
+
+    pub fn get_tx_meta(&self, txid_hex: &str) -> Result<Option<TxMeta>, SyncError> {
+        let key = format!("txmeta:{}", txid_hex);
+        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+            None    => Ok(None),
+            Some(v) => serde_json::from_slice(&v).map(Some)
+                           .map_err(|e| SyncError::Db(e.to_string())),
+        }
+    }
 }
 
 impl Drop for UtxoSyncDb {
@@ -448,7 +476,7 @@ impl Drop for UtxoSyncDb {
 
 // ── UTXO application ──────────────────────────────────────────────────────────
 
-/// Apply one transaction: spend inputs, create outputs.
+/// Apply one transaction: spend inputs, create outputs, write TxMeta index.
 /// Coinbase inputs (null prev_txid) are not spent from the UTXO set.
 pub fn apply_wire_tx(
     db:     &UtxoSyncDb,
@@ -456,16 +484,39 @@ pub fn apply_wire_tx(
     txid:   &[u8; 32],
     height: u64,
 ) -> Result<(), SyncError> {
-    // Spend inputs (skip coinbase null inputs)
+    let is_coinbase = tx.is_coinbase();
+    let size        = encode_wire_tx(tx).len() as u32;
+
+    // Spend inputs — đọc value trước khi xóa để tính fee
+    let mut input_sum: u64 = 0;
     for inp in &tx.inputs {
         if !inp.is_coinbase() {
+            if let Ok(Some(utxo)) = db.get_utxo(&inp.prev_txid, inp.prev_vout) {
+                input_sum = input_sum.saturating_add(utxo.value);
+            }
             db.remove_utxo(&inp.prev_txid, inp.prev_vout)?;
         }
     }
+
     // Create outputs
+    let mut output_sum: u64 = 0;
     for (vout, out) in tx.outputs.iter().enumerate() {
+        output_sum = output_sum.saturating_add(out.value);
         db.insert_utxo(txid, vout as u32, out, height)?;
     }
+
+    // Tính fee_rate (msat/vByte); 0 cho coinbase hoặc không đủ data
+    let fee_rate_msat_vb = if is_coinbase || input_sum == 0 || size == 0 {
+        0
+    } else {
+        let fee = input_sum.saturating_sub(output_sum);
+        fee.saturating_mul(1000) / size as u64
+    };
+
+    // Ghi TX index
+    let txid_hex = hex::encode(txid);
+    db.put_tx_meta(&txid_hex, &TxMeta { height, size, fee_rate_msat_vb, is_coinbase })?;
+
     Ok(())
 }
 
