@@ -37,12 +37,15 @@ function fmtHashrate(h) {
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
-async function fetchJson(url) {
+async function fetchJson(url, timeoutMs = 10000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
     if (!r.ok) return null;
     return await r.json();
-  } catch (_) { return null; }
+  } catch (_) { clearTimeout(timer); return null; }
 }
 
 // ── Address link ──────────────────────────────────────────────────────────────

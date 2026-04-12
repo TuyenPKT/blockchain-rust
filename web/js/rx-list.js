@@ -12,7 +12,10 @@ async function loadTxs(reset) {
   const list = document.getElementById('tx-list');
 
   if (!data) {
-    list.innerHTML = '<div style="padding:24px;color:var(--red)">Failed to load transactions.</div>';
+    list.innerHTML = `<div style="padding:24px;color:var(--red)">
+      ⚠ Không thể tải dữ liệu transactions — server chưa chạy hoặc không phản hồi.
+      <br><button onclick="loadTxs(true)" style="margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 16px;border-radius:6px;cursor:pointer;font-size:.82rem">↻ Thử lại</button>
+    </div>`;
     return;
   }
 
