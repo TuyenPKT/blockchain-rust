@@ -45,7 +45,7 @@ function buildTicker(s) {
   s = s || {};
   const height = (s.height ?? 0).toLocaleString("en-US");
   const hr     = fmtHashrate(s.hashrate ?? 0);
-  const bt     = s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—';
+  const bt     = (s.avg_block_time_s ?? s.block_time_avg) ? Math.round(s.avg_block_time_s ?? s.block_time_avg) + 's' : '—';
   const items  = [
     `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '4,096 PKT reward'}`,
     `🔄 Difficulty ${s.difficulty ?? '—'}`, `⏱ ${bt} block time`,
@@ -144,7 +144,7 @@ function renderStats(s) {
     ['Latest Block',   `#${(s.height ?? 0).toLocaleString("en-US")}`],
     ['Difficulty',     s.difficulty ?? '—'],
     ['Hashrate',       fmtHashrate(s.hashrate ?? 0)],
-    ['Avg Block Time', s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—'],
+    ['Avg Block Time', (s.avg_block_time_s ?? s.block_time_avg) ? Math.round(s.avg_block_time_s ?? s.block_time_avg) + 's' : '—'],
     ['UTXO Count',     (s.utxo_count ?? 0).toLocaleString("en-US")],
     ['Mempool',        (s.mempool_count ?? 0) + ' txs'],
     ['Signature',      'ECDSA + Dilithium (hybrid post-quantum)'],
