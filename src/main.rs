@@ -153,6 +153,7 @@ mod pkt_mempool_bridge;
 mod pkt_snapshot;
 mod pkt_fullnode;
 mod pkt_install;
+mod pkt_pool;
 mod evm_address;
 mod pkt_paths;
 
@@ -298,6 +299,10 @@ fn main() {
         Some("install-node") => {
             // cargo run -- install-node [--mainnet] [--user <u>] [--print-sh|--print-config]
             pkt_install::cmd_install_node(&args[2..].to_vec());
+        }
+        Some("pool") => {
+            // cargo run -- pool [miner_port=8337] [node_addr=127.0.0.1:8334] [stats_port=8338]
+            pkt_pool::cmd_pool(&args[2..].to_vec());
         }
         Some("mine-genesis") => {
             // cargo run -- mine-genesis [--testnet] [--bits 0x1f00ffff] ["message"]

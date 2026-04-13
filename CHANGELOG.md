@@ -4,6 +4,46 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.4 — Public Mining Pool (2026-04-14)
+
+### Added
+- `src/pkt_pool.rs` — Public Mining Pool proxy:
+  - `PoolShared` — shared state: `RwLock<PoolStats>` + `RwLock<HashMap<WorkerId, WorkerStats>>` + template cache
+  - `CachedTemplate` — template với TTL 30 giây, auto-refresh background thread
+  - `handle_miner()` — per-miner TCP handler: `GetTemplate` → cache; `NewBlock` → forward upstream + record stats; `GetBlocks` → proxy
+  - `run_pool_server()` — TCP listener port 8337, spawn thread per miner
+  - `run_stats_server()` — HTTP server port 8338:
+    - `GET /api/pool/stats` → total_blocks, active_workers, uptime_secs, template_height
+    - `GET /api/pool/workers` → per-worker: blocks_found, last_seen_secs_ago, connected
+  - `run_template_refresh()` — background thread refresh template mỗi 30s
+  - `cmd_pool(args)` — CLI entry: `pool [miner_port=8337] [node_addr=127.0.0.1:8334] [stats_port=8338]`
+- `src/main.rs` — thêm `mod pkt_pool` + `pool` command dispatch
+
+### Files
+- `src/pkt_pool.rs` — NEW (260 lines)
+- `src/main.rs` — +2 lines (mod + command)
+
+### Tests
+- +9 tests pkt_pool (total: 9)
+
+### Usage
+```bash
+# Start pool (upstream: local pkt-node port 8334)
+cargo run -- pool
+
+# Pool với custom ports
+cargo run -- pool 8337 127.0.0.1:8334 8338
+
+# Miners kết nối pool thay vì node trực tiếp
+cargo run -- mine <addr> 0 127.0.0.1:8337
+
+# Pool stats
+curl http://localhost:8338/api/pool/stats
+curl http://localhost:8338/api/pool/workers
+```
+
+---
+
 ## v24.0.9.11 — Fix Avg Block Time hiển thị — (2026-04-14)
 
 ### Added

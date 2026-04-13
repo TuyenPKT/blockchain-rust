@@ -1,6 +1,6 @@
 # Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v24.0.9.11 ✅ — 0 errors, 0 warnings**
+**Version hiện tại: v24.4 ✅ — 0 errors, 0 warnings**
 
 ---
 
@@ -95,7 +95,7 @@ Auth không đủ (`sync/start`), API key trong URL, `api_keys.json` 0644, UTXO 
 - [x] v24.2 — **Network-aware Data Paths**: `src/pkt_paths.rs` single source of truth; `testnet/` vs `mainnet/` data dirs; +6 tests
 - [x] v24.3 — **Nav Toggle Redesign**: desktop pill shape; testnet first; dot indicator; amber/blue active colors
 - [x] v24.0.9.5–v24.0.9.11 — **Frontend Bug Fixes**: Block Reward động từ API; TX input/output value field; Avg Block Time fallback; Address Type EVM; address-page.js API URL fix; nginx prefix strip; RocksDB LOCK cleanup
-- [ ] v24.4 — **Public Mining Pool**: Stratum endpoint public; miner stats page
+- [x] v24.4 — **Public Mining Pool**: `src/pkt_pool.rs`; proxy pool (miner_port=8337, stats_port=8338); `PoolShared` RwLock; per-miner stats; stats HTTP API `/api/pool/stats` + `/api/pool/workers`; CLI `cargo run -- pool`; +9 tests
 - [ ] v24.5 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
 - [ ] v24.6 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
 - [ ] v24.7 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
