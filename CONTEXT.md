@@ -1,6 +1,6 @@
 # Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v24.0 ✅ — 0 errors, 0 warnings**
+**Version hiện tại: v24.0.9.11 ✅ — 0 errors, 0 warnings**
 
 ---
 
@@ -91,11 +91,15 @@ Auth không đủ (`sync/start`), API key trong URL, `api_keys.json` 0644, UTXO 
 
 ### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ← ĐANG LÀM
 - [x] v24.0 — **Node Onboarding**: `src/pkt_install.rs` — `generate_install_sh()` Linux/macOS (systemd+launchd) + `generate_install_ps1()` Windows (Windows Service); `generate_config_toml()`; CLI `install-node [--mainnet] [--print-sh|--print-ps1|--print-config]`; +25 tests
-- [ ] v24.1 — **Public Mining Pool**: Stratum endpoint public; miner stats page; `blockchain-rust pool` với config file
-- [ ] v24.2 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
-- [ ] v24.3 — **Developer Docs**: OpenAPI spec đầy đủ; `crates/pkt-sdk` hoàn chỉnh; quick-start guide
-- [ ] v24.4 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
-- [ ] v24.5 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
+- [x] v24.1 — **EVM Address Format**: `src/evm_address.rs` Keccak-256 + EIP-55; `wallet.rs` + `wallet_cli.rs` dùng EVM; pkt_labels cập nhật; +14 tests
+- [x] v24.2 — **Network-aware Data Paths**: `src/pkt_paths.rs` single source of truth; `testnet/` vs `mainnet/` data dirs; +6 tests
+- [x] v24.3 — **Nav Toggle Redesign**: desktop pill shape; testnet first; dot indicator; amber/blue active colors
+- [x] v24.0.9.5–v24.0.9.11 — **Frontend Bug Fixes**: Block Reward động từ API; TX input/output value field; Avg Block Time fallback; Address Type EVM; address-page.js API URL fix; nginx prefix strip; RocksDB LOCK cleanup
+- [ ] v24.4 — **Public Mining Pool**: Stratum endpoint public; miner stats page
+- [ ] v24.5 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
+- [ ] v24.6 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
+- [ ] v24.7 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
+- [ ] v24.8 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, AI Consensus, Singularity Chain
@@ -129,6 +133,11 @@ Chỉ ghi các quyết định **không hiển nhiên** hoặc có thể gây l�
 | v23.0 | Merkle root dùng SHA256d (khớp `wire_txid`), KHÔNG phải BLAKE3 |
 | v23.5 | `ibd_action()` skip validation nếu block height ≤ checkpoint — không verify signature cũ |
 | v24.0 | `install.ps1` dùng `New-Service` (cần Admin); non-admin fallback `~/.local/bin` không có service |
+| v24.1 | EVM address = Keccak256(uncompressed_pubkey_64B)[12:32] + EIP-55 checksum; KHÔNG phải RIPEMD160 |
+| v24.2 | `pkt_paths::set_mainnet()` phải gọi trước mọi dispatch trong `main.rs` |
+| v24.0.9.x | Backend summary trả `block_time_avg`; JS cần `avg_block_time_s ?? block_time_avg` |
+| v24.0.9.x | `address-page.js` dùng `API_BASE = '/blockchain-rust'`; gọi `/api/testnet/addr/` KHÔNG phải `/api/address/` |
+| v24.0.9.x | `TxInput/TxOutput` field là `value` (paklets), KHÔNG phải `amount`; dùng `Number()` cast vì `[key: string]: unknown` |
 
 ---
 

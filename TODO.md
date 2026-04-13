@@ -1,7 +1,7 @@
 # TODO — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v15.8 ✅**
-**Tiến độ: 130+ versions — Era 1–23 hoàn thành (trừ Era 20 hardware-dependent)**
+**Version hiện tại: v24.0.9.11 ✅**
+**Tiến độ: 150+ versions — Era 1–31 hoàn thành (trừ Era 20 hardware-dependent)**
 
 ---
 
@@ -157,4 +157,4 @@
 | Era 23 (DX)        | 4  | 4  | 0  |
 | **Tổng**           | **~130** | **~130** | **0** |
 
-> Cập nhật lần cuối: **v15.8 ✅ — 2023 tests · 0 warnings**
+> Cập nhật lần cuối: **v24.0.9.11 ✅ — 2023+ tests · 0 warnings**

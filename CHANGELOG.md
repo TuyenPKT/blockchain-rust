@@ -4,6 +4,101 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.0.9.11 — Fix Avg Block Time hiển thị — (2026-04-14)
+
+### Added
+- `web/js/app.js` — `buildTicker` và stats table dùng `s.avg_block_time_s ?? s.block_time_avg` thay vì chỉ `avg_block_time_s`
+
+### Files
+- `web/js/app.js` — 2 chỗ fallback `block_time_avg`
+
+### Gotcha
+- Backend trả `block_time_avg`, JS check `avg_block_time_s` → hiện `—`
+
+---
+
+## v24.0.9.10 — Fix address-page.js gọi sai API endpoint (2026-04-14)
+
+### Added
+- `web/js/address-page.js` — sửa URL từ `/api/address/` → `/api/testnet/addr/?limit=50`
+
+### Files
+- `web/js/address-page.js` line 190
+
+### Gotcha
+- `/api/address/` không tồn tại trong backend → fetchJson trả null → balance = 0, txs = []
+
+---
+
+## v24.0.9.9 — Fix Address Type Unknown cho EVM (0x) addresses (2026-04-14)
+
+### Added
+- `web/js/address.js` — `detectType()` thêm case `0x[0-9a-fA-F]{40}` → `EVM (EIP-55)`
+- `web/js/address-page.js` — `detectType()` thêm cùng case
+
+### Files
+- `web/js/address.js`
+- `web/js/address-page.js`
+
+---
+
+## v24.0.9.8 — Fix Total Input/Output = 0 trong TX detail (2026-04-13)
+
+### Added
+- `desktop/src/api.ts` — đổi `TxInput.amount` → `TxInput.value`, `TxOutput.amount` → `TxOutput.value` (đúng field name backend)
+- `desktop/src/pages/TxDetail.tsx` — dùng `Number(i.value)` và `Number(o.value)` để tránh TypeScript `unknown` type error
+- `desktop/src/pages/BlockDetail.tsx` — dùng `Number(o.value)` trong `outTotal`
+
+### Files
+- `desktop/src/api.ts`
+- `desktop/src/pages/TxDetail.tsx`
+- `desktop/src/pages/BlockDetail.tsx`
+
+### Gotcha
+- Interface dùng `[key: string]: unknown` → property access trả `unknown` → cần `Number()` cast để cộng
+
+---
+
+## v24.0.9.7 — Block Reward từ coinbase TX thực tế (2026-04-13)
+
+### Added
+- `src/pkt_testnet_web.rs` — `ps_summary`: tính `block_reward` từ coinbase TX (TX đầu tiên trong block) thay vì công thức halving lý thuyết
+  - `AddrIndexDb::get_txids_at_height(height, 1)` → txid coinbase
+  - `UtxoSyncDb::scan_tx_outputs(txid)` → tổng outputs = thực tế reward
+  - Fallback về halving schedule nếu actual = 0 (UTXO đã spent)
+
+### Files
+- `src/pkt_testnet_web.rs` — block_reward calculation (~line 1218)
+
+### Gotcha
+- Coinbase UTXO có thể đã spent → fallback về formula (4096 PKT >> halvings)
+
+---
+
+## v24.0.9.6 — Typed block_reward fields trong NetworkSummary (2026-04-13)
+
+### Added
+- `desktop/src/api.ts` — thêm `block_reward?: number` và `block_reward_pkt?: number` vào `NetworkSummary`
+- `desktop/src/pages/Node.tsx` — dùng `summary.block_reward` thay `summary["block_reward"]`
+
+### Files
+- `desktop/src/api.ts`
+- `desktop/src/pages/Node.tsx`
+
+---
+
+## v24.0.9.5 — Block Reward động từ API (2026-04-13)
+
+### Added
+- `web/js/app.js` — `fetchStats()` cập nhật `stat-reward` từ `s.block_reward_pkt`; `buildTicker()` dùng `s.block_reward_pkt` động
+- `index.html` — thêm `id="stat-reward"` với placeholder `—` cho Block Reward stat
+
+### Files
+- `web/js/app.js`
+- `index.html`
+
+---
+
 ## v24.3 — PKTScan Nav Toggle Redesign (2026-04-10)
 
 ### Added
