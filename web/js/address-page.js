@@ -34,6 +34,7 @@
     if (addr.startsWith('tpkt1q')) return 'Testnet P2WPKH';
     if (addr.startsWith('rpkt1q')) return 'Regtest P2WPKH';
     if (addr.startsWith('pkt1p'))  return 'P2TR (taproot)';
+    if (/^0x[0-9a-fA-F]{40}$/.test(addr)) return 'EVM (EIP-55)';
     if (/^[0-9a-fA-F]{40,}$/.test(addr)) return 'Hex (raw)';
     if (/^[123mn]/.test(addr))     return 'P2PKH (Base58)';
     return 'Unknown';
