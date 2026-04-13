@@ -19,8 +19,10 @@ export interface NetworkSummary {
   mempool_count?:    number;
   difficulty?:       number;
   utxo_count?:       number;
-  total_value_pkt?:  number;
-  total_value_sat?:  number;
+  total_value_pkt?:   number;
+  total_value_sat?:   number;
+  block_reward?:      number;     // paklets
+  block_reward_pkt?:  number;     // PKT float
   [key: string]: unknown;
 }
 

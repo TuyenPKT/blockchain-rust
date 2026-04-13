@@ -73,7 +73,7 @@ export function Node({ nodeUrl }: NodeProps) {
   // Extra fields returned by /api/testnet/summary
   const tipHash     = (summary["tip_hash"]     as string | undefined) ?? "";
   const totalValue  = (summary["total_value_sat"] as number | undefined) ?? 0;
-  const blockReward = (summary["block_reward"] as number | undefined) ?? 0;
+  const blockReward = summary.block_reward ?? 0;
 
   function fmtTime(s: number) {
     if (!s) return "—";
