@@ -187,7 +187,7 @@
     document.title = `${addr.slice(0, 12)}… — PKTScan`;
 
     const enc  = encodeURIComponent(addr);
-    const data = await fetchJson(`${API_BASE}/api/address/${enc}`);
+    const data = await fetchJson(`${API_BASE}/api/testnet/addr/${enc}?limit=50`);
 
     if (!data) {
       document.getElementById('addr-content').innerHTML = renderError('Address not found or API unavailable.');
