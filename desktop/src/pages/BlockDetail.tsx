@@ -59,7 +59,7 @@ function ConfBadge({ conf }: { conf: number | undefined }) {
 
 function TxRow({ tx, onTx }: { tx: TxDetail; onTx: (txid: string) => void }) {
   const txid = tx.txid ?? tx.hash ?? "";
-  const outTotal = (tx.outputs ?? []).reduce((s, o) => s + (o.amount ?? 0), 0);
+  const outTotal = (tx.outputs ?? []).reduce((s, o) => s + (Number(o.value) || 0), 0);
 
   return (
     <div

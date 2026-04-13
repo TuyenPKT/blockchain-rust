@@ -122,13 +122,13 @@ export interface TxInput {
   txid?:    string;
   vout?:    number;
   address?: string;
-  amount?:  number;
+  value?:   number;   // paklets — backend field name
   [key: string]: unknown;
 }
 
 export interface TxOutput {
   address?: string;
-  amount?:  number;
+  value?:   number;   // paklets — backend field name
   vout?:    number;
   type?:    string;
   [key: string]: unknown;

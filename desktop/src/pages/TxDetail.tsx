@@ -91,10 +91,10 @@ function InputRow({ inp, onAddr }: { inp: TxInput; onAddr: (addr: string) => voi
         )}
       </div>
 
-      {inp.amount !== undefined && (
+      {inp.value !== undefined && (
         <span style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13,
           color: colors.text, flexShrink: 0 }}>
-          {(inp.amount / PACKETS_PER_PKT).toFixed(4)} PKT
+          {(inp.value / PACKETS_PER_PKT).toFixed(4)} PKT
         </span>
       )}
     </div>
@@ -130,10 +130,10 @@ function OutputRow({ out, onAddr }: { out: TxOutput; onAddr: (addr: string) => v
         )}
       </div>
 
-      {out.amount !== undefined && (
+      {out.value !== undefined && (
         <span style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13,
           color: colors.green, flexShrink: 0 }}>
-          {(out.amount / PACKETS_PER_PKT).toFixed(4)} PKT
+          {(out.value / PACKETS_PER_PKT).toFixed(4)} PKT
         </span>
       )}
     </div>
@@ -143,8 +143,8 @@ function OutputRow({ out, onAddr }: { out: TxOutput; onAddr: (addr: string) => v
 // ── Flow diagram (summary bar) ────────────────────────────────────────────────
 
 function FlowBar({ tx }: { tx: TxDetailType }) {
-  const inTotal  = (tx.inputs  ?? []).reduce((s, i) => s + (i.amount ?? 0), 0);
-  const outTotal = (tx.outputs ?? []).reduce((s, o) => s + (o.amount ?? 0), 0);
+  const inTotal  = (tx.inputs  ?? []).reduce((s, i) => s + (Number(i.value) || 0), 0);
+  const outTotal = (tx.outputs ?? []).reduce((s, o) => s + (Number(o.value) || 0), 0);
   const fee      = tx.fee ?? (inTotal > 0 ? inTotal - outTotal : undefined);
 
   return (
