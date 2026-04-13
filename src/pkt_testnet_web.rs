@@ -1215,6 +1215,16 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         }
     };
 
+    // INITIAL_BLOCK_REWARD = 4096 PKT = 4096 * 2^30 paklets; HALVING_INTERVAL = 2^20 blocks
+    const INITIAL_BLOCK_REWARD: u64 = 4_096 * 1_073_741_824;
+    const HALVING_INTERVAL: u64     = 1_048_576;
+    let block_reward: u64 = if height == 0 {
+        0
+    } else {
+        let halvings = height / HALVING_INTERVAL;
+        if halvings >= 63 { 0 } else { INITIAL_BLOCK_REWARD >> halvings }
+    };
+
     Json(json!({
         "height":                  height,
         "tip_hash":                tip_hash,
@@ -1228,6 +1238,8 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         "mempool_count":           mempool_count,
         "mempool_top_fee_msat_vb": mempool_top_fee_msat_vb,
         "rich_top5":               rich_top5,
+        "block_reward":            block_reward,
+        "block_reward_pkt":        (block_reward as f64) / 1_073_741_824.0,
     })).into_response()
 }
 

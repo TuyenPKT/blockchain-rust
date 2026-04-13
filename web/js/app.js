@@ -47,10 +47,10 @@ function buildTicker(s) {
   const hr     = fmtHashrate(s.hashrate ?? 0);
   const bt     = s.avg_block_time_s ? Math.round(s.avg_block_time_s) + 's' : '—';
   const items  = [
-    `📦 Block #${height}`, `⚡ ${hr}`, `💰 50 PKT reward`,
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '4,096 PKT reward'}`,
     `🔄 Difficulty ${s.difficulty ?? '—'}`, `⏱ ${bt} block time`,
     `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
-    `📦 Block #${height}`, `⚡ ${hr}`, `💰 50 PKT reward`,
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '4,096 PKT reward'}`,
     `🔄 Difficulty ${s.difficulty ?? '—'}`, `⏱ ${bt} block time`,
     `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
   ];
@@ -71,6 +71,10 @@ async function fetchStats() {
     document.getElementById('stat-nodes').textContent     = (s.utxo_count ?? 0).toLocaleString("en-US");
     document.getElementById('stat-txs').textContent       = (s.mempool_count ?? 0) + ' txs';
     document.getElementById('stat-diff').textContent      = s.difficulty ?? '—';
+    if (s.block_reward_pkt != null) {
+      const el = document.getElementById('stat-reward');
+      if (el) el.textContent = s.block_reward_pkt.toLocaleString(undefined, {maximumFractionDigits: 0}) + ' PKT';
+    }
     buildTicker(s);
     renderStats(s);
   } catch(e) { console.warn('fetchStats', e); }
