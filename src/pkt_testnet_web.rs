@@ -1215,14 +1215,28 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         }
     };
 
-    // INITIAL_BLOCK_REWARD = 4096 PKT = 4096 * 2^30 paklets; HALVING_INTERVAL = 2^20 blocks
-    const INITIAL_BLOCK_REWARD: u64 = 4_096 * 1_073_741_824;
-    const HALVING_INTERVAL: u64     = 1_048_576;
+    // Block reward thực tế từ coinbase TX của block mới nhất
+    // Fallback về PKT halving formula nếu UTXO đã spent hoặc chưa có data
     let block_reward: u64 = if height == 0 {
         0
     } else {
-        let halvings = height / HALVING_INTERVAL;
-        if halvings >= 63 { 0 } else { INITIAL_BLOCK_REWARD >> halvings }
+        let actual = ps.open_addr()
+            .and_then(|adb| adb.get_txids_at_height(height, 1).into_iter().next())
+            .and_then(|coinbase_txid| {
+                ps.open().map(|(_, udb)| {
+                    udb.scan_tx_outputs(&coinbase_txid)
+                       .iter()
+                       .map(|u| u.value)
+                       .sum::<u64>()
+                })
+            })
+            .unwrap_or(0);
+        if actual > 0 {
+            actual
+        } else {
+            let halvings = height / 1_048_576;
+            if halvings >= 63 { 0 } else { (4_096u64 * 1_073_741_824) >> halvings }
+        }
     };
 
     Json(json!({
