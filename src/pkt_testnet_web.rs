@@ -1216,11 +1216,11 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
     };
 
     // Block reward thực tế từ coinbase TX của block mới nhất
-    // Fallback về PKT halving formula nếu UTXO đã spent hoặc chưa có data
+    // Trả 0 nếu chưa có data — không dùng formula lý thuyết vì testnet params khác mainnet
     let block_reward: u64 = if height == 0 {
         0
     } else {
-        let actual = ps.open_addr()
+        ps.open_addr()
             .and_then(|adb| adb.get_txids_at_height(height, 1).into_iter().next())
             .and_then(|coinbase_txid| {
                 ps.open().map(|(_, udb)| {
@@ -1230,13 +1230,7 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
                        .sum::<u64>()
                 })
             })
-            .unwrap_or(0);
-        if actual > 0 {
-            actual
-        } else {
-            let halvings = height / crate::pkt_genesis::HALVING_INTERVAL;
-            if halvings >= 63 { 0 } else { crate::pkt_genesis::INITIAL_BLOCK_REWARD >> halvings }
-        }
+            .unwrap_or(0)
     };
 
     Json(json!({
