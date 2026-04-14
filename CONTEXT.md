@@ -1,4 +1,4 @@
-# Open Consensus Execution Interface Framework — CONTEXT
+2# Open Consensus Execution Interface Framework — CONTEXT
 
 **Version hiện tại: v24.4 ✅ — 0 errors, 0 warnings**
 
@@ -75,19 +75,17 @@
 - [x] v23.6 — **Wire Mempool Bridge**: `load_wire_mempool_txs`; WireTx→Transaction convert; template merge; +21 tests
 - [x] v23.7 — **UTXO Snapshot**: NDJSON format; `dump/load/load_snapshot`; CLI `snapshot dump/load/info`; +21 tests
 - [x] v23.8 — **Full Node Mode**: `pkt_fullnode.rs`; `spawn_sync_process()`; `start_watcher` auto-restart; `cmd_fullnode`; +17 tests
-
-#### Fix bảo mật (post v23.8) — 15 issues ✅
-Auth không đủ (`sync/start`), API key trong URL, `api_keys.json` 0644, UTXO decode, Merkle SHA256d, balance=0 wire/legacy, PKT divisor 1e9→2^30, OCEIF rebranding, genesis placeholder, Mutex unwrap ×15, peer param injection, wallet.key 0644, pool dummy_reward, fake label pGTESTNE.
+- [x] v23.8.1 — **Security Patch** (15 issues): Auth `sync/start`, API key in URL, `api_keys.json` 0644, UTXO decode, Merkle SHA256d, balance=0 wire/legacy, PKT divisor 1e9→2^30, OCEIF rebranding, genesis placeholder, Mutex unwrap ×15, peer param injection, wallet.key 0644, pool dummy_reward, fake label pGTESTNE
 
 #### Checklist trước Mainnet
-- [ ] Checkpoints thực tế tại height 50k, 100k (`pkt_checkpoints.rs`)
-- [x] Xóa `src/genesis.rs` cũ ✅ — đã xóa hoàn toàn; command `testnet` (legacy Era 4) cũng xóa; `peer_discovery.rs` migrate sang `PktNetworkParams`
-- [x] Địa chỉ coinbase testnet genesis thật vào `pkt_labels.rs` PRESETS ✅ — `18114ap` → "Testnet Genesis Miner" (richlist #1, 87k PKT, height 1–1744)
-- [ ] Verify treasury/pool address thật (`pSEHPyBk`, `p7LMkZBs`)
-- [x] Verify DNS `seed.oceif.com:64764` + `seed.testnet.oceif.com:8333` ✅ — API port 8081, synced height=1744
-- [ ] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics
-- [ ] `pool_api.rs`: `block_reward_at(current_height)` thay `INITIAL_BLOCK_REWARD` cố định
+- [ ] Checkpoints thực tế tại height 50k, 100k — **chờ testnet đủ blocks** (hiện tại ~77)
+- [x] Xóa `src/genesis.rs` cũ ✅
+- [x] Địa chỉ coinbase testnet genesis thật vào `pkt_labels.rs` PRESETS ✅
+- [x] Verify DNS `seed.oceif.com:64764` + `seed.testnet.oceif.com:8333` ✅
+- [ ] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics PKT
+- [ ] Block reward thực từ coinbase TX (plan v24.0.9.7 — thay formula lý thuyết)
 - [ ] Pentest: fuzz REST API, peer spam / eclipse attack trên testnet
+- [ ] LZ4 compact: chạy đủ lâu để RocksDB tự compact data cũ → kiểm tra disk giảm
 
 ### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ← ĐANG LÀM
 - [x] v24.0 — **Node Onboarding**: `src/pkt_install.rs` — `generate_install_sh()` Linux/macOS (systemd+launchd) + `generate_install_ps1()` Windows (Windows Service); `generate_config_toml()`; CLI `install-node [--mainnet] [--print-sh|--print-ps1|--print-config]`; +25 tests
@@ -96,7 +94,11 @@ Auth không đủ (`sync/start`), API key trong URL, `api_keys.json` 0644, UTXO 
 - [x] v24.3 — **Nav Toggle Redesign**: desktop pill shape; testnet first; dot indicator; amber/blue active colors
 - [x] v24.0.9.5–v24.0.9.11 — **Frontend Bug Fixes**: Block Reward động từ API; TX input/output value field; Avg Block Time fallback; Address Type EVM; address-page.js API URL fix; nginx prefix strip; RocksDB LOCK cleanup
 - [x] v24.4 — **Public Mining Pool**: `src/pkt_pool.rs`; proxy pool (miner_port=8337, stats_port=8338); `PoolShared` RwLock; per-miner stats; stats HTTP API `/api/pool/stats` + `/api/pool/workers`; CLI `cargo run -- pool`; +9 tests
-- [ ] v24.5 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
+- [x] v24.5 — **LZ4 Compression**: `db_opts()` trong `pkt_paths.rs`; bật LZ4 cho 7 RocksDB opens; tiết kiệm ~40-60% disk
+- [ ] v24.6 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
+- [ ] v24.7 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
+- [ ] v24.8 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
+- [ ] v24.9 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
 - [ ] v24.6 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
 - [ ] v24.7 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
 - [ ] v24.8 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
