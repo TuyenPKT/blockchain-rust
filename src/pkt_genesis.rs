@@ -1,9 +1,10 @@
 #![allow(dead_code)]
-//! v13.4 — PKT Testnet Genesis Params
+//! v24.6 — PKT Tokenomics: 21M PKT
 //!
 //! Định nghĩa các tham số mạng PKT (OCEIF):
 //!   - Đơn vị tiền: paklet (1 PKT = 2^30 paklets)
-//!   - Block reward: 4096 PKT/block, giảm 50% mỗi 1,048,576 blocks (~2 năm)
+//!   - Block reward: 20 PKT/block, giảm 50% mỗi 525,000 blocks (~365 ngày)
+//!   - Tổng cung: 20 × 525,000 × 2 = 21,000,000 PKT (chính xác)
 //!   - Block time: 60 giây
 //!   - Treasury nhận 20% block reward (pkt_steward.rs)
 //!   - Mainnet, testnet, regtest đều có magic bytes và port riêng
@@ -15,18 +16,19 @@ use crate::pkt_sync::{compact_target_to_bytes, hash_meets_target};
 /// 1 PKT = 2^30 paklets (đơn vị cơ bản không chia được)
 pub const PAKLETS_PER_PKT: u64 = 1_073_741_824; // 2^30
 
-/// Block reward ban đầu: 4096 PKT/block
-pub const INITIAL_BLOCK_REWARD_PKT: u64 = 4_096;
+/// Block reward ban đầu: 20 PKT/block
+/// Tổng cung: 20 × 525,000 × 2 = 21,000,000 PKT
+pub const INITIAL_BLOCK_REWARD_PKT: u64 = 20;
 pub const INITIAL_BLOCK_REWARD: u64 = INITIAL_BLOCK_REWARD_PKT * PAKLETS_PER_PKT;
 
-/// Halving mỗi 1,048,576 blocks (~2 năm ở 1 block/phút)
-pub const HALVING_INTERVAL: u64 = 1_048_576;
+/// Halving mỗi 525,000 blocks (~365 ngày ở 60s/block)
+pub const HALVING_INTERVAL: u64 = 525_000;
 
 /// Target block time: 60 giây
 pub const TARGET_BLOCK_TIME_SECS: u64 = 60;
 
-/// Tổng cung tối đa: 6,000,000,000 PKT
-pub const MAX_SUPPLY_PKT: u64 = 6_000_000_000;
+/// Tổng cung tối đa: 21,000,000 PKT (= 20 × 525,000 × 2)
+pub const MAX_SUPPLY_PKT: u64 = 21_000_000;
 pub const MAX_SUPPLY_PAKLETS: u64 = MAX_SUPPLY_PKT * PAKLETS_PER_PKT;
 
 /// Coinbase maturity: 100 blocks trước khi tiêu được
@@ -360,18 +362,17 @@ mod tests {
 
     #[test]
     fn test_initial_block_reward_paklets() {
-        assert_eq!(INITIAL_BLOCK_REWARD, 4_096 * (1u64 << 30));
+        assert_eq!(INITIAL_BLOCK_REWARD, 20 * (1u64 << 30));
     }
 
     #[test]
     fn test_halving_interval_constant() {
-        assert_eq!(HALVING_INTERVAL, 1_048_576);
-        assert_eq!(HALVING_INTERVAL, 1u64 << 20);
+        assert_eq!(HALVING_INTERVAL, 525_000);
     }
 
     #[test]
     fn test_max_supply_pkt() {
-        assert_eq!(MAX_SUPPLY_PKT, 6_000_000_000);
+        assert_eq!(MAX_SUPPLY_PKT, 21_000_000);
     }
 
     // ── Network params ────────────────────────────────────────────────────

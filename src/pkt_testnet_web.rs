@@ -1234,8 +1234,8 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
         if actual > 0 {
             actual
         } else {
-            let halvings = height / 1_048_576;
-            if halvings >= 63 { 0 } else { (4_096u64 * 1_073_741_824) >> halvings }
+            let halvings = height / crate::pkt_genesis::HALVING_INTERVAL;
+            if halvings >= 63 { 0 } else { crate::pkt_genesis::INITIAL_BLOCK_REWARD >> halvings }
         }
     };
 

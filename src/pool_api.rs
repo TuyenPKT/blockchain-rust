@@ -70,7 +70,7 @@ async fn get_pool_stats(State(db): State<PoolDb>) -> Json<Value> {
 async fn get_pool_miners(State(db): State<PoolDb>) -> Json<Value> {
     let pool = db.lock().await;
 
-    // Payout estimate based on current block reward (OCEIF initial = 4096 PKT)
+    // Payout estimate based on current block reward (OCEIF initial = 20 PKT, total supply = 21M)
     let block_reward = crate::pkt_genesis::INITIAL_BLOCK_REWARD;
     let payouts = pool.payout(block_reward);
 

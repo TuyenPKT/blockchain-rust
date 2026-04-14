@@ -13,6 +13,7 @@ pub mod pkt_health;
 pub mod pkt_export;
 
 // ── PKT network layer ─────────────────────────────────────────────────────────
+pub mod pkt_genesis;
 pub mod evm_address;
 pub mod pkt_paths;
 pub mod pkt_wire;
