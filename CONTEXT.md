@@ -82,7 +82,7 @@
 - [x] Xóa `src/genesis.rs` cũ ✅
 - [x] Địa chỉ coinbase testnet genesis thật vào `pkt_labels.rs` PRESETS ✅
 - [x] Verify DNS `seed.oceif.com:64764` + `seed.testnet.oceif.com:8333` ✅
-- [x] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics PKT ✅ — v24.6: 20 PKT/block, 525,000 blocks/halving, tổng 21M PKT
+- [x] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics PKT ✅ — v24.6: 20 PKT/block, 525,000 blocks/halving, 21M PKT tổng cung (mainnet params; testnet có thể khác)
 - [ ] Block reward thực từ coinbase TX (plan v24.0.9.7 — thay formula lý thuyết)
 - [ ] Pentest: fuzz REST API, peer spam / eclipse attack trên testnet
 - [ ] LZ4 compact: chạy đủ lâu để RocksDB tự compact data cũ → kiểm tra disk giảm
