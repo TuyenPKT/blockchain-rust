@@ -38,9 +38,9 @@ use crate::message::Message;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-pub const DEFAULT_MINER_PORT: u16  = 8337;
-pub const DEFAULT_STATS_PORT: u16  = 8338;
-pub const DEFAULT_NODE_ADDR:  &str = "127.0.0.1:8334";
+pub fn default_miner_port() -> u16  { crate::pkt_config::get().pool_port }
+pub fn default_stats_port() -> u16  { crate::pkt_config::get().stats_port }
+pub fn default_node_addr()  -> String { format!("127.0.0.1:{}", crate::pkt_config::get().rpc_port) }
 /// Refresh template cache nếu quá N giây
 const TEMPLATE_TTL_SECS: u64 = 30;
 
@@ -359,9 +359,10 @@ fn run_template_refresh(shared: Arc<PoolShared>) {
 // ── CLI entry point ───────────────────────────────────────────────────────────
 
 pub fn cmd_pool(args: &[String]) {
-    let miner_port: u16  = args.first().and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_MINER_PORT);
-    let node_addr:  &str = args.get(1).map(|s| s.as_str()).unwrap_or(DEFAULT_NODE_ADDR);
-    let stats_port: u16  = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_STATS_PORT);
+    let miner_port: u16   = args.first().and_then(|s| s.parse().ok()).unwrap_or_else(default_miner_port);
+    let default_node      = default_node_addr();
+    let node_addr:  &str  = args.get(1).map(|s| s.as_str()).unwrap_or(&default_node);
+    let stats_port: u16   = args.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(default_stats_port);
 
     println!("[pool] v24.4 — PKT Mining Pool");
     println!("[pool] upstream node  : {}", node_addr);

@@ -96,13 +96,11 @@
 - [x] v24.4 — **Public Mining Pool**: `src/pkt_pool.rs`; proxy pool (miner_port=8337, stats_port=8338); `PoolShared` RwLock; per-miner stats; stats HTTP API `/api/pool/stats` + `/api/pool/workers`; CLI `cargo run -- pool`; +9 tests
 - [x] v24.5 — **LZ4 Compression**: `db_opts()` trong `pkt_paths.rs`; bật LZ4 cho 7 RocksDB opens; tiết kiệm ~40-60% disk
 - [x] v24.6 — **Tokenomics 21M PKT**: `INITIAL_BLOCK_REWARD=20 PKT`, `HALVING_INTERVAL=525,000 blocks` (~365 ngày), `MAX_SUPPLY=21,000,000 PKT` chính xác
-- [ ] v24.6 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
-- [ ] v24.7 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
-- [ ] v24.8 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
-- [ ] v24.9 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
-- [ ] v24.6 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
-- [ ] v24.7 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
-- [ ] v24.8 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
+- [ ] v24.6.1 — **Network Config**: `src/pkt_config.rs` single source of truth cho tất cả network params
+- [ ] v24.7 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
+- [ ] v24.8 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
+- [ ] v24.9 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
+- [ ] v24.10 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
 
 ### Era 20 — Post-Singularity (v99.x) — hardware-dependent
 - [ ] v99.0–v99.5 — Quantum Random Beacon, Neural Wallet, Interplanetary Sync, AI Consensus, Singularity Chain
