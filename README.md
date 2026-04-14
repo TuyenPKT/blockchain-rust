@@ -263,9 +263,9 @@ cargo run -- blake3                           # BLAKE3 vs SHA-256 throughput
 
 ```
 PAKLETS_PER_PKT     = 2^30  = 1,073,741,824
-INITIAL_BLOCK_REWARD = 4096 PKT
-HALVING_INTERVAL    = 2^20  = 1,048,576 blocks
-MAX_SUPPLY          = 6,000,000,000 PKT
+INITIAL_BLOCK_REWARD = 20 PKT
+HALVING_INTERVAL     = 525,000 blocks (~365 ngày)
+MAX_SUPPLY           = 21,000,000 PKT
 Steward reward      = 20% mỗi block
 
 Mainnet port  = 64764  (magic: d9 b4 be f9)

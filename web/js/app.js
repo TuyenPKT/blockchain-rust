@@ -47,10 +47,10 @@ function buildTicker(s) {
   const hr     = fmtHashrate(s.hashrate ?? 0);
   const bt     = (s.avg_block_time_s ?? s.block_time_avg) ? Math.round(s.avg_block_time_s ?? s.block_time_avg) + 's' : '—';
   const items  = [
-    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '4,096 PKT reward'}`,
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '20 PKT reward'}`,
     `🔄 Difficulty ${s.difficulty ?? '—'}`, `⏱ ${bt} block time`,
     `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
-    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '4,096 PKT reward'}`,
+    `📦 Block #${height}`, `⚡ ${hr}`, `💰 ${s.block_reward_pkt != null ? s.block_reward_pkt.toLocaleString(undefined,{maximumFractionDigits:0})+' PKT reward' : '20 PKT reward'}`,
     `🔄 Difficulty ${s.difficulty ?? '—'}`, `⏱ ${bt} block time`,
     `🔐 BLAKE3 PoW`, `🛡 Post-Quantum ready`,
   ];

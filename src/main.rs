@@ -1664,7 +1664,7 @@ mod tests {
         // genesis hash thật đã mine
         assert_eq!(p.genesis_hash.len(), 64);
         // reward hợp lệ
-        assert_eq!(INITIAL_BLOCK_REWARD, 4096 * PAKLETS_PER_PKT);
+        assert_eq!(INITIAL_BLOCK_REWARD, 20 * PAKLETS_PER_PKT);
     }
 
     // ── Block Explorer (v4.6) ────────────────────────────────────────────────

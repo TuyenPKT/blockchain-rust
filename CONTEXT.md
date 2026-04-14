@@ -191,8 +191,9 @@ Browser (oceif.com/blockchain-rust/)
 
 ```
 PAKLETS_PER_PKT      = 2^30 = 1,073,741,824
-INITIAL_BLOCK_REWARD = 4,096 PKT
-HALVING_INTERVAL     = 2^20 = 1,048,576 blocks
+INITIAL_BLOCK_REWARD = 20 PKT
+HALVING_INTERVAL     = 525,000 blocks (~365 ngày)
+MAX_SUPPLY           = 21,000,000 PKT
 PoW domain           = OCEIF_Ann_v1 / OCEIF_Block_v1
 
 Mainnet port  = 64764  peer: seed.oceif.com:64764
