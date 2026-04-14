@@ -1122,6 +1122,18 @@ pub fn run() {
         .expect("error while running PKTScan desktop");
 }
 
+// ── URL helpers ───────────────────────────────────────────────────────────────
+
+/// Xóa trailing slash khỏi URL.
+fn base(url: &str) -> &str {
+    url.trim_end_matches('/')
+}
+
+/// Tạo reqwest HTTP client chuẩn.
+fn client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder().build()
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
