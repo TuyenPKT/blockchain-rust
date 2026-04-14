@@ -312,7 +312,7 @@ impl SyncDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
         std::fs::create_dir_all(path)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        let mut opts = Options::default();
+        let mut opts = crate::pkt_paths::db_opts();
         opts.create_if_missing(true);
         let db = DB::open(&opts, path)
             .map_err(|e| SyncError::Db(e.to_string()))?;

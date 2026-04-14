@@ -4,6 +4,24 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.5 — LZ4 Compression (2026-04-14)
+
+### Added
+- `src/pkt_paths.rs` — `db_opts()` helper: `Options` với `DBCompressionType::Lz4`
+- Bật LZ4 compression cho tất cả 7 RocksDB `open()` calls:
+  - `pkt_addr_index`, `pkt_block_sync`, `pkt_labels`, `pkt_mempool_sync`, `pkt_reorg`, `pkt_sync`, `pkt_utxo_sync`
+- Data mới ghi sẽ được compress ~40-60%; data cũ vẫn đọc được (backward compatible)
+
+### Files
+- `src/pkt_paths.rs` — thêm `db_opts()` + `use rocksdb::{DBCompressionType, Options}`
+- 7 files pkt_*.rs — thay `Options::default()` → `crate::pkt_paths::db_opts()` trong `open()`
+
+### Gotcha
+- Data cũ không tự compact: cần `cargo run -- sync` hoặc restart node để RocksDB compact dần theo background compaction
+- Read-only opens (`open_read_only`) giữ `Options::default()` — vẫn đọc được cả compressed lẫn uncompressed data
+
+---
+
 ## v24.4 — Public Mining Pool (2026-04-14)
 
 ### Added

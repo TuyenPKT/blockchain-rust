@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-//! v24.2 — PKT Data Paths
+//! v24.5 — PKT Data Paths + DB Options
 //!
 //! Single source of truth cho tất cả đường dẫn DB/file của PKT node.
 //!
@@ -33,6 +33,8 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use rocksdb::{DBCompressionType, Options};
 
 // ── Global network flag ────────────────────────────────────────────────────────
 
@@ -81,6 +83,17 @@ pub fn peers_file() -> PathBuf { data_dir().join("peers.txt")  }
 // ── Shared paths (không đổi theo network) ────────────────────────────────────
 
 pub fn wallet_key() -> PathBuf { pkt_root().join("wallet.key") }
+
+// ── RocksDB options ───────────────────────────────────────────────────────────
+
+/// RocksDB options chuẩn với LZ4 compression.
+/// Dùng cho tất cả write-enabled DB::open() calls.
+/// LZ4 giảm ~40-60% disk usage so với no-compression default.
+pub fn db_opts() -> Options {
+    let mut opts = Options::default();
+    opts.set_compression_type(DBCompressionType::Lz4);
+    opts
+}
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
