@@ -699,7 +699,7 @@ mod tests {
         let tx = Transaction::coinbase("aabbccddee112233445566778899aabbccddee11", 5000);
         assert_eq!(tx.fee, 0);
         // Tổng output = subsidy + total_fee
-        assert_eq!(tx.total_output(), 50_000_000_000u64 + 5000); // 50 PKT subsidy at height=0
+        assert_eq!(tx.total_output(), crate::pkt_genesis::INITIAL_BLOCK_REWARD + 5000); // 20 PKT subsidy at height=0
     }
 
     // ── Mempool ───────────────────────────────────────────────────────────────

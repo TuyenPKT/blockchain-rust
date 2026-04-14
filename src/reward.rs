@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 //! v7.0 — Block Reward Engine
 
-pub const INITIAL_SUBSIDY: u64 = 50_000_000_000; // 50 PKT in satoshi
-pub const HALVING_INTERVAL: u64 = 210_000;
+pub const INITIAL_SUBSIDY: u64 = crate::pkt_genesis::INITIAL_BLOCK_REWARD; // 20 PKT
+pub const HALVING_INTERVAL: u64 = crate::pkt_genesis::HALVING_INTERVAL;   // 525,000 blocks (~365 ngày)
 
 #[derive(Debug, Clone)]
 pub struct BlockReward {
@@ -115,7 +115,7 @@ pub fn cmd_reward_info() {
     println!();
 
     // Stats tại height hiện tại (ví dụ block đầu tiên)
-    for h in [0u64, 210_000, 420_000, 1_000_000, 5_000_000] {
+    for h in [0u64, HALVING_INTERVAL, HALVING_INTERVAL*2, HALVING_INTERVAL*4, HALVING_INTERVAL*10] {
         let s = RewardEngine::subsidy_at(h);
         if s > 0 {
             println!("  Block #{:<10}: reward = {:.9} PKT  (era {})",
@@ -136,24 +136,24 @@ mod tests {
 
     #[test]
     fn test_subsidy_at_first_halving() {
-        assert_eq!(RewardEngine::subsidy_at(210_000), INITIAL_SUBSIDY / 2);
+        assert_eq!(RewardEngine::subsidy_at(HALVING_INTERVAL), INITIAL_SUBSIDY / 2);
     }
 
     #[test]
     fn test_subsidy_at_second_halving() {
-        assert_eq!(RewardEngine::subsidy_at(420_000), INITIAL_SUBSIDY / 4);
+        assert_eq!(RewardEngine::subsidy_at(HALVING_INTERVAL * 2), INITIAL_SUBSIDY / 4);
     }
 
     #[test]
     fn test_subsidy_at_third_halving() {
-        assert_eq!(RewardEngine::subsidy_at(630_000), INITIAL_SUBSIDY / 8);
+        assert_eq!(RewardEngine::subsidy_at(HALVING_INTERVAL * 3), INITIAL_SUBSIDY / 8);
     }
 
     #[test]
     fn test_estimated_supply_increases_with_height() {
-        let s1 = RewardEngine::estimated_supply(210_000);
-        let s2 = RewardEngine::estimated_supply(420_000);
-        assert!(s2 > s1, "supply at 420k should exceed supply at 210k");
+        let s1 = RewardEngine::estimated_supply(HALVING_INTERVAL);
+        let s2 = RewardEngine::estimated_supply(HALVING_INTERVAL * 2);
+        assert!(s2 > s1, "supply at 2nd halving should exceed supply at 1st halving");
     }
 
     #[test]
@@ -166,16 +166,16 @@ mod tests {
     #[test]
     fn test_halving_era_calculation() {
         assert_eq!(RewardEngine::halving_era(0), 0);
-        assert_eq!(RewardEngine::halving_era(209_999), 0);
-        assert_eq!(RewardEngine::halving_era(210_000), 1);
-        assert_eq!(RewardEngine::halving_era(420_000), 2);
+        assert_eq!(RewardEngine::halving_era(HALVING_INTERVAL - 1), 0);
+        assert_eq!(RewardEngine::halving_era(HALVING_INTERVAL), 1);
+        assert_eq!(RewardEngine::halving_era(HALVING_INTERVAL * 2), 2);
     }
 
     #[test]
     fn test_blocks_until_next_halving() {
-        assert_eq!(RewardEngine::blocks_until_next_halving(0), 210_000);
-        assert_eq!(RewardEngine::blocks_until_next_halving(100_000), 110_000);
-        assert_eq!(RewardEngine::blocks_until_next_halving(210_000), 210_000);
+        assert_eq!(RewardEngine::blocks_until_next_halving(0), HALVING_INTERVAL);
+        assert_eq!(RewardEngine::blocks_until_next_halving(HALVING_INTERVAL / 2), HALVING_INTERVAL / 2);
+        assert_eq!(RewardEngine::blocks_until_next_halving(HALVING_INTERVAL), HALVING_INTERVAL);
     }
 
     #[test]

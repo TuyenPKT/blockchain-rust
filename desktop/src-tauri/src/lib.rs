@@ -344,8 +344,8 @@ fn miner_loop(app: tauri::AppHandle, pubkey_hash_hex: String, node_addr: String,
         let fee: u64 = tmpl.txs.iter()
             .map(|t| t["fee"].as_u64().unwrap_or(0))
             .sum();
-        let era     = (tmpl.height / 210_000).min(63);
-        let subsidy = 50_000_000_000u64 >> era;
+        let era     = (tmpl.height / pkt_core::pkt_genesis::HALVING_INTERVAL).min(63);
+        let subsidy = pkt_core::pkt_genesis::INITIAL_BLOCK_REWARD >> era;
         let amount  = subsidy + fee;
 
         let cb_txid  = compute_coinbase_txid(tmpl.height, amount);

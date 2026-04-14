@@ -52,7 +52,7 @@ impl Simulator {
     pub fn era_params(era: u32) -> EraParams {
         // Era 0: reward=50B, burn=0%, yield=500bps
         // Each era: reward /= 2, burn += 5%, yield -= 50bps
-        let base_reward: u64 = 50_000_000_000;
+        let base_reward: u64 = crate::pkt_genesis::INITIAL_BLOCK_REWARD;
         let block_reward = if era >= 64 { 0 } else { base_reward >> era };
         let fee_burn_pct = (era * 5).min(100) as u8;
         let staking_yield_bps = 500u32.saturating_sub(era * 50);
@@ -67,7 +67,7 @@ impl Simulator {
     }
 
     pub fn step(&mut self, block: u64, fees: u64) {
-        let halving_interval = 210_000u64;
+        let halving_interval = crate::pkt_genesis::HALVING_INTERVAL;
         let era = (block / halving_interval) as u32;
         let params = Self::era_params(era);
 
@@ -122,7 +122,7 @@ impl Simulator {
             return 0.0;
         }
         let last_block = self.history.last().map(|s| s.block).unwrap_or(0);
-        let era = (last_block / 210_000) as u32;
+        let era = (last_block / crate::pkt_genesis::HALVING_INTERVAL) as u32;
         let params = Self::era_params(era);
         // Blocks per year ~ 52560 (10-min blocks)
         let annual_reward = params.block_reward as u128 * 52560;
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn test_era_params_era0() {
         let p = Simulator::era_params(0);
-        assert_eq!(p.block_reward, 50_000_000_000);
+        assert_eq!(p.block_reward, crate::pkt_genesis::INITIAL_BLOCK_REWARD);
         assert_eq!(p.fee_burn_pct, 0);
         assert_eq!(p.staking_yield_bps, 500);
     }
@@ -223,7 +223,7 @@ mod tests {
         };
         let mut sim2 = Simulator::new(eco);
         // Simulate at block 210000 (era 1, burn_pct=5)
-        sim2.step(210_000, 100_000);
+        sim2.step(crate::pkt_genesis::HALVING_INTERVAL, 100_000);
         assert!(sim2.total_burned() > 0);
         let _ = burned_no_fees; // suppress unused
     }
@@ -247,7 +247,7 @@ mod tests {
         };
         let mut sim = Simulator::new(eco);
         // era 1: burn=5%
-        sim.step(210_000, 100_000);
+        sim.step(crate::pkt_genesis::HALVING_INTERVAL, 100_000);
         let snap = sim.history.last().unwrap();
         assert!(snap.fee_burned > 0); // fees were burned
     }
