@@ -189,7 +189,7 @@ export function Miner({ nodeUrl }: MinerProps) {
                 value={mineNode}
                 onChange={e => setMineNode(e.target.value)}
                 disabled={status === "running"}
-                placeholder="seed.testnet.oceif.com:8334"
+                placeholder="seed.testnet.oceif.com:8337"
                 style={{
                   width: "100%", boxSizing: "border-box",
                   background: colors.surface2, border: `1px solid ${colors.border}`,
