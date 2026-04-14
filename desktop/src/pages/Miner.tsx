@@ -18,7 +18,7 @@ interface MineStats {
   uptime_secs:  number;
 }
 
-const DEFAULT_NODE = "seed.testnet.oceif.com:8334";
+const DEFAULT_NODE = "seed.testnet.oceif.com:8337"; // pool (8337); direct node: :8334
 const DEFAULT_THREADS = navigator.hardwareConcurrency
   ? Math.max(1, Math.floor(navigator.hardwareConcurrency / 3))
   : 2;
