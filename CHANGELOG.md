@@ -4,6 +4,31 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.6 — Tokenomics 21M PKT (2026-04-14)
+
+### Added
+- Tokenomics mới: tổng cung **21,000,000 PKT** (như Bitcoin)
+  - `INITIAL_BLOCK_REWARD_PKT`: 4,096 → **20 PKT/block**
+  - `HALVING_INTERVAL`: 1,048,576 → **525,000 blocks (~365 ngày/halving)**
+  - `MAX_SUPPLY_PKT`: 6,000,000,000 → **21,000,000** (chính xác: 20 × 525,000 × 2)
+- `pkt_testnet_web.rs`: fallback block_reward dùng constants thay hardcode `4096` + `1_048_576`
+- `lib.rs`: thêm `pub mod pkt_genesis`
+
+### Files
+- `src/pkt_genesis.rs` — 3 constants + doc + 3 tests updated
+- `src/pkt_testnet_web.rs` — fallback formula dùng `pkt_genesis::` constants
+- `src/pool_api.rs` — comment updated
+- `src/lib.rs` — thêm `pub mod pkt_genesis`
+
+### Tests
+- 35/35 tests `pkt_genesis` pass
+
+### Gotcha
+- Tokenomics thay đổi **không ảnh hưởng testnet node đang chạy** — node dùng consensus riêng
+- Constants được dùng trong: fallback block_reward API, pool payout estimate, desktop display
+
+---
+
 ## v24.5 — LZ4 Compression (2026-04-14)
 
 ### Added

@@ -82,7 +82,7 @@
 - [x] Xóa `src/genesis.rs` cũ ✅
 - [x] Địa chỉ coinbase testnet genesis thật vào `pkt_labels.rs` PRESETS ✅
 - [x] Verify DNS `seed.oceif.com:64764` + `seed.testnet.oceif.com:8333` ✅
-- [ ] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics PKT
+- [x] Verify `HALVING_INTERVAL` + `INITIAL_BLOCK_REWARD` khớp tokenomics PKT ✅ — v24.6: 20 PKT/block, 525,000 blocks/halving, tổng 21M PKT
 - [ ] Block reward thực từ coinbase TX (plan v24.0.9.7 — thay formula lý thuyết)
 - [ ] Pentest: fuzz REST API, peer spam / eclipse attack trên testnet
 - [ ] LZ4 compact: chạy đủ lâu để RocksDB tự compact data cũ → kiểm tra disk giảm
@@ -95,6 +95,7 @@
 - [x] v24.0.9.5–v24.0.9.11 — **Frontend Bug Fixes**: Block Reward động từ API; TX input/output value field; Avg Block Time fallback; Address Type EVM; address-page.js API URL fix; nginx prefix strip; RocksDB LOCK cleanup
 - [x] v24.4 — **Public Mining Pool**: `src/pkt_pool.rs`; proxy pool (miner_port=8337, stats_port=8338); `PoolShared` RwLock; per-miner stats; stats HTTP API `/api/pool/stats` + `/api/pool/workers`; CLI `cargo run -- pool`; +9 tests
 - [x] v24.5 — **LZ4 Compression**: `db_opts()` trong `pkt_paths.rs`; bật LZ4 cho 7 RocksDB opens; tiết kiệm ~40-60% disk
+- [x] v24.6 — **Tokenomics 21M PKT**: `INITIAL_BLOCK_REWARD=20 PKT`, `HALVING_INTERVAL=525,000 blocks` (~365 ngày), `MAX_SUPPLY=21,000,000 PKT` chính xác
 - [ ] v24.6 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
 - [ ] v24.7 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
 - [ ] v24.8 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
