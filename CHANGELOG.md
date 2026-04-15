@@ -4,6 +4,37 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.6.1 — Network Config (2026-04-14)
+
+### Added
+- `src/pkt_config.rs` — `PktConfig` OnceLock singleton: single source of truth cho tất cả network config
+  - Testnet: `seed.testnet.oceif.com`, p2p=8333, api=8081, pool=8337, stats=8338, rpc=8334
+  - Mainnet: `seed.mainnet.oceif.com`, p2p=64764, rpc=64766
+  - Helpers: `seed_p2p()`, `seed_pool()`, `seed_rpc()`, `api_base()`
+  - `pkt_config::init(mainnet)` → `pkt_config::get()` pattern
+- `src/pkt_pool.rs` — `default_miner_port()`, `default_stats_port()`, `default_node_addr()` dùng `pkt_config::get()`
+- `src/lib.rs` — thêm `pub mod pkt_config`
+- `desktop/src-tauri/src/lib.rs` — `start_sync` dùng `pkt_config::get().seed_p2p()` thay hardcode
+- `desktop/src/pages/Node.tsx` — `DEFAULT_SEED` port 8334→8333 (P2P, không phải RPC)
+- `web/js/address.js` — thêm `${API_BASE}` prefix vào API call bị thiếu
+
+### Files
+- `src/pkt_config.rs` — NEW: PktConfig + 9 tests
+- `src/pkt_pool.rs` — 3 port constants → functions dùng config
+- `src/lib.rs` — `pub mod pkt_config`
+- `desktop/src-tauri/src/lib.rs` — start_sync hardcode → config
+- `desktop/src/pages/Node.tsx` — DEFAULT_SEED port fix
+- `web/js/address.js` — API_BASE prefix fix
+
+### Tests
+- 9 tests `pkt_config` pass
+
+### Gotcha
+- `pkt_config::init(mainnet)` phải gọi trước mọi dispatch trong `main()`
+- `pkt_pool.rs` constants đã xoá — dùng functions thay thế (breaking change nội bộ)
+
+---
+
 ## v24.6 — Tokenomics 21M PKT (2026-04-14)
 
 ### Added

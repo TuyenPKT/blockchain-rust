@@ -92,14 +92,15 @@ async fn start_sync(peer: Option<String>) -> Result<String, String> {
     if SYNC_RUNNING.load(Ordering::SeqCst) {
         return Err("Sync đang chạy".into());
     }
-    let peer = peer.unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+    let peer = peer.unwrap_or_else(|| pkt_core::pkt_config::get().seed_p2p());
     SYNC_STOP.store(false, Ordering::SeqCst);
     SYNC_RUNNING.store(true, Ordering::SeqCst);
+    let peer_display = peer.clone();
     std::thread::spawn(move || {
         pkt_core::pkt_sync::cmd_sync(&[peer]);
         SYNC_RUNNING.store(false, Ordering::SeqCst);
     });
-    Ok(format!("Sync started → seed.testnet.oceif.com:8333"))
+    Ok(format!("Sync started → {}", peer_display))
 }
 
 /// Trả về true nếu sync đang chạy.
@@ -115,7 +116,6 @@ fn is_sync_running() -> bool {
 
 const PKT_TESTNET_MAGIC: [u8; 4] = [0xfc, 0x11, 0x09, 0x07];
 const PKT_HEADER_LEN:    usize   = 24;
-const PKT_DEFAULT_PEER:  &str    = "seed.testnet.oceif.com:8333";
 
 fn sha256d_checksum(payload: &[u8]) -> [u8; 4] {
     use sha2::Sha256;
@@ -239,7 +239,8 @@ async fn tx_broadcast(_node_url: String, raw_hex: String) -> Result<serde_json::
         hex::encode(b)
     };
 
-    tokio::task::spawn_blocking(move || pkt_broadcast_sync(&raw, PKT_DEFAULT_PEER))
+    let default_peer = pkt_core::pkt_config::get().seed_p2p();
+    tokio::task::spawn_blocking(move || pkt_broadcast_sync(&raw, &default_peer))
         .await
         .map_err(|e| e.to_string())?
         .map(|_| serde_json::json!({"txid": txid, "status": "broadcast"}))
@@ -1122,18 +1123,6 @@ pub fn run() {
         .expect("error while running PKTScan desktop");
 }
 
-// ── URL helpers ───────────────────────────────────────────────────────────────
-
-/// Xóa trailing slash khỏi URL.
-fn base(url: &str) -> &str {
-    url.trim_end_matches('/')
-}
-
-/// Tạo reqwest HTTP client chuẩn.
-fn client() -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder().build()
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1142,11 +1131,9 @@ mod tests {
 
     #[test]
     fn test_evm_address_format() {
+        use secp256k1::rand::{rngs::StdRng, SeedableRng};
         let secp = secp256k1::Secp256k1::new();
-        let mut sk_bytes = [1u8; 32];
-        sk_bytes[31] = 7;
-        let sk = secp256k1::SecretKey::from_slice(&sk_bytes).unwrap();
-        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let (_, pk) = secp.generate_keypair(&mut StdRng::seed_from_u64(0));
         let addr = evm_address_from_pubkey(&pk);
         assert!(addr.starts_with("0x"), "EVM address phải bắt đầu bằng 0x");
         assert_eq!(addr.len(), 42, "0x + 40 hex chars");
@@ -1154,30 +1141,12 @@ mod tests {
 
     #[test]
     fn test_parse_evm_address_roundtrip() {
+        use secp256k1::rand::{rngs::StdRng, SeedableRng};
         let secp = secp256k1::Secp256k1::new();
-        let mut sk_bytes = [1u8; 32];
-        sk_bytes[31] = 3;
-        let sk = secp256k1::SecretKey::from_slice(&sk_bytes).unwrap();
-        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
-        let addr  = evm_address_from_pubkey(&pk);
-        let raw   = parse_evm_address(&addr).unwrap();
-        let back  = eip55_checksum(&raw);
+        let (_, pk) = secp.generate_keypair(&mut StdRng::seed_from_u64(1));
+        let addr = evm_address_from_pubkey(&pk);
+        let raw  = parse_evm_address(&addr).unwrap();
+        let back = eip55_checksum(&raw);
         assert_eq!(addr, back, "EIP-55 phải idempotent");
-    }
-
-    #[test]
-    fn test_base_trims_trailing_slash() {
-        assert_eq!(base("https://oceif.com/blockchain-rust/"), "https://oceif.com/blockchain-rust");
-        assert_eq!(base("https://oceif.com/blockchain-rust"),  "https://oceif.com/blockchain-rust");
-    }
-
-    #[test]
-    fn test_base_no_slash() {
-        assert_eq!(base("http://localhost:8080"), "http://localhost:8080");
-    }
-
-    #[tokio::test]
-    async fn test_client_builds() {
-        assert!(client().is_ok());
     }
 }

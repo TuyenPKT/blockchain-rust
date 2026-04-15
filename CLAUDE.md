@@ -1,33 +1,80 @@
 # CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v21.0 ✅**
+**Version hiện tại: v24.6.1 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt
-- Không sửa code cũ, chỉ extend. Mỗi version = 1 file mới + update `main.rs`
-- Build sạch: `cargo build/test` không warnings, là sửa lỗi, không được phép xoá warnings
 - Cập nhật `CONTEXT.md` + `CHANGELOG.md` sau mỗi version
 - Không `unwrap()` / `panic` trong production
-- Không hardcode secret, không raw SQL, validate tại API boundary
-* không fake/demo
+Tests vẫn tồn tại
+nhưng:
 
-## Làm việc với AI
+- không được tạo fake values
+- không hard-code literal data
+- chỉ test qua interface
+- dữ liệu test phải load từ external source
 
-AI bị đóng băng tại training cutoff — API signature thay đổi sau đó có thể sai.
+Test inputs phải:
+- deterministic
+- không mang semantic identity
+- không hard-code example user data
+
+# DATA POLICY
+
+Tuyệt đối không tạo:
+- mock data
+- fake data
+- example values
+- placeholder values
+- demo accounts
+- lorem ipsum
+- test emails
+- sample phone numbers
+
+Không viết:
+- example usage với giá trị cụ thể
+- unit test chứa hard-coded values
+- seed data giả
+
+Nếu thiếu dữ liệu:
+→ tạo interface / type / schema
+→ để TODO hoặc error
+→ KHÔNG tự bịa giá trị
+
+Mọi dữ liệu phải đến từ:
+- database thật
+- API thật
+- config thật
+- input runtime
+
+Không được viết:
+"test data"
 
 **Khi thêm dependency mới:**
 1. Thêm vào `Cargo.toml` với version cố định
 2. Đọc CHANGELOG của dep
 3. Ghi gotcha vào mục **Lưu ý kỹ thuật** bên dưới
-4. Hỏi AI viết code → `cargo build` → paste lỗi cho AI nếu có (tối đa 2–3 lần)
+4. Hỏi AI viết code → `cargo build` → paste lỗi cho AI nếu có 
 
 **Nguyên tắc:** AI giỏi structure — compiler giỏi correctness — docs giỏi truth. `CLAUDE.md` là "correction file": ghi một lần, AI đọc mãi.
 
 ## Testing
 
 - Không dùng `mock_data()` để test business logic — dùng chain/DB thật
-- `mock_data()` chỉ hợp lệ cho thuật toán render thuần túy (format string, sparkline)
 - Test xanh với data ảo = test vô nghĩa
+
+If real data source is undefined:
+    return error
+Do NOT fabricate values
+
+struct Config {
+    database_url: String
+}
+
+fn init_repo(cfg: &Config) -> Result<UserRepo> {
+    connect(cfg.database_url)
+}
+
 
 ## CHANGELOG format
 
@@ -93,35 +140,52 @@ tower-http = { version = "0.5", features = ["fs"] }
 
 ```
 src/
-├── main.rs                 ← mod declarations + CLI dispatch + integration tests
-├── block.rs / chain.rs / transaction.rs / utxo.rs / wallet.rs / mempool.rs
-├── message.rs / node.rs / hd_wallet.rs / script.rs
-├── lightning.rs / taproot.rs / covenant.rs / confidential.rs / coinjoin.rs
-├── atomic_swap.rs / zk_proof.rs / pow_ghost.rs / bft.rs / sharding.rs
-├── zk_rollup.rs / optimistic_rollup.rs / recursive_zk.rs / zkevm.rs
-├── smart_contract.rs / oracle.rs / governance.rs / ai_agent.rs
-├── dilithium.rs / sphincs.rs / kyber.rs / hybrid_sig.rs
-├── self_amend.rs / ibc.rs / did.rs / fhe_contract.rs / sovereign_rollup.rs
-├── sdk_gen.rs / full_stack.rs / miner.rs / wallet_cli.rs
-├── pktscan_api.rs          ← REST API: /chain /balance /tx /status
-├── pkt_bandwidth.rs / pkt_address.rs / pkt_genesis.rs
-├── tui_dashboard.rs / tui_wallet.rs / web_frontend.rs
-├── qr_code.rs / shell_completions.rs / web_charts.rs
-├── block_detail.rs / address_detail.rs / ws_live.rs
-├── web_serve.rs            ← ServeDir + page routes (/address/:a /block/:h /rx/:id)
-├── pkt_sync.rs / pkt_utxo_sync.rs / pkt_wire.rs / pkt_address_index.rs
-├── pkt_mempool_sync.rs / pkt_testnet_web.rs
-└── pkt_analytics.rs        ← v18.0: hashrate/block_time/difficulty time-series
+├── main.rs                 ← CLI dispatch + integration tests
+├── lib.rs                  ← pub mod exports (dùng bởi desktop Tauri)
+│
+│  ── Base types ──
+├── script.rs / transaction.rs / reward.rs / api_auth.rs
+├── pkt_address.rs / pkt_health.rs / pkt_export.rs
+│
+│  ── Network config (single source of truth) ──
+├── pkt_genesis.rs          ← tokenomics: 20 PKT/block, 525k halving, 21M supply
+├── pkt_config.rs           ← PktConfig OnceLock: seed, ports, data_dir (testnet/mainnet)
+├── pkt_paths.rs            ← data dirs + db_opts() LZ4 compression
+├── pkt_wire.rs / pkt_peer.rs / pkt_checkpoints.rs / evm_address.rs
+│
+│  ── Storage / sync ──
+├── pkt_sync.rs / pkt_utxo_sync.rs / pkt_addr_index.rs
+├── pkt_reorg.rs / pkt_mempool.rs / pkt_mempool_sync.rs
+├── pkt_block_sync.rs / pkt_labels.rs / pkt_search.rs
+├── pkt_analytics.rs / pkt_snapshot.rs
+│
+│  ── API / UI ──
+├── pkt_explorer_api.rs     ← REST /api/testnet/*
+├── pkt_testnet_web.rs      ← summary, block list, TX, address endpoints
+├── pkt_sync_ui.rs
+│
+│  ── Services ──
+├── pkt_pool.rs             ← mining pool proxy (8337 → 8334, stats 8338)
+├── pkt_fullnode.rs         ← full node mode (spawn + watcher)
+└── pkt_install.rs          ← install script generator (systemd/launchd/Windows Service)
 
 web/
 ├── css/style.css           ← theme, panels — ServeDir (no rebuild)
+├── js/shared.js            ← API_BASE, fetchJson, helpers
 ├── js/app.js               ← Home SPA
 ├── js/testnet.js           ← Testnet page
-├── js/charts-live.js       ← v18.0: Chart.js analytics
-├── js/address.js / address-page.js / block-list.js / block-detail.js
-├── js/rx-list.js / rx-detail.js / shared.js
+├── js/charts-live.js       ← Chart.js analytics (hashrate/difficulty/block_time)
+├── js/address.js / address-page.js
+├── js/block-list.js / block-detail.js
+├── js/rx-list.js / rx-detail.js
+├── js/health.js / playground.js / webhooks.js
 ├── address/index.html / block/index.html / block/detail.html
 └── rx/index.html / rx/detail.html
+
+desktop/
+├── src/pages/              ← Explorer.tsx / Node.tsx / Miner.tsx / Wallet.tsx
+├── src/api.ts / i18n.ts / theme.ts / App.tsx
+└── src-tauri/src/lib.rs    ← Tauri IPC commands (start_sync, peer_scan, broadcast_tx, …)
 
 index.html                  ← embedded via include_bytes! — rebuild khi sửa
 ```
@@ -143,32 +207,29 @@ index.html                  ← embedded via include_bytes! — rebuild khi sử
 
 ## Roadmap
 
-### Era 25 — Analytics & Polish (v18.x) ← ĐANG LÀM
+### Era 25–28 (v18.x–v21.x) ✅ HOÀN THÀNH
 
-~~v18.0 — Analytics Charts Web~~ ✅
-~~v18.1 — v18.6, v18.8~~ ✅
-v18.1 — Address Labels: LabelDb, preset miners/exchanges
-v18.2 — Search Pro: detect type, fuzzy label
-v18.3 — TX Detail Page: inputs/outputs, fee rate, confirmations
-v18.4 — Block Detail Enhanced: TX list, fee total, miner breakdown
-v18.5 — Pagination Cursor: cursor-based thay offset
-v18.6 — Mobile API: /api/testnet/summary
-v18.8 — Health & Uptime: /api/health/detailed
-v18.9 — Data Export: CSV streaming
-~~v18.7 — Mainnet Switch~~ — hoãn vô thời hạn
-~~v18.9 — Data Export~~ ✅
+~~Era 25 — Analytics & Polish (v18.x)~~ ✅
+~~Era 26 — PKTCore Production + Dev Layer (v19.x)~~ ✅
+~~Era 27 — PKTScan Desktop App (v20.x)~~ ✅
+~~Era 28 — PKTScan Desktop Nâng Cao (v21.x)~~ ✅ (v21.0 Miner IPC · v21.1 i18n+Theme · v21.2 Wallet+Peer Scan)
 
-### Era 26 — PKTCore Production + Dev Layer (v19.x)
+### Era 29 — PKTScan Backend Fix (v22.x) ✅
 
-v19.0 Cargo Workspace · v19.1 Flat File Storage · v19.2 JSON-RPC · v19.3 GetAddr/Addr
-v19.4 libp2p · v19.5 JS/TS SDK · v19.6 PKT CLI · v19.7 API Playground
-v19.8 Webhook UI · v19.9 Developer Portal
+~~v22.0~~ Address Index · ~~v22.1~~ UTXO Height · ~~v22.2~~ Block TX Count
+~~v22.4~~ Broadcast TX · ~~v22.5~~ Wallet Send · ~~v22.6~~ Fix Stats Display
 
-### Era 27 — PKTScan Desktop App (v20.x) ← HOÀN THÀNH ✅
+### Era 30 — PKT Full Node (v23.x) ✅
 
-~~v20.0–v20.9~~ ✅ · ~~v20.9 Build & Release~~ ✅
+~~v23.0~~ TX Validation · ~~v23.1~~ P2PKH Script · ~~v23.2~~ Block Relay
+~~v23.3~~ Multi-peer · ~~v23.4~~ Mempool Full · ~~v23.5~~ IBD Checkpoints
+~~v23.6~~ Wire Mempool Bridge · ~~v23.7~~ UTXO Snapshot · ~~v23.8~~ Full Node Mode
+~~v23.8.1~~ Security Patch (15 issues)
 
-### Era 28 — PKTScan Desktop Nâng Cao (v21.x)
+### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ← ĐANG LÀM
 
-~~v21.0 Real Miner IPC~~ ✅ · v21.1 Wallet Integration · v21.2 Node Manager
-v21.3 Offline Mode · v21.4 Notifications · v21.5 Auto-update
+~~v24.0~~ Node Onboarding · ~~v24.1~~ EVM Address · ~~v24.2~~ Network-aware Paths
+~~v24.3~~ Nav Toggle · ~~v24.4~~ Mining Pool · ~~v24.5~~ LZ4 Compression
+~~v24.6~~ Tokenomics 21M PKT · ~~v24.6.1~~ Network Config (pkt_config.rs)
+v24.7 — Testnet Faucet · v24.8 — Developer Docs · v24.9 — Multi-node Bootstrap
+v24.10 — Mainnet Prep (checkpoints, genesis verify, tokenomics audit)

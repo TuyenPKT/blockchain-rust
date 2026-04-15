@@ -64,7 +64,7 @@
 
     // Use the dedicated Base58 address endpoint (backend converts → script key internally)
     var enc = encodeURIComponent(addr);
-    const data = await fetchJson('api/testnet/addr/' + enc + '?limit=50');
+    const data = await fetchJson(`${API_BASE}/api/testnet/addr/` + enc + '?limit=50');
 
     const balance   = data?.balance  ?? 0;
     const txHistory = data?.txs      ?? [];

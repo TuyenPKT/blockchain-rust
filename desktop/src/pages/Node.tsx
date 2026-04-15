@@ -15,7 +15,7 @@ interface PeerInfo {
   status:     "online" | "timeout" | "refused" | "invalid";
 }
 
-const DEFAULT_SEED = "seed.testnet.oceif.com:8334";
+const DEFAULT_SEED = "seed.testnet.oceif.com:8333";
 
 export function Node({ nodeUrl }: NodeProps) {
   const [summary, setSummary]   = useState<NetworkSummary>({});
