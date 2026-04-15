@@ -20,6 +20,7 @@ target/
 Thumbs.db
 ehthumbs.db
 desktop.ini
+main 2.rs
 
 # ── Secrets / credentials ─────────────────────────────────────────────────────
 *.key
