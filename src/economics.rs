@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_era_params_era1() {
         let p = Simulator::era_params(1);
-        assert_eq!(p.block_reward, 25_000_000_000); // halved
+        assert_eq!(p.block_reward, crate::pkt_genesis::INITIAL_BLOCK_REWARD >> 1);
         assert_eq!(p.fee_burn_pct, 5);
         assert_eq!(p.staking_yield_bps, 450);
     }

@@ -280,8 +280,9 @@ mod tests {
     static SEQ: AtomicU64 = AtomicU64::new(0);
 
     fn tmp_path(label: &str) -> PathBuf {
-        let n = SEQ.fetch_add(1, Ordering::SeqCst);
-        std::env::temp_dir().join(format!("pkt_snapshot_{}_{}", label, n))
+        let n   = SEQ.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("pkt_snapshot_{}_{}_{}", pid, label, n))
     }
 
     fn p2pkh_script(hash: u8) -> Vec<u8> {
