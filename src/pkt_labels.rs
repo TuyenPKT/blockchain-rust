@@ -19,7 +19,7 @@
 
 use std::path::{Path, PathBuf};
 
-use rocksdb::{Direction, IteratorMode, Options, DB};
+use crate::pkt_kv::Kv;
 use serde::{Deserialize, Serialize};
 
 use crate::pkt_sync::SyncError;
@@ -72,7 +72,7 @@ pub fn preset_by_address(addr: &str) -> Option<LabelEntry> {
 // ── LabelDb ───────────────────────────────────────────────────────────────────
 
 pub struct LabelDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
@@ -82,17 +82,13 @@ impl LabelDb {
     }
 
     pub fn open(path: &Path) -> Result<Self, SyncError> {
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path).map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_temp() -> Result<Self, SyncError> {
@@ -112,7 +108,7 @@ impl LabelDb {
     /// Tra cứu label theo script_hex. Chỉ tìm trong DB (không check preset).
     pub fn get_label(&self, script_hex: &str) -> Option<LabelEntry> {
         let key = Self::lbl_key(script_hex);
-        let raw = self.db.get(key.as_bytes()).ok()??;
+        let raw = self.kv.get(key.as_bytes()).ok()??;
         serde_json::from_slice::<LabelEntry>(&raw).ok()
     }
 
@@ -124,27 +120,19 @@ impl LabelDb {
         }
         // DB lookup bằng address trực tiếp làm key
         let key = Self::lbl_key(addr);
-        let raw = self.db.get(key.as_bytes()).ok()??;
+        let raw = self.kv.get(key.as_bytes()).ok()??;
         serde_json::from_slice::<LabelEntry>(&raw).ok()
     }
 
     /// Tra cứu label theo script_hex, fallback sang address nếu được cung cấp.
     pub fn get_label_for(&self, script_hex: &str, address: Option<&str>) -> Option<LabelEntry> {
-        // 1. Script-based preset (chưa có — script quá dài để preset)
-        // 2. Address-based preset
         if let Some(addr) = address {
-            if let Some(e) = preset_by_address(addr) {
-                return Some(e);
-            }
+            if let Some(e) = preset_by_address(addr) { return Some(e); }
         }
-        // 3. DB by script_hex
-        if let Some(e) = self.get_label(script_hex) {
-            return Some(e);
-        }
-        // 4. DB by address
+        if let Some(e) = self.get_label(script_hex) { return Some(e); }
         if let Some(addr) = address {
             let key = Self::lbl_key(addr);
-            if let Ok(Some(raw)) = self.db.get(key.as_bytes()) {
+            if let Ok(Some(raw)) = self.kv.get(key.as_bytes()) {
                 if let Ok(e) = serde_json::from_slice::<LabelEntry>(&raw) {
                     return Some(e);
                 }
@@ -155,23 +143,18 @@ impl LabelDb {
 
     /// Liệt kê tất cả labels trong DB.
     pub fn list_all(&self) -> Vec<(String, LabelEntry)> {
-        let prefix = b"lbl:";
-        let iter = self.db.iterator(IteratorMode::From(prefix, Direction::Forward));
-        let mut out = Vec::new();
-        for item in iter {
-            let Ok((key, val)) = item else { continue };
-            if !key.starts_with(prefix) { break; }
-            let script = std::str::from_utf8(&key[4..]).unwrap_or("").to_string();
-            if let Ok(entry) = serde_json::from_slice::<LabelEntry>(&val) {
-                out.push((script, entry));
-            }
-        }
-        out
+        self.kv.scan_prefix(b"lbl:")
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let script = std::str::from_utf8(&k[4..]).ok()?.to_string();
+                let entry  = serde_json::from_slice::<LabelEntry>(&v).ok()?;
+                Some((script, entry))
+            })
+            .collect()
     }
 
     // ── Write ─────────────────────────────────────────────────────────────────
 
-    /// Lưu label vào DB theo script_hex (hoặc address string).
     pub fn set_label(
         &self,
         key_str:  &str,
@@ -180,19 +163,14 @@ impl LabelDb {
         verified: bool,
     ) -> Result<(), SyncError> {
         let key = Self::lbl_key(key_str);
-        let entry = LabelEntry {
-            label:    label.to_string(),
-            category: category.to_string(),
-            verified,
-        };
+        let entry = LabelEntry { label: label.to_string(), category: category.to_string(), verified };
         let raw = serde_json::to_vec(&entry).map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.put(key.as_bytes(), &raw).map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(key.as_bytes(), &raw).map_err(SyncError::Db)
     }
 
-    /// Xóa label khỏi DB.
     pub fn delete_label(&self, key_str: &str) -> Result<(), SyncError> {
         let key = Self::lbl_key(key_str);
-        self.db.delete(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.delete(key.as_bytes()).map_err(SyncError::Db)
     }
 }
 

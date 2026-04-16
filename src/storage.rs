@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use rocksdb::{DB, Options, IteratorMode};
+use crate::pkt_kv::Kv;
 
 use crate::block::Block;
 use crate::transaction::TxOutput;
@@ -26,12 +26,8 @@ use crate::transaction::TxOutput;
 
 fn db_path() -> PathBuf { crate::pkt_paths::data_dir().join("db") }
 
-fn open_db() -> Result<DB, String> {
-    let path = db_path();
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    let mut opts = Options::default();
-    opts.create_if_missing(true);
-    DB::open(&opts, &path).map_err(|e| e.to_string())
+fn open_db() -> Result<Kv, String> {
+    Kv::open_rw(&db_path())
 }
 
 // ─── Key helpers ──────────────────────────────────────────────────────────────
@@ -50,32 +46,21 @@ pub fn save_chain(blocks: &[Block]) -> Result<(), String> {
         let key = block_key(block.index);
         let val = serde_json::to_vec(block)
             .map_err(|e| format!("serialize block {}: {e}", block.index))?;
-        db.put(key.as_bytes(), &val).map_err(|e| e.to_string())?;
+        db.put(key.as_bytes(), &val)?;
     }
-    // Ghi tip height vào meta
     if let Some(last) = blocks.last() {
-        db.put(META_HEIGHT, last.index.to_string().as_bytes())
-            .map_err(|e| e.to_string())?;
+        db.put(META_HEIGHT, last.index.to_string().as_bytes())?;
     }
     Ok(())
 }
 
-/// Load tất cả blocks từ RocksDB, sắp xếp theo height
 pub fn load_chain() -> Result<Option<Vec<Block>>, String> {
     if !db_path().exists() { return Ok(None); }
     let db = open_db()?;
-    let mut blocks: Vec<Block> = Vec::new();
-
-    for item in db.iterator(IteratorMode::Start) {
-        let (key, val) = item.map_err(|e| e.to_string())?;
-        let key_str = std::str::from_utf8(&key).unwrap_or("");
-        if key_str.starts_with("block:") {
-            let block: Block = serde_json::from_slice(&val)
-                .map_err(|e| format!("deserialize block: {e}"))?;
-            blocks.push(block);
-        }
-    }
-
+    let mut blocks: Vec<Block> = db.scan_prefix(b"block:")
+        .into_iter()
+        .filter_map(|(_, val)| serde_json::from_slice::<Block>(&val).ok())
+        .collect();
     if blocks.is_empty() { return Ok(None); }
     blocks.sort_by_key(|b| b.index);
     Ok(Some(blocks))
@@ -85,48 +70,38 @@ pub fn load_chain() -> Result<Option<Vec<Block>>, String> {
 
 /// Lưu toàn bộ UTXO set vào RocksDB
 pub fn save_utxo(utxos: &HashMap<String, TxOutput>) -> Result<(), String> {
+    use crate::pkt_kv::BatchOp;
     let db = open_db()?;
 
-    // Xóa toàn bộ utxo cũ trước khi ghi mới (clean write)
-    let old_keys: Vec<Vec<u8>> = db.iterator(IteratorMode::Start)
-        .filter_map(|item| {
-            item.ok().and_then(|(k, _)| {
-                if std::str::from_utf8(&k).unwrap_or("").starts_with("utxo:") {
-                    Some(k.to_vec())
-                } else { None }
-            })
-        })
-        .collect();
-    for k in old_keys {
-        db.delete(&k).map_err(|e| e.to_string())?;
+    // Collect owned data first, then create ops
+    let mut kvs: Vec<(Vec<u8>, Option<Vec<u8>>)> = Vec::new();
+    for (k, _) in db.scan_prefix(b"utxo:") {
+        kvs.push((k, None));
     }
-
-    // Ghi UTXO mới
     for (k, output) in utxos {
-        let key = utxo_key(k);
+        let key = utxo_key(k).into_bytes();
         let val = serde_json::to_vec(output)
             .map_err(|e| format!("serialize utxo {k}: {e}"))?;
-        db.put(key.as_bytes(), &val).map_err(|e| e.to_string())?;
+        kvs.push((key, Some(val)));
     }
-    Ok(())
+    let ops: Vec<BatchOp<'_>> = kvs.iter().map(|(k, v)| match v {
+        Some(v) => BatchOp::Put(k.as_slice(), v.as_slice()),
+        None    => BatchOp::Delete(k.as_slice()),
+    }).collect();
+    db.write_batch(&ops)
 }
 
-/// Load toàn bộ UTXO set từ RocksDB
 pub fn load_utxo() -> Result<Option<HashMap<String, TxOutput>>, String> {
     if !db_path().exists() { return Ok(None); }
     let db = open_db()?;
-    let mut utxos: HashMap<String, TxOutput> = HashMap::new();
-
-    for item in db.iterator(IteratorMode::Start) {
-        let (key, val) = item.map_err(|e| e.to_string())?;
-        let key_str = std::str::from_utf8(&key).unwrap_or("");
-        if let Some(utxo_key) = key_str.strip_prefix("utxo:") {
-            let output: TxOutput = serde_json::from_slice(&val)
-                .map_err(|e| format!("deserialize utxo: {e}"))?;
-            utxos.insert(utxo_key.to_string(), output);
-        }
-    }
-
+    let utxos: HashMap<String, TxOutput> = db.scan_prefix(b"utxo:")
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let key = std::str::from_utf8(&k).ok()?.strip_prefix("utxo:")?.to_string();
+            let val = serde_json::from_slice::<TxOutput>(&v).ok()?;
+            Some((key, val))
+        })
+        .collect();
     if utxos.is_empty() { return Ok(None); }
     Ok(Some(utxos))
 }
@@ -272,9 +247,7 @@ pub fn load_mined_balance(address: &str) -> u64 {
 pub fn reset_storage() -> Result<(), String> {
     let path = db_path();
     if path.exists() {
-        // DB::destroy xóa đúng cách (bao gồm manifest, WAL, SST files)
-        DB::destroy(&Options::default(), &path)
-            .map_err(|e| e.to_string())?;
+        std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -363,32 +336,23 @@ pub fn save_contract_store(
 ) -> Result<(), String> {
     let db = open_db()?;
 
-    // Xóa entries cũ
-    let old_keys: Vec<Vec<u8>> = db
-        .iterator(IteratorMode::Start)
-        .filter_map(|item| {
-            item.ok().and_then(|(k, _)| {
-                if std::str::from_utf8(&k).unwrap_or("").starts_with("contract:") {
-                    Some(k.to_vec())
-                } else {
-                    None
-                }
-            })
-        })
-        .collect();
-    for k in old_keys {
-        db.delete(&k).map_err(|e| e.to_string())?;
+    use crate::pkt_kv::BatchOp;
+    let mut kvs: Vec<(Vec<u8>, Option<Vec<u8>>)> = Vec::new();
+    for (k, _) in db.scan_prefix(b"contract:") {
+        kvs.push((k, None));
     }
-
-    // Ghi contract mới
     for (addr, state) in &store.contracts {
-        let key  = contract_key(addr);
+        let key  = contract_key(addr).into_bytes();
         let data = ContractStateData::from_state(state);
         let val  = serde_json::to_vec(&data)
             .map_err(|e| format!("serialize contract {addr}: {e}"))?;
-        db.put(key.as_bytes(), &val).map_err(|e| e.to_string())?;
+        kvs.push((key, Some(val)));
     }
-    Ok(())
+    let ops: Vec<BatchOp<'_>> = kvs.iter().map(|(k, v)| match v {
+        Some(v) => BatchOp::Put(k.as_slice(), v.as_slice()),
+        None    => BatchOp::Delete(k.as_slice()),
+    }).collect();
+    db.write_batch(&ops)
 }
 
 /// Load ContractStore từ RocksDB.  Trả về `None` nếu không có entry nào.
@@ -399,23 +363,13 @@ pub fn load_contract_store(
     }
     let db = open_db()?;
     let mut store = crate::contract_state::ContractStore::new();
-    let mut found = false;
-
-    for item in db.iterator(IteratorMode::Start) {
-        let (key, val) = item.map_err(|e| e.to_string())?;
-        let key_str = std::str::from_utf8(&key).unwrap_or("");
-        if key_str.starts_with("contract:") {
-            let data: ContractStateData = serde_json::from_slice(&val)
-                .map_err(|e| format!("deserialize contract: {e}"))?;
-            let state = data.into_state();
-            store.contracts.insert(state.address.clone(), state);
-            found = true;
-        }
+    for (_, val) in db.scan_prefix(b"contract:") {
+        let data: ContractStateData = serde_json::from_slice(&val)
+            .map_err(|e| format!("deserialize contract: {e}"))?;
+        let state = data.into_state();
+        store.contracts.insert(state.address.clone(), state);
     }
-
-    if !found {
-        return Ok(None);
-    }
+    if store.contracts.is_empty() { return Ok(None); }
     Ok(Some(store))
 }
 
@@ -428,7 +382,7 @@ pub fn save_governor(governor: &crate::governance::Governor) -> Result<(), Strin
     let db  = open_db()?;
     let snap = governor.snapshot();
     let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
-    db.put(GOV_SNAPSHOT_KEY, json).map_err(|e| e.to_string())
+    db.put(GOV_SNAPSHOT_KEY, &json).map_err(|e| e.to_string())
 }
 
 /// Load Governor từ RocksDB. Trả về `None` nếu chưa có dữ liệu.
@@ -461,7 +415,7 @@ pub fn save_contract_registry(
     let db   = open_db()?;
     let snap = reg.snapshot(tmap);
     let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
-    db.put(CONTRACT_REGISTRY_KEY, json).map_err(|e| e.to_string())
+    db.put(CONTRACT_REGISTRY_KEY, &json).map_err(|e| e.to_string())
 }
 
 /// Load ContractRegistry từ RocksDB. Trả về registry rỗng nếu chưa có dữ liệu.
@@ -489,7 +443,7 @@ const STAKING_POOL_KEY: &[u8] = b"staking:pool";
 pub fn save_staking_pool(pool: &crate::staking::StakingPool) -> Result<(), String> {
     let db   = open_db()?;
     let json = serde_json::to_vec(pool).map_err(|e| e.to_string())?;
-    db.put(STAKING_POOL_KEY, json).map_err(|e| e.to_string())
+    db.put(STAKING_POOL_KEY, &json).map_err(|e| e.to_string())
 }
 
 /// Load StakingPool từ RocksDB. Trả về pool rỗng nếu chưa có dữ liệu.
@@ -513,7 +467,7 @@ pub fn save_token_registry(reg: &crate::token::TokenRegistry) -> Result<(), Stri
     let db   = open_db()?;
     let snap = reg.snapshot();
     let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
-    db.put(TOKEN_REGISTRY_KEY, json).map_err(|e| e.to_string())
+    db.put(TOKEN_REGISTRY_KEY, &json).map_err(|e| e.to_string())
 }
 
 /// Load TokenRegistry từ RocksDB. Trả về registry rỗng nếu chưa có dữ liệu.

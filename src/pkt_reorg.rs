@@ -21,7 +21,7 @@
 
 use std::path::{Path, PathBuf};
 
-use rocksdb::{DB, Options};
+use crate::pkt_kv::Kv;
 use serde::{Deserialize, Serialize};
 
 use crate::pkt_addr_index::AddrIndexDb;
@@ -85,23 +85,19 @@ impl BlockDelta {
 // ── ReorgDb ───────────────────────────────────────────────────────────────────
 
 pub struct ReorgDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
 impl ReorgDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path).map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_temp() -> Result<Self, SyncError> {
@@ -122,19 +118,16 @@ impl ReorgDb {
     pub fn save_delta(&self, height: u64, delta: &BlockDelta) -> Result<(), SyncError> {
         let chk_key   = format!("chk:{:016x}", height);
         let delta_key = format!("delta:{:016x}", height);
-        self.db.put(chk_key.as_bytes(), &delta.block_hash)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        let val = serde_json::to_vec(delta)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.put(delta_key.as_bytes(), &val)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
+        self.kv.put(chk_key.as_bytes(), &delta.block_hash).map_err(SyncError::Db)?;
+        let val = serde_json::to_vec(delta).map_err(|e| SyncError::Db(e.to_string()))?;
+        self.kv.put(delta_key.as_bytes(), &val).map_err(SyncError::Db)?;
         let cur_tip = self.get_tip_height()?.unwrap_or(0);
         self.set_tip_height(cur_tip.max(height))
     }
 
     pub fn get_checkpoint(&self, height: u64) -> Result<Option<[u8; 32]>, SyncError> {
         let key = format!("chk:{:016x}", height);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 32 => {
                 let mut h = [0u8; 32];
@@ -147,7 +140,7 @@ impl ReorgDb {
 
     pub fn get_delta(&self, height: u64) -> Result<Option<BlockDelta>, SyncError> {
         let key = format!("delta:{:016x}", height);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None    => Ok(None),
             Some(v) => {
                 let d: BlockDelta = serde_json::from_slice(&v)
@@ -160,14 +153,14 @@ impl ReorgDb {
     pub fn delete_delta(&self, height: u64) -> Result<(), SyncError> {
         let chk   = format!("chk:{:016x}", height);
         let delta = format!("delta:{:016x}", height);
-        self.db.delete(chk.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.delete(delta.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.delete(chk.as_bytes()).map_err(SyncError::Db)?;
+        self.kv.delete(delta.as_bytes()).map_err(SyncError::Db)
     }
 
     // ── Height tracking ────────────────────────────────────────────────────────
 
     pub fn get_tip_height(&self) -> Result<Option<u64>, SyncError> {
-        match self.db.get(b"meta:tip_height").map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(b"meta:tip_height").map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 8 => {
                 Ok(Some(u64::from_le_bytes(v[..8].try_into().unwrap())))
@@ -177,8 +170,7 @@ impl ReorgDb {
     }
 
     pub fn set_tip_height(&self, h: u64) -> Result<(), SyncError> {
-        self.db.put(b"meta:tip_height", &h.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(b"meta:tip_height", &h.to_le_bytes()).map_err(SyncError::Db)
     }
 
     // ── Reorg detection ───────────────────────────────────────────────────────
@@ -289,7 +281,7 @@ impl ReorgDb {
             .map_err(|e| SyncError::Db(format!("{:?}", e)))?;
         addr_db.set_addr_height(target_height)?;
         if target_height == 0 {
-            let _ = self.db.delete(b"meta:tip_height");
+            let _ = self.kv.delete(b"meta:tip_height");
         } else {
             self.set_tip_height(target_height)?;
         }

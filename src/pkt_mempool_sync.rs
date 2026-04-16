@@ -20,7 +20,7 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use rocksdb::{Direction, IteratorMode, Options, DB};
+use crate::pkt_kv::Kv;
 use serde::Serialize;
 
 use crate::pkt_block_sync::read_tx_s;
@@ -52,7 +52,7 @@ pub struct MempoolTxInfo {
 // ── MempoolDb ────────────────────────────────────────────────────────────────
 
 pub struct MempoolDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
@@ -60,22 +60,13 @@ impl MempoolDb {
     // ── Open ─────────────────────────────────────────────────────────────────
 
     pub fn open(path: &Path) -> Result<Self, SyncError> {
-        std::fs::create_dir_all(path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
-        std::fs::create_dir_all(path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     /// Temp DB for unit tests.
@@ -95,10 +86,10 @@ impl MempoolDb {
     /// Return true if the given txid (hex) is already in the mempool.
     pub fn has_tx(&self, txid_hex: &str) -> bool {
         let key = format!("tx:{}", txid_hex);
-        self.db.get(key.as_bytes()).ok().flatten().is_some()
+        self.kv.get(key.as_bytes()).ok().flatten().is_some()
     }
 
-    /// Store a transaction: writes `tx:`, `fee:`, `ts:` keys atomically.
+    /// Store a transaction: writes `tx:`, `fee:`, `ts:` keys.
     pub fn put_tx(
         &self,
         txid_hex:         &str,
@@ -106,155 +97,103 @@ impl MempoolDb {
         fee_rate_msat_vb: u64,
         ts_ns:            u64,
     ) -> Result<(), SyncError> {
-        // tx:{txid} → raw wire bytes
-        let tx_key = format!("tx:{}", txid_hex);
-        self.db.put(tx_key.as_bytes(), raw_bytes)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-
-        // fee:{MAX-rate:020}:{txid} → "" (lex scan = highest fee first)
+        let tx_key  = format!("tx:{}", txid_hex);
         let inv_rate = u64::MAX - fee_rate_msat_vb;
         let fee_key  = format!("fee:{:020}:{}", inv_rate, txid_hex);
-        self.db.put(fee_key.as_bytes(), b"")
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-
-        // ts:{txid} → [ts_ns: 8 LE][fee_rate: 8 LE]
-        let ts_key = format!("ts:{}", txid_hex);
+        let ts_key   = format!("ts:{}", txid_hex);
         let mut meta = [0u8; 16];
         meta[..8].copy_from_slice(&ts_ns.to_le_bytes());
         meta[8..].copy_from_slice(&fee_rate_msat_vb.to_le_bytes());
-        self.db.put(ts_key.as_bytes(), &meta)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
 
-        Ok(())
+        let tx_k  = tx_key.as_bytes();
+        let fee_k = fee_key.as_bytes();
+        let ts_k  = ts_key.as_bytes();
+        let ops = [
+            crate::pkt_kv::BatchOp::Put(tx_k,  raw_bytes),
+            crate::pkt_kv::BatchOp::Put(fee_k, b""),
+            crate::pkt_kv::BatchOp::Put(ts_k,  &meta),
+        ];
+        self.kv.write_batch(&ops).map_err(SyncError::Db)
     }
 
-    /// Lấy raw bytes + fee_rate + ts_ns của một tx trong mempool.
-    /// Returns None nếu txid không tồn tại.
     pub fn get_tx_raw(&self, txid_hex: &str) -> Option<(Vec<u8>, u64, u64)> {
         let tx_key = format!("tx:{}", txid_hex);
-        let raw    = self.db.get(tx_key.as_bytes()).ok()??;
+        let raw    = self.kv.get(tx_key.as_bytes()).ok()??;
         let ts_key = format!("ts:{}", txid_hex);
-        let (ts_ns, fee_rate) = match self.db.get(ts_key.as_bytes()).ok().flatten() {
+        let (ts_ns, fee_rate) = match self.kv.get(ts_key.as_bytes()).ok().flatten() {
             Some(v) if v.len() == 16 => (
                 u64::from_le_bytes(v[..8].try_into().unwrap()),
                 u64::from_le_bytes(v[8..].try_into().unwrap()),
             ),
             _ => (0, 0),
         };
-        Some((raw.to_vec(), fee_rate, ts_ns))
+        Some((raw, fee_rate, ts_ns))
     }
 
-    /// Delete confirmed transactions (called when a block is applied).
     pub fn evict_confirmed(&self, txids: &[[u8; 32]]) -> Result<(), SyncError> {
         for txid in txids {
             let txid_hex = hex::encode(txid);
-
-            // Read fee_rate from ts: key to reconstruct the fee: key
             let ts_key   = format!("ts:{}", txid_hex);
-            let fee_rate = match self.db.get(ts_key.as_bytes())
-                .map_err(|e| SyncError::Db(e.to_string()))?
-            {
-                Some(v) if v.len() == 16 => {
-                    u64::from_le_bytes(v[8..16].try_into().unwrap())
-                }
-                _ => {
-                    // Not in mempool — skip gracefully
-                    continue;
-                }
+            let fee_rate = match self.kv.get(ts_key.as_bytes()).map_err(SyncError::Db)? {
+                Some(v) if v.len() == 16 => u64::from_le_bytes(v[8..16].try_into().unwrap()),
+                _ => continue, // not in mempool
             };
-
             let inv_rate = u64::MAX - fee_rate;
             let fee_key  = format!("fee:{:020}:{}", inv_rate, txid_hex);
             let tx_key   = format!("tx:{}", txid_hex);
-
-            self.db.delete(fee_key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))?;
-            self.db.delete(tx_key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))?;
-            self.db.delete(ts_key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))?;
+            self.kv.delete(fee_key.as_bytes()).map_err(SyncError::Db)?;
+            self.kv.delete(tx_key.as_bytes()).map_err(SyncError::Db)?;
+            self.kv.delete(ts_key.as_bytes()).map_err(SyncError::Db)?;
         }
         Ok(())
     }
 
-    /// Return up to `limit` pending transactions sorted by fee rate (highest first).
     pub fn get_pending(&self, limit: usize) -> Result<Vec<MempoolTxInfo>, SyncError> {
         let mut results = Vec::with_capacity(limit.min(256));
-        let iter = self.db.iterator(IteratorMode::From(b"fee:", Direction::Forward));
-
-        for item in iter {
+        for (k, _) in self.kv.scan_prefix(b"fee:") {
             if results.len() >= limit { break; }
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if !k.starts_with(b"fee:") { break; }
-
-            // Key: "fee:{inv_rate:020}:{txid_hex}"
-            let key_str = match std::str::from_utf8(&k) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            // Split into at most 3 parts on ':'
+            let key_str = match std::str::from_utf8(&k) { Ok(s) => s.to_string(), Err(_) => continue };
             let mut parts = key_str.splitn(3, ':');
-            let _prefix   = parts.next(); // "fee"
-            let inv_str   = match parts.next() { Some(s) => s, None => continue };
-            let txid_hex  = match parts.next() { Some(s) => s, None => continue };
+            let _ = parts.next();
+            let inv_str  = match parts.next() { Some(s) => s.to_string(), None => continue };
+            let txid_hex = match parts.next() { Some(s) => s.to_string(), None => continue };
 
-            let inv_rate: u64 = inv_str.parse().unwrap_or(0);
+            let inv_rate: u64    = inv_str.parse().unwrap_or(0);
             let fee_rate_msat_vb = u64::MAX - inv_rate;
 
-            // Read raw bytes to get size
             let tx_key = format!("tx:{}", txid_hex);
-            let raw = match self.db.get(tx_key.as_bytes())
-                .map_err(|e| SyncError::Db(e.to_string()))?
-            {
+            let raw = match self.kv.get(tx_key.as_bytes()).map_err(SyncError::Db)? {
                 Some(v) => v,
-                None => continue, // stale fee key
+                None => continue,
             };
-
-            // Read timestamp from ts: key
             let ts_key = format!("ts:{}", txid_hex);
-            let ts_ns  = match self.db.get(ts_key.as_bytes())
-                .map_err(|e| SyncError::Db(e.to_string()))?
-            {
+            let ts_ns = match self.kv.get(ts_key.as_bytes()).map_err(SyncError::Db)? {
                 Some(v) if v.len() == 16 => u64::from_le_bytes(v[..8].try_into().unwrap()),
                 _ => 0,
             };
-
             results.push(MempoolTxInfo {
-                txid:             txid_hex.to_string(),
-                size:             raw.len() as u64,
+                txid: txid_hex,
+                size: raw.len() as u64,
                 fee_rate_msat_vb,
-                ts_secs:          ts_ns / 1_000_000_000,
+                ts_secs: ts_ns / 1_000_000_000,
             });
         }
         Ok(results)
     }
 
-    /// Count pending transactions.
     pub fn count(&self) -> Result<usize, SyncError> {
-        let mut n = 0usize;
-        let iter = self.db.iterator(IteratorMode::From(b"tx:", Direction::Forward));
-        for item in iter {
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if !k.starts_with(b"tx:") { break; }
-            n += 1;
-        }
-        Ok(n)
+        Ok(self.kv.scan_prefix(b"tx:").len())
     }
 
-    /// Fee rate histogram: returns Vec of (lower_bound_msat_vb, count).
-    ///
-    /// Buckets: [0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
-    /// The last bucket captures everything ≥ 1000 msat/vB.
     pub fn fee_rate_histogram(&self) -> Result<Vec<(u64, u64)>, SyncError> {
         const BUCKETS: &[u64] = &[0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
         let mut counts = vec![0u64; BUCKETS.len()];
 
-        let iter = self.db.iterator(IteratorMode::From(b"fee:", Direction::Forward));
-        for item in iter {
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if !k.starts_with(b"fee:") { break; }
-
-            let key_str = match std::str::from_utf8(&k) { Ok(s) => s, Err(_) => continue };
+        for (k, _) in self.kv.scan_prefix(b"fee:") {
+            let key_str = match std::str::from_utf8(&k) { Ok(s) => s.to_string(), Err(_) => continue };
             let mut parts = key_str.splitn(3, ':');
-            let _  = parts.next();
-            let inv_str = match parts.next() { Some(s) => s, None => continue };
+            let _ = parts.next();
+            let inv_str = match parts.next() { Some(s) => s.to_string(), None => continue };
             let inv_rate: u64 = inv_str.parse().unwrap_or(0);
             let fee_rate = u64::MAX - inv_rate;
 

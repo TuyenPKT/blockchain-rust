@@ -1,6 +1,6 @@
 # CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v25.4 ✅**
+**Version hiện tại: v25.5 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt
@@ -117,8 +117,7 @@ bs58 = "0.5"
 tokio = { version = "1", features = ["full"] }
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
-rocksdb = "0.21"                       # fallback (--no-default-features)
-redb = { version = "2", optional = true }  # default backend (v25.2)
+redb = "2"                             # pure-Rust KV backend (v25.5, unconditional)
 axum = { version = "0.7", features = ["ws"] }
 async-graphql = { version = "7", features = ["tracing"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -239,3 +238,4 @@ v24.10 — Mainnet Prep (checkpoints, genesis verify, tokenomics audit)
 
 ~~v25.0~~ RocksKv Abstraction · ~~v25.1~~ RedbKv + feature flag · ~~v25.2~~ redb Default
 ~~v25.3~~ VPS Migration + Re-sync · ~~v25.4~~ In-Process Sync (redb hoạt động trên VPS)
+~~v25.5~~ Remove RocksDB (redb là backend duy nhất, không còn C++ dep)

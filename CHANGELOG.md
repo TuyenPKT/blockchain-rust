@@ -4,6 +4,38 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v25.5 — Remove RocksDB (2026-04-16)
+
+### Added
+- Loại bỏ hoàn toàn RocksDB khỏi codebase — redb là backend duy nhất
+- Migrate 8 files từ `rocksdb::` trực tiếp sang `crate::pkt_kv::Kv`:
+  `pkt_block_sync`, `pkt_reorg`, `pkt_labels`, `pkt_mempool_sync`, `wal`, `block_storage`, `storage`
+- `src/pkt_kv.rs` — xóa `RocksKv` struct, xóa `#[cfg(feature = "use-redb")]`, `Kv = RedbKv` unconditional
+- `src/pkt_paths.rs` — xóa `use rocksdb::{...}` và `pub fn db_opts() -> Options`
+- `Cargo.toml` — xóa `rocksdb = "0.21"`, `redb` không còn optional, xóa feature `use-redb`
+
+### Files
+- `src/pkt_kv.rs` — RocksKv removed, redb unconditional
+- `src/pkt_paths.rs` — db_opts() removed
+- `src/pkt_block_sync.rs` — `DB` → `Kv`
+- `src/pkt_reorg.rs` — `DB` → `Kv`
+- `src/pkt_labels.rs` — `DB` → `Kv`, iterator → `scan_prefix`
+- `src/pkt_mempool_sync.rs` — `DB` → `Kv`, `write_batch` cho put_tx
+- `src/wal.rs` — `WriteBatch` → `BatchOp` pattern
+- `src/block_storage.rs` — `DB` → `Kv`
+- `src/storage.rs` — `DB` → `Kv`, `DB::destroy` → `remove_dir_all`
+- `Cargo.toml` — rocksdb removed, redb promoted to required dep
+
+### Tests
+- 2457 passed
+
+### Gotcha
+- `BatchOp<'a>` lifetime: collect `Vec<(Vec<u8>, Option<Vec<u8>>)>` owned trước, sau đó tạo `Vec<BatchOp<'_>>` borrow từ owned data — không thể borrow từ temporary
+- `Kv::put` nhận `&[u8]` — `serde_json::to_vec()` trả `Vec<u8>` phải pass `&json` không phải `json`
+- `reset_storage()`: `DB::destroy()` → `std::fs::remove_dir_all()` (xóa thư mục `data.redb` bên trong)
+
+---
+
 ## v25.4 — In-Process Sync / Remove Subprocess (2026-04-16)
 
 ### Added

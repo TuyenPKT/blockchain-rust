@@ -50,8 +50,6 @@ tokio       = { workspace = true }
 # v0.8: HD Wallet BIP32/39/44
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
-# v4.2.1: RocksDB embedded key-value store
-rocksdb = "0.21"
 # v4.4: REST API / v8.1: WebSocket live feed
 axum = { version = "0.7", features = ["ws"] }
 # web/: ServeDir runtime file serving (no rebuild needed for CSS/JS/PNG changes)
@@ -92,16 +90,15 @@ libp2p = { version = "0.53", features = ["tcp", "noise", "yamux", "mdns", "tokio
 futures = "0.3"
 # v24.1: EVM-compatible address (Keccak256 + EIP-55)
 sha3 = "0.10"
-# v25.1: redb — pure-Rust KV backend (opt-in, replaces RocksDB)
-redb = { version = "2", optional = true }
+# v25.5: redb — pure-Rust KV backend (unconditional, RocksDB removed)
+redb = "2"
 
 [features]
-default = ["use-redb"]
+default = []
 fuzz = ["proptest"]
 integration = []          # v16.2: E2E integration tests (cargo test --features integration)
 opencl = ["dep:ocl"]
 cuda = ["dep:cust"]
-use-redb = ["dep:redb"]   # v25.2: redb là default — cargo build --no-default-features để dùng RocksDB
 
 [dev-dependencies]
 proptest = "1.4"

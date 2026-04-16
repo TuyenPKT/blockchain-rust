@@ -33,7 +33,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use rocksdb::{DB, Options};
+use crate::pkt_kv::Kv;
 use serde_json;
 
 use crate::block::Block;
@@ -113,31 +113,26 @@ impl BlockLocation {
 
 // ── BlockStorage ──────────────────────────────────────────────────────────────
 
-/// Flat file block storage với RocksDB index.
+/// Flat file block storage với KV index.
 pub struct BlockStorage {
     data_dir:      PathBuf,
-    index:         DB,
+    kv:            Kv,
     max_file_size: u64,
     write_lock:    Mutex<()>,
 }
 
 impl BlockStorage {
-    /// Mở (hoặc tạo mới) storage tại `data_dir`.
     pub fn open(data_dir: &Path) -> StorageResult<Self> {
         Self::open_with_max(data_dir, MAX_FILE_SIZE)
     }
 
-    /// Mở với `max_file_size` tùy chỉnh — dùng trong tests.
     pub fn open_with_max(data_dir: &Path, max_file_size: u64) -> StorageResult<Self> {
         std::fs::create_dir_all(data_dir)?;
         let index_path = data_dir.join("index");
-        let mut opts = Options::default();
-        opts.create_if_missing(true);
-        let index = DB::open(&opts, &index_path)
-            .map_err(|e| BlockStorageError::Db(e.to_string()))?;
+        let kv = Kv::open_rw(&index_path).map_err(BlockStorageError::Db)?;
         Ok(Self {
             data_dir: data_dir.to_owned(),
-            index,
+            kv,
             max_file_size,
             write_lock: Mutex::new(()),
         })
@@ -156,31 +151,27 @@ impl BlockStorage {
     }
 
     fn get_u32(&self, key: &[u8]) -> StorageResult<Option<u32>> {
-        match self.index.get(key).map_err(|e| BlockStorageError::Db(e.to_string()))? {
+        match self.kv.get(key).map_err(BlockStorageError::Db)? {
             None    => Ok(None),
-            Some(v) if v.len() >= 4 =>
-                Ok(Some(u32::from_le_bytes(v[..4].try_into().unwrap()))),
+            Some(v) if v.len() >= 4 => Ok(Some(u32::from_le_bytes(v[..4].try_into().unwrap()))),
             Some(_) => Ok(None),
         }
     }
 
     fn get_u64(&self, key: &[u8]) -> StorageResult<Option<u64>> {
-        match self.index.get(key).map_err(|e| BlockStorageError::Db(e.to_string()))? {
+        match self.kv.get(key).map_err(BlockStorageError::Db)? {
             None    => Ok(None),
-            Some(v) if v.len() >= 8 =>
-                Ok(Some(u64::from_le_bytes(v[..8].try_into().unwrap()))),
+            Some(v) if v.len() >= 8 => Ok(Some(u64::from_le_bytes(v[..8].try_into().unwrap()))),
             Some(_) => Ok(None),
         }
     }
 
     fn set_u32(&self, key: &[u8], val: u32) -> StorageResult<()> {
-        self.index.put(key, &val.to_le_bytes())
-            .map_err(|e| BlockStorageError::Db(e.to_string()))
+        self.kv.put(key, &val.to_le_bytes()).map_err(BlockStorageError::Db)
     }
 
     fn set_u64(&self, key: &[u8], val: u64) -> StorageResult<()> {
-        self.index.put(key, &val.to_le_bytes())
-            .map_err(|e| BlockStorageError::Db(e.to_string()))
+        self.kv.put(key, &val.to_le_bytes()).map_err(BlockStorageError::Db)
     }
 
     // ── Write state ───────────────────────────────────────────────────────────
@@ -202,22 +193,12 @@ impl BlockStorage {
 
     /// Số block đã lưu (đếm từ index).
     pub fn count(&self) -> u64 {
-        let mut n = 0u64;
-        let mode = rocksdb::IteratorMode::From(b"blk:", rocksdb::Direction::Forward);
-        for item in self.index.iterator(mode) {
-            let Ok((k, _)) = item else { break };
-            if !k.starts_with(b"blk:") { break; }
-            n += 1;
-        }
-        n
+        self.kv.scan_prefix(b"blk:").len() as u64
     }
 
-    /// Lấy `BlockLocation` của block có height cho trước.
     pub fn get_location(&self, height: u64) -> StorageResult<Option<BlockLocation>> {
         let key = Self::index_key(height);
-        match self.index.get(key.as_bytes())
-            .map_err(|e| BlockStorageError::Db(e.to_string()))?
-        {
+        match self.kv.get(key.as_bytes()).map_err(BlockStorageError::Db)? {
             None    => Ok(None),
             Some(v) => Ok(BlockLocation::from_bytes(&v)),
         }
@@ -302,8 +283,7 @@ impl BlockStorage {
 
         // Cập nhật index
         let ikey = Self::index_key(block.index);
-        self.index.put(ikey.as_bytes(), &loc.to_bytes())
-            .map_err(|e| BlockStorageError::Db(e.to_string()))?;
+        self.kv.put(ikey.as_bytes(), &loc.to_bytes()).map_err(BlockStorageError::Db)?;
 
         // Cập nhật metadata
         let new_offset = offset + needed;

@@ -21,7 +21,7 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use rocksdb::{DB, Options};
+use crate::pkt_kv::Kv;
 use sha2::{Digest, Sha256};
 
 use crate::pkt_addr_index::AddrIndexDb;
@@ -36,24 +36,19 @@ use crate::pkt_peer::send_msg;
 
 /// Stores minimal block metadata (height ↔ hash).  No raw block bytes.
 pub struct BlockSyncDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
 impl BlockSyncDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_temp() -> Result<Self, SyncError> {
@@ -71,20 +66,17 @@ impl BlockSyncDb {
     /// Store height → hash and hash → height.
     pub fn set_block(&self, height: u64, hash: &[u8; 32]) -> Result<(), SyncError> {
         let hkey = format!("height:{:016x}", height);
-        self.db.put(hkey.as_bytes(), hash)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
+        self.kv.put(hkey.as_bytes(), hash).map_err(SyncError::Db)?;
         let mut rkey = [0u8; 37]; // "hash:" + 32 bytes
         rkey[..5].copy_from_slice(b"hash:");
         rkey[5..].copy_from_slice(hash);
-        self.db.put(&rkey, &height.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.put(b"meta:block_height", &height.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(&rkey, &height.to_le_bytes()).map_err(SyncError::Db)?;
+        self.kv.put(b"meta:block_height", &height.to_le_bytes()).map_err(SyncError::Db)
     }
 
     pub fn get_block_hash(&self, height: u64) -> Result<Option<[u8; 32]>, SyncError> {
         let key = format!("height:{:016x}", height);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 32 => {
                 let mut h = [0u8; 32];
@@ -96,7 +88,7 @@ impl BlockSyncDb {
     }
 
     pub fn get_block_height(&self) -> Result<Option<u64>, SyncError> {
-        match self.db.get(b"meta:block_height").map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(b"meta:block_height").map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 8 => Ok(Some(u64::from_le_bytes(v[..8].try_into().unwrap()))),
             Some(_) => Ok(None),

@@ -15,30 +15,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use rocksdb::{DB, Options, WriteBatch, IteratorMode};
-
+use crate::pkt_kv::Kv;
 use crate::block::Block;
 use crate::transaction::TxOutput;
 use crate::utxo::UtxoSet;
 
-// ─── DB path (cùng schema với storage.rs) ─────────────────────────────────────
-
-fn pkt_dir() -> PathBuf {
-    // Unix: $HOME  |  Windows: %USERPROFILE%  |  fallback: current dir
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".pkt")
-}
 fn db_path() -> PathBuf { crate::pkt_paths::data_dir().join("db") }
 
-fn open_db() -> Result<DB, String> {
-    let path = db_path();
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    let mut opts = Options::default();
-    opts.create_if_missing(true);
-    DB::open(&opts, &path).map_err(|e| e.to_string())
+fn open_db() -> Result<Kv, String> {
+    Kv::open_rw(&db_path())
 }
 
 // ─── Key schema (phải khớp với storage.rs) ────────────────────────────────────
@@ -65,18 +50,18 @@ pub enum RecoveryStatus {
 
 // ─── Write Epoch helpers ──────────────────────────────────────────────────────
 
-fn read_epoch(db: &DB) -> u64 {
+fn read_epoch(db: &Kv) -> u64 {
     db.get(META_WRITE_EPOCH).ok().flatten()
         .and_then(|v| std::str::from_utf8(&v).ok().and_then(|s| s.parse().ok()))
         .unwrap_or(0)
 }
 
-fn read_wal_height(db: &DB) -> Option<u64> {
+fn read_wal_height(db: &Kv) -> Option<u64> {
     db.get(META_WAL_HEIGHT).ok().flatten()
         .and_then(|v| std::str::from_utf8(&v).ok().and_then(|s| s.parse().ok()))
 }
 
-fn is_write_in_progress(db: &DB) -> bool {
+fn is_write_in_progress(db: &Kv) -> bool {
     read_epoch(db) % 2 != 0
 }
 
@@ -85,54 +70,54 @@ fn is_write_in_progress(db: &DB) -> bool {
 /// Lưu Blockchain vào DB trong 1 atomic WriteBatch.
 /// Thay thế save_blockchain trong storage.rs: không bao giờ bị split giữa chừng.
 pub fn atomic_save(bc: &crate::chain::Blockchain) -> Result<(), String> {
+    use crate::pkt_kv::BatchOp;
     let db = open_db()?;
 
     let epoch = read_epoch(&db);
 
-    // ── Phase 1: Đánh dấu đang write (epoch lẻ) ──────────────────────────────
-    db.put(META_WRITE_EPOCH, (epoch + 1).to_string().as_bytes())
-        .map_err(|e| e.to_string())?;
+    // Phase 1: đánh dấu đang write (epoch lẻ)
+    db.put(META_WRITE_EPOCH, (epoch + 1).to_string().as_bytes())?;
 
-    // ── Phase 2: Build WriteBatch — tất cả keys trong 1 batch ────────────────
-    let mut batch = WriteBatch::default();
+    // Phase 2: collect tất cả (key, value) owned data
+    let mut kvs: Vec<(Vec<u8>, Option<Vec<u8>>)> = Vec::new();
 
-    // Blocks
     for block in &bc.chain {
-        let key = block_key(block.index);
+        let key = block_key(block.index).into_bytes();
         let val = serde_json::to_vec(block)
             .map_err(|e| format!("serialize block {}: {e}", block.index))?;
-        batch.put(key.as_bytes(), &val);
+        kvs.push((key, Some(val)));
     }
 
-    // Xóa UTXOs cũ + ghi mới trong cùng batch
-    let old_utxo_keys: Vec<Vec<u8>> = db.iterator(IteratorMode::Start)
-        .filter_map(|item| item.ok().and_then(|(k, _)| {
-            if std::str::from_utf8(&k).unwrap_or("").starts_with("utxo:") {
-                Some(k.to_vec())
-            } else { None }
-        }))
-        .collect();
-    for k in old_utxo_keys {
-        batch.delete(&k);
+    // Xóa UTXOs cũ
+    for (k, _) in db.scan_prefix(b"utxo:") {
+        kvs.push((k, None));
     }
+
+    // Ghi UTXOs mới
     for (k, output) in &bc.utxo_set.utxos {
-        let key = utxo_key(k);
+        let key = utxo_key(k).into_bytes();
         let val = serde_json::to_vec(output)
             .map_err(|e| format!("serialize utxo {k}: {e}"))?;
-        batch.put(key.as_bytes(), &val);
+        kvs.push((key, Some(val)));
     }
 
     // Metadata
     if let Some(last) = bc.chain.last() {
-        batch.put(META_HEIGHT,    last.index.to_string().as_bytes());
-        batch.put(META_WAL_HEIGHT, last.index.to_string().as_bytes());
+        let h = last.index.to_string().into_bytes();
+        kvs.push((META_HEIGHT.to_vec(),     Some(h.clone())));
+        kvs.push((META_WAL_HEIGHT.to_vec(), Some(h)));
     }
-    batch.put(META_DIFFICULTY, bc.difficulty.to_string().as_bytes());
-    // Epoch chẵn = committed
-    batch.put(META_WRITE_EPOCH, (epoch + 2).to_string().as_bytes());
+    kvs.push((META_DIFFICULTY.to_vec(),  Some(bc.difficulty.to_string().into_bytes())));
+    kvs.push((META_WRITE_EPOCH.to_vec(), Some((epoch + 2).to_string().into_bytes())));
 
-    // ── Phase 3: Atomic commit ────────────────────────────────────────────────
-    db.write(batch).map_err(|e| format!("atomic write failed: {e}"))
+    // Phase 3: atomic commit
+    let ops: Vec<BatchOp<'_>> = kvs.iter().map(|(k, v)| {
+        match v {
+            Some(v) => BatchOp::Put(k.as_slice(), v.as_slice()),
+            None    => BatchOp::Delete(k.as_slice()),
+        }
+    }).collect();
+    db.write_batch(&ops).map_err(|e| format!("atomic write failed: {e}"))
 }
 
 // ─── Crash Recovery ───────────────────────────────────────────────────────────
@@ -170,7 +155,6 @@ pub fn check_and_recover(bc: &mut crate::chain::Blockchain) -> RecoveryStatus {
     // Rebuild UTXO bằng cách replay từ đầu (đơn giản nhất, đúng nhất)
     bc.utxo_set = rebuild_utxo_from_chain(&bc.chain);
 
-    // Reset epoch về chẵn sau khi repair
     let _ = db.put(META_WRITE_EPOCH, b"0");
     let _ = db.put(META_WAL_HEIGHT, chain_tip.to_string().as_bytes());
 
@@ -220,13 +204,11 @@ pub fn load_blocks_for_recovery() -> Result<Option<Vec<Block>>, String> {
     if !db_path().exists() { return Ok(None); }
     let db = open_db()?;
     let mut blocks: Vec<Block> = Vec::new();
-    for item in db.iterator(IteratorMode::Start) {
-        let (key, val) = item.map_err(|e| e.to_string())?;
-        if std::str::from_utf8(&key).unwrap_or("").starts_with("block:") {
-            let block: Block = serde_json::from_slice(&val)
-                .map_err(|e| format!("deserialize: {e}"))?;
-            blocks.push(block);
-        }
+    for (key, val) in db.scan_prefix(b"block:") {
+        let _ = key;
+        let block: Block = serde_json::from_slice(&val)
+            .map_err(|e| format!("deserialize: {e}"))?;
+        blocks.push(block);
     }
     if blocks.is_empty() { return Ok(None); }
     blocks.sort_by_key(|b| b.index);
@@ -238,8 +220,7 @@ pub fn load_utxos_for_recovery() -> HashMap<String, TxOutput> {
     if !db_path().exists() { return HashMap::new(); }
     let db = match open_db() { Ok(d) => d, Err(_) => return HashMap::new() };
     let mut utxos = HashMap::new();
-    for item in db.iterator(IteratorMode::Start) {
-        let Ok((key, val)) = item else { continue };
+    for (key, val) in db.scan_prefix(b"utxo:") {
         if let Some(utxo_k) = std::str::from_utf8(&key).ok().and_then(|s| s.strip_prefix("utxo:")) {
             if let Ok(output) = serde_json::from_slice::<TxOutput>(&val) {
                 utxos.insert(utxo_k.to_string(), output);
