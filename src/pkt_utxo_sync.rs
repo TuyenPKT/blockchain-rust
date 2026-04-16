@@ -22,7 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
-use rocksdb::{DB, Options};
+use crate::pkt_kv::Kv;
 use sha2::{Digest, Sha256};
 use serde::{Serialize, Deserialize};
 
@@ -291,7 +291,7 @@ pub fn wire_txid(tx: &WireTx) -> [u8; 32] {
 
 /// RocksDB for downloaded UTXO state (separate from local chain UTXOs).
 pub struct UtxoSyncDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
@@ -306,21 +306,16 @@ impl UtxoSyncDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
         std::fs::create_dir_all(path)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_path_buf() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_path_buf() })
     }
 
     /// Open read-only — không giữ write lock, dùng cho pktscan khi sync đang chạy.
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
         std::fs::create_dir_all(path)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_path_buf() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_path_buf() })
     }
 
     pub fn open_temp() -> Result<Self, SyncError> {
@@ -342,19 +337,17 @@ impl UtxoSyncDb {
         };
         let val = serde_json::to_vec(&entry)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.put(key.as_bytes(), &val)
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(key.as_bytes(), &val).map_err(SyncError::Db)
     }
 
     pub fn remove_utxo(&self, txid: &[u8; 32], vout: u32) -> Result<(), SyncError> {
         let key = utxo_key(txid, vout);
-        self.db.delete(key.as_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.delete(key.as_bytes()).map_err(SyncError::Db)
     }
 
     pub fn get_utxo(&self, txid: &[u8; 32], vout: u32) -> Result<Option<UtxoEntry>, SyncError> {
         let key = utxo_key(txid, vout);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None    => Ok(None),
             Some(v) => {
                 let entry: UtxoEntry = serde_json::from_slice(&v)
@@ -367,7 +360,7 @@ impl UtxoSyncDb {
     // ── Height / tip tracking ─────────────────────────────────────────────────
 
     pub fn get_utxo_height(&self) -> Result<Option<u64>, SyncError> {
-        match self.db.get(KEY_UTXO_HEIGHT).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(KEY_UTXO_HEIGHT).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) => {
                 let s = std::str::from_utf8(&v).map_err(|e| SyncError::Db(e.to_string()))?;
@@ -378,12 +371,12 @@ impl UtxoSyncDb {
     }
 
     pub fn set_utxo_height(&self, height: u64) -> Result<(), SyncError> {
-        self.db.put(KEY_UTXO_HEIGHT, height.to_string().as_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(KEY_UTXO_HEIGHT, height.to_string().as_bytes())
+            .map_err(SyncError::Db)
     }
 
     pub fn get_tip_hash(&self) -> Result<Option<[u8; 32]>, SyncError> {
-        match self.db.get(KEY_UTXO_TIP_HASH).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(KEY_UTXO_TIP_HASH).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 32 => {
                 let mut h = [0u8; 32];
@@ -395,34 +388,23 @@ impl UtxoSyncDb {
     }
 
     pub fn set_tip_hash(&self, hash: &[u8; 32]) -> Result<(), SyncError> {
-        self.db.put(KEY_UTXO_TIP_HASH, hash.as_ref())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(KEY_UTXO_TIP_HASH, hash.as_ref())
+            .map_err(SyncError::Db)
     }
 
     // ── Stats ─────────────────────────────────────────────────────────────────
 
     pub fn count_utxos(&self) -> Result<u64, SyncError> {
-        use rocksdb::IteratorMode;
-        let mut count = 0u64;
-        for item in self.db.iterator(IteratorMode::Start) {
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if k.starts_with(b"utxo:") { count += 1; }
-        }
-        Ok(count)
+        let count = self.kv.scan_prefix(b"utxo:").len();
+        Ok(count as u64)
     }
 
     /// Sum of all UTXO values in this DB.
     pub fn total_value(&self) -> Result<u64, SyncError> {
-        use rocksdb::IteratorMode;
-        let mut total = 0u64;
-        for item in self.db.iterator(IteratorMode::Start) {
-            let (k, v) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if k.starts_with(b"utxo:") {
-                if let Ok(entry) = serde_json::from_slice::<UtxoEntry>(&v) {
-                    total = total.saturating_add(entry.value);
-                }
-            }
-        }
+        let total = self.kv.scan_prefix(b"utxo:")
+            .into_iter()
+            .filter_map(|(_, v)| serde_json::from_slice::<UtxoEntry>(&v).ok())
+            .fold(0u64, |acc, e| acc.saturating_add(e.value));
         Ok(total)
     }
 
@@ -431,34 +413,27 @@ impl UtxoSyncDb {
     /// Scan tất cả unspent outputs của một txid.
     /// Key prefix: "utxo:{txid_hex}:"
     pub fn scan_tx_outputs(&self, txid_hex: &str) -> Vec<UtxoEntry> {
-        use rocksdb::{Direction, IteratorMode};
         let prefix = format!("utxo:{}:", txid_hex);
-        let iter   = self.db.iterator(IteratorMode::From(prefix.as_bytes(), Direction::Forward));
-        let mut out = Vec::new();
-        for item in iter {
-            let Ok((k, v)) = item else { continue };
-            if !k.starts_with(prefix.as_bytes()) { break; }
-            if let Ok(entry) = serde_json::from_slice::<UtxoEntry>(&v) {
-                out.push(entry);
-            }
-        }
-        out
+        self.kv.scan_prefix(prefix.as_bytes())
+            .into_iter()
+            .filter_map(|(_, v)| serde_json::from_slice::<UtxoEntry>(&v).ok())
+            .collect()
     }
 
-    /// Raw DB access for iteration (used by explorer queries in pkt_explorer_api).
-    pub fn raw_db(&self) -> &rocksdb::DB { &self.db }
+    /// Raw KV access for iteration (used by explorer queries in pkt_explorer_api).
+    pub fn raw_kv(&self) -> &Kv { &self.kv }
 
     // ── TX meta index (v24.1) ─────────────────────────────────────────────────
 
     pub fn put_tx_meta(&self, txid_hex: &str, meta: &TxMeta) -> Result<(), SyncError> {
         let key = format!("txmeta:{}", txid_hex);
         let val = serde_json::to_vec(meta).map_err(|e| SyncError::Db(e.to_string()))?;
-        self.db.put(key.as_bytes(), &val).map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(key.as_bytes(), &val).map_err(SyncError::Db)
     }
 
     pub fn get_tx_meta(&self, txid_hex: &str) -> Result<Option<TxMeta>, SyncError> {
         let key = format!("txmeta:{}", txid_hex);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None    => Ok(None),
             Some(v) => serde_json::from_slice(&v).map(Some)
                            .map_err(|e| SyncError::Db(e.to_string())),

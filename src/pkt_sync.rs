@@ -18,8 +18,7 @@ use std::path::{Path, PathBuf};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
-use rocksdb::{DB, Options};
-
+use crate::pkt_kv::Kv;
 use crate::pkt_wire::{
     self, PktMsg, WireBlockHeader, InvItem, TESTNET_MAGIC, MAINNET_MAGIC,
 };
@@ -296,7 +295,7 @@ pub fn build_locator(known_hashes: &[[u8; 32]]) -> Vec<[u8; 32]> {
 
 /// RocksDB wrapper for downloaded wire headers and sync state.
 pub struct SyncDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
@@ -312,21 +311,18 @@ impl SyncDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
         std::fs::create_dir_all(path)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(SyncDb { db, path: path.to_path_buf() })
+        let kv = Kv::open_rw(path)
+            .map_err(|e| SyncError::Db(e))?;
+        Ok(SyncDb { kv, path: path.to_path_buf() })
     }
 
     /// Open read-only — không giữ write lock, dùng cho pktscan khi sync đang chạy.
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
         std::fs::create_dir_all(path)
             .map_err(|e| SyncError::Db(e.to_string()))?;
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(SyncDb { db, path: path.to_path_buf() })
+        let kv = Kv::open_ro(path)
+            .map_err(|e| SyncError::Db(e))?;
+        Ok(SyncDb { kv, path: path.to_path_buf() })
     }
 
     /// Open in a temp dir (test helper).
@@ -339,14 +335,14 @@ impl SyncDb {
     /// Save one raw 80-byte header at `height`.
     pub fn save_header(&self, height: u64, raw: &[u8; 80]) -> Result<(), SyncError> {
         let key = wireheader_key(height);
-        self.db.put(key.as_bytes(), raw.as_ref())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(key.as_bytes(), raw.as_ref())
+            .map_err(SyncError::Db)
     }
 
     /// Load raw 80-byte header at `height`.
     pub fn load_header(&self, height: u64) -> Result<Option<[u8; 80]>, SyncError> {
         let key = wireheader_key(height);
-        match self.db.get(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 80 => {
                 let mut raw = [0u8; 80];
@@ -359,7 +355,7 @@ impl SyncDb {
 
     /// Get the last synced height (None if no headers saved yet).
     pub fn get_sync_height(&self) -> Result<Option<u64>, SyncError> {
-        match self.db.get(KEY_SYNC_HEIGHT).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(KEY_SYNC_HEIGHT).map_err(SyncError::Db)? {
             None    => Ok(None),
             Some(v) => {
                 let s = std::str::from_utf8(&v).map_err(|e| SyncError::Db(e.to_string()))?;
@@ -371,13 +367,13 @@ impl SyncDb {
 
     /// Persist the last synced height.
     pub fn set_sync_height(&self, height: u64) -> Result<(), SyncError> {
-        self.db.put(KEY_SYNC_HEIGHT, height.to_string().as_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(KEY_SYNC_HEIGHT, height.to_string().as_bytes())
+            .map_err(SyncError::Db)
     }
 
     /// Save the hash of the highest known header (used as prev for next batch).
     pub fn get_tip_hash(&self) -> Result<Option<[u8; 32]>, SyncError> {
-        match self.db.get(KEY_SYNC_TIP_HASH).map_err(|e| SyncError::Db(e.to_string()))? {
+        match self.kv.get(KEY_SYNC_TIP_HASH).map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 32 => {
                 let mut h = [0u8; 32];
@@ -389,8 +385,8 @@ impl SyncDb {
     }
 
     pub fn set_tip_hash(&self, hash: &[u8; 32]) -> Result<(), SyncError> {
-        self.db.put(KEY_SYNC_TIP_HASH, hash.as_ref())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(KEY_SYNC_TIP_HASH, hash.as_ref())
+            .map_err(SyncError::Db)
     }
 
     /// Return the SHA256d wire hash of the header at `height` (= block_hash peer uses).
@@ -406,26 +402,24 @@ impl SyncDb {
 
     /// Count headers stored (iterates wireheader: keys).
     pub fn count_headers(&self) -> Result<u64, SyncError> {
-        use rocksdb::IteratorMode;
-        let mut count = 0u64;
-        for item in self.db.iterator(IteratorMode::Start) {
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if k.starts_with(b"wireheader:") { count += 1; }
-        }
-        Ok(count)
+        let count = self.kv.scan_all()
+            .into_iter()
+            .filter(|(k, _)| k.starts_with(b"wireheader:"))
+            .count();
+        Ok(count as u64)
     }
 
     /// Lưu số lượng TX trong block ở height (dùng bởi sync_blocks sau khi apply).
     pub fn save_block_tx_count(&self, height: u64, count: u64) -> Result<(), SyncError> {
         let key = format!("txcount:{:016x}", height);
-        self.db.put(key.as_bytes(), &count.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(key.as_bytes(), &count.to_le_bytes())
+            .map_err(SyncError::Db)
     }
 
     /// Lấy số TX đã lưu cho block ở height. Trả 0 nếu chưa có (block cũ trước v22.2).
     pub fn get_block_tx_count(&self, height: u64) -> u64 {
         let key = format!("txcount:{:016x}", height);
-        self.db.get(key.as_bytes()).ok()
+        self.kv.get(key.as_bytes()).ok()
             .flatten()
             .and_then(|v| v.try_into().ok().map(u64::from_le_bytes))
             .unwrap_or(0)
@@ -630,38 +624,27 @@ pub fn parse_sync_args(args: &[String]) -> SyncConfig {
     cfg
 }
 
-pub fn cmd_sync(args: &[String]) {
-    if args.first().map(|s| s.as_str()) == Some("--help") {
-        println!();
-        println!("  cargo run -- sync [host:port] [options]");
-        println!();
-        println!("  Options:");
-        println!("    --mainnet          sync mainnet (mặc định: testnet)");
-        println!("    --max N            tối đa N headers (0 = không giới hạn)");
-        println!("    --timeout S        recv timeout (giây, mặc định: 30)");
-        println!("    --skip-pow         bỏ qua kiểm tra PoW (regtest/debug)");
-        println!();
-        return;
-    }
+/// Chạy một chu kỳ sync đầy đủ: kết nối → handshake → poll loop đến khi lỗi hoặc chain reset.
+///
+/// Được gọi từ `pkt_fullnode::cmd_fullnode` thay thế subprocess model (v25.4).
+/// Khi return: caller sẽ tự restart sau một khoảng delay.
+///
+/// Sự khác biệt so với `cmd_sync`:
+/// - `std::process::exit` → `return` (không kill toàn bộ process).
+/// - Nhận `peer` và `mainnet` trực tiếp thay vì parse CLI args.
+pub fn run_sync(peer: &str, mainnet: bool) {
+    let mut cfg = if mainnet { SyncConfig::mainnet() } else { SyncConfig::default() };
 
-    let mut cfg = parse_sync_args(args);
-
-    // Tìm host:port từ args (bare arg không bắt đầu bằng --)
-    let peer_addr = args.iter()
-        .find(|a| !a.starts_with('-') && a.contains(':'))
-        .cloned()
-        .unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
-
-    // Chain mình dùng BLAKE3 PoW — tự động skip PoW khi kết nối node mình.
-    // User có thể override bằng cách KHÔNG pass --skip-pow (hiện không có flag ngược lại),
-    // nhưng kết nối seed.* của mình thì luôn skip để tránh PoWFailed.
-    if peer_addr.contains("oceif.com") || peer_addr.starts_with("127.") || peer_addr.starts_with("localhost") {
+    if peer.contains("oceif.com") || peer.starts_with("127.") || peer.starts_with("localhost") {
         cfg.skip_pow_check = true;
     }
 
+    run_sync_inner(peer, cfg);
+}
+
+fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
     println!("[sync] kết nối tới {} ({}) …", peer_addr, cfg.network);
 
-    // TCP connect + handshake
     let peer_cfg = crate::pkt_peer::PeerConfig {
         host:  peer_addr.split(':').next().unwrap_or("seed.testnet.oceif.com").to_string(),
         port:  peer_addr.split(':').nth(1).and_then(|p| p.parse().ok()).unwrap_or(8333),
@@ -669,27 +652,28 @@ pub fn cmd_sync(args: &[String]) {
         ..crate::pkt_peer::PeerConfig::default()
     };
 
-    let mut stream = match std::net::TcpStream::connect_timeout(
-        &format!("{}:{}", peer_cfg.host, peer_cfg.port)
-            .parse::<std::net::SocketAddr>()
-            .or_else(|_| {
-                use std::net::ToSocketAddrs;
-                format!("{}:{}", peer_cfg.host, peer_cfg.port)
-                    .to_socket_addrs()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-                    .and_then(|mut i| i.next().ok_or_else(||
-                        std::io::Error::new(std::io::ErrorKind::Other, "no addr")))
-            })
-            .unwrap_or_else(|_| {
-                eprintln!("[sync] không resolve được {}", peer_addr);
-                std::process::exit(1);
-            }),
-        std::time::Duration::from_secs(10),
-    ) {
+    let addr = match format!("{}:{}", peer_cfg.host, peer_cfg.port)
+        .parse::<std::net::SocketAddr>()
+        .or_else(|_| {
+            use std::net::ToSocketAddrs;
+            format!("{}:{}", peer_cfg.host, peer_cfg.port)
+                .to_socket_addrs()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+                .and_then(|mut i| i.next().ok_or_else(||
+                    std::io::Error::new(std::io::ErrorKind::Other, "no addr")))
+        }) {
+        Ok(a) => a,
+        Err(_) => {
+            eprintln!("[sync] không resolve được {}", peer_addr);
+            return;
+        }
+    };
+
+    let mut stream = match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("[sync] connect thất bại: {}", e);
-            std::process::exit(1);
+            return;
         }
     };
 
@@ -699,7 +683,7 @@ pub fn cmd_sync(args: &[String]) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("[sync] handshake thất bại: {}", e);
-            std::process::exit(1);
+            return;
         }
     };
 
@@ -728,10 +712,7 @@ pub fn cmd_sync(args: &[String]) {
     // Mở SyncDb, lấy start point
     let db = match SyncDb::open(&cfg.db_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở DB thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở DB thất bại: {}", e); return; }
     };
 
     // Mở UtxoDb, BlockDb, AddrIndexDb và MempoolDb để apply transactions
@@ -739,42 +720,27 @@ pub fn cmd_sync(args: &[String]) {
     let block_path   = crate::pkt_paths::block_db();
     let addr_path    = crate::pkt_addr_index::default_addr_db_path();
     let mempool_path = crate::pkt_mempool_sync::default_mempool_db_path();
+    let reorg_path   = crate::pkt_reorg::default_reorg_db_path();
 
     let utxo_db = match crate::pkt_utxo_sync::UtxoSyncDb::open(&utxo_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở utxodb thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở utxodb thất bại: {}", e); return; }
     };
     let block_db = match crate::pkt_block_sync::BlockSyncDb::open(&block_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở blockdb thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở blockdb thất bại: {}", e); return; }
     };
     let addr_db = match crate::pkt_addr_index::AddrIndexDb::open(&addr_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở addrdb thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở addrdb thất bại: {}", e); return; }
     };
     let mempool_db = match crate::pkt_mempool_sync::MempoolDb::open(&mempool_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở mempooldb thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở mempooldb thất bại: {}", e); return; }
     };
-    let reorg_path = crate::pkt_reorg::default_reorg_db_path();
     let reorg_db = match crate::pkt_reorg::ReorgDb::open(&reorg_path) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("[sync] mở reorgdb thất bại: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => { eprintln!("[sync] mở reorgdb thất bại: {}", e); return; }
     };
 
     let start_height: u64  = db.get_sync_height().ok().flatten().unwrap_or(0);
@@ -873,7 +839,7 @@ pub fn cmd_sync(args: &[String]) {
     }
 
     // Reset DBs khi phát hiện node chain thay đổi.
-    // Drop DB handles trước khi xóa directory (giải phóng RocksDB LOCK file).
+    // Drop DB handles trước khi xóa directory (giải phóng LOCK file).
     if chain_reset {
         let _ = db.set_sync_height(0);
         let _ = db.set_tip_hash(&[0u8; 32]);
@@ -887,9 +853,38 @@ pub fn cmd_sync(args: &[String]) {
         if addr_path.exists()    { let _ = std::fs::remove_dir_all(&addr_path); }
         if reorg_path.exists()   { let _ = std::fs::remove_dir_all(&reorg_path); }
         if mempool_path.exists() { let _ = std::fs::remove_dir_all(&mempool_path); }
-        eprintln!("[sync] DBs đã reset — systemd sẽ restart để sync từ genesis");
-        std::process::exit(0); // systemd restarts → fresh start
+        eprintln!("[sync] DBs đã reset — sẽ restart để sync từ genesis");
+        // return → caller (fullnode watcher loop) sẽ spawn lại run_sync
     }
+}
+
+pub fn cmd_sync(args: &[String]) {
+    if args.first().map(|s| s.as_str()) == Some("--help") {
+        println!();
+        println!("  cargo run -- sync [host:port] [options]");
+        println!();
+        println!("  Options:");
+        println!("    --mainnet          sync mainnet (mặc định: testnet)");
+        println!("    --max N            tối đa N headers (0 = không giới hạn)");
+        println!("    --timeout S        recv timeout (giây, mặc định: 30)");
+        println!("    --skip-pow         bỏ qua kiểm tra PoW (regtest/debug)");
+        println!();
+        return;
+    }
+
+    let mut cfg = parse_sync_args(args);
+
+    // Tìm host:port từ args (bare arg không bắt đầu bằng --)
+    let peer_addr = args.iter()
+        .find(|a| !a.starts_with('-') && a.contains(':'))
+        .cloned()
+        .unwrap_or_else(|| "seed.testnet.oceif.com:8333".to_string());
+
+    if peer_addr.contains("oceif.com") || peer_addr.starts_with("127.") || peer_addr.starts_with("localhost") {
+        cfg.skip_pow_check = true;
+    }
+
+    run_sync_inner(&peer_addr, cfg);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

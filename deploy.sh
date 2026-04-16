@@ -1,49 +1,45 @@
 #!/bin/bash
-# deploy.sh — build release + copy lên server oceif.com
+# deploy.sh — rsync source → build trên VPS → lưu binary → xóa target/
 # Chạy từ máy local: bash deploy.sh
 
 set -e
 
-SERVER="oceif.com"
-USER="tuyenpkt"      # đổi nếu dùng user khác
+SERVER="180.93.1.235"
+USER="tuyenpkt"
 REMOTE_DIR="~/blockchain-rust"
-BINARY="blockchain-rust"
+BINARY_DIR="~/bin"
 
-echo "=== [1/3] Build release binary (macOS → Linux cross-compile) ==="
-# Nếu chưa có target linux: rustup target add x86_64-unknown-linux-musl
-# Hoặc build thẳng trên server (xem bên dưới)
-
-echo ""
-echo "⚠️  Khuyến nghị: build trực tiếp trên server để tránh cross-compile"
-echo "   Chạy:  ssh $USER@$SERVER 'bash -s' < deploy_server.sh"
-echo ""
-
-echo "=== [2/3] Copy source lên server ==="
-ssh "$USER@$SERVER" "mkdir -p $REMOTE_DIR"
-rsync -avz --exclude target --exclude .git \
+echo "=== [1/3] Sync source lên server (bỏ qua target/) ==="
+ssh "$USER@$SERVER" "mkdir -p $REMOTE_DIR $BINARY_DIR"
+rsync -az --exclude target/ --exclude .git/ \
     ./ "$USER@$SERVER:$REMOTE_DIR/"
 
-echo ""
-echo "=== [3/3] Build + start trên server ==="
-ssh "$USER@$SERVER" << 'REMOTE'
+echo "=== [2/3] Build release trên server ==="
+ssh "$USER@$SERVER" bash << 'REMOTE'
+set -e
 cd ~/blockchain-rust
+source "$HOME/.cargo/env" 2>/dev/null || true
 
-# Cài Rust nếu chưa có
-if ! command -v cargo &>/dev/null; then
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
-fi
+cargo build --release 2>&1 | tail -5
 
-# Build release
-cargo build --release
-echo "✅ Build xong: $(ls -lh target/release/blockchain-rust)"
+# Lưu binary ra ngoài target/
+cp target/release/blockchain-rust ~/bin/blockchain-rust
+echo "✅ Binary: $(ls -lh ~/bin/blockchain-rust)"
 
-# Setup systemd
-cp ~/blockchain-rust/blockchain-node.service /etc/systemd/system/
-cp ~/blockchain-rust/blockchain-api.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable blockchain-node blockchain-api
-systemctl restart blockchain-node blockchain-api
-echo "✅ Services started"
-systemctl status blockchain-node blockchain-api --no-pager
+# Xóa target/ ngay sau khi lấy binary
+rm -rf target/
+echo "✅ Đã xóa target/ — disk freed"
+df -h / | tail -1
 REMOTE
+
+echo "=== [3/3] Restart services ==="
+ssh "$USER@$SERVER" bash << 'REMOTE'
+set -e
+# Cập nhật ExecStart trong service files nếu cần
+sudo systemctl daemon-reload
+sudo systemctl restart blockchain-node.service pkt-fullnode.service 2>/dev/null || true
+sudo systemctl status blockchain-node.service pkt-fullnode.service --no-pager -l | tail -10
+REMOTE
+
+echo ""
+echo "✅ Deploy xong. Binary tại ~/bin/blockchain-rust trên VPS."

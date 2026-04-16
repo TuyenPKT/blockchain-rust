@@ -20,15 +20,14 @@
 
 use std::path::{Path, PathBuf};
 
-use rocksdb::{Direction, IteratorMode, Options, DB};
-
+use crate::pkt_kv::Kv;
 use crate::pkt_sync::SyncError;
 use crate::pkt_utxo_sync::{UtxoSyncDb, WireTx};
 
 // ── AddrIndexDb ───────────────────────────────────────────────────────────────
 
 pub struct AddrIndexDb {
-    db:   DB,
+    kv:   Kv,
     path: PathBuf,
 }
 
@@ -40,17 +39,13 @@ pub struct AddrTxEntry {
 
 impl AddrIndexDb {
     pub fn open(path: &Path) -> Result<Self, SyncError> {
-        let mut opts = crate::pkt_paths::db_opts();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path).map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_rw(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, SyncError> {
-        let opts = Options::default();
-        let db = DB::open_for_read_only(&opts, path, false)
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        Ok(Self { db, path: path.to_owned() })
+        let kv = Kv::open_ro(path).map_err(SyncError::Db)?;
+        Ok(Self { kv, path: path.to_owned() })
     }
 
     pub fn open_temp() -> Result<Self, SyncError> {
@@ -90,9 +85,7 @@ impl AddrIndexDb {
     // ── Balance helpers ────────────────────────────────────────────────────────
 
     fn read_balance(&self, script_hex: &str) -> Result<u64, SyncError> {
-        match self.db.get(Self::bal_key(script_hex).as_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))?
-        {
+        match self.kv.get(Self::bal_key(script_hex).as_bytes()).map_err(SyncError::Db)? {
             None => Ok(0),
             Some(v) if v.len() == 8 => {
                 Ok(u64::from_le_bytes(v[..8].try_into().unwrap()))
@@ -102,18 +95,15 @@ impl AddrIndexDb {
     }
 
     fn write_balance(&self, script_hex: &str, new_bal: u64, old_bal: u64) -> Result<(), SyncError> {
-        // Remove stale rich entry
         if old_bal > 0 {
-            self.db.delete(Self::rich_key(old_bal, script_hex).as_bytes())
-                .map_err(|e| SyncError::Db(e.to_string()))?;
+            self.kv.delete(Self::rich_key(old_bal, script_hex).as_bytes())
+                .map_err(SyncError::Db)?;
         }
-        // Write new balance
-        self.db.put(Self::bal_key(script_hex).as_bytes(), &new_bal.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))?;
-        // Write new rich entry (skip if zero — not a holder)
+        self.kv.put(Self::bal_key(script_hex).as_bytes(), &new_bal.to_le_bytes())
+            .map_err(SyncError::Db)?;
         if new_bal > 0 {
-            self.db.put(Self::rich_key(new_bal, script_hex).as_bytes(), b"")
-                .map_err(|e| SyncError::Db(e.to_string()))?;
+            self.kv.put(Self::rich_key(new_bal, script_hex).as_bytes(), b"")
+                .map_err(SyncError::Db)?;
         }
         Ok(())
     }
@@ -130,21 +120,18 @@ impl AddrIndexDb {
 
     /// Delete a specific key (used by rollback to remove atx entries).
     pub fn delete_key(&self, key: &str) -> Result<(), SyncError> {
-        self.db.delete(key.as_bytes()).map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.delete(key.as_bytes()).map_err(SyncError::Db)
     }
 
     /// Clear all bal: and rich: entries (before rebuilding from UTXO set).
     pub fn clear_balance_index(&self) -> Result<(), SyncError> {
-        for prefix in &["bal:", "rich:"] {
-            let mut keys: Vec<Vec<u8>> = Vec::new();
-            let mode = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
-            for item in self.db.iterator(mode) {
-                let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-                if !k.starts_with(prefix.as_bytes()) { break; }
-                keys.push(k.to_vec());
-            }
+        for prefix in &[b"bal:".as_ref(), b"rich:"] {
+            let keys: Vec<Vec<u8>> = self.kv.scan_prefix(prefix)
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect();
             for key in keys {
-                self.db.delete(&key).map_err(|e| SyncError::Db(e.to_string()))?;
+                self.kv.delete(&key).map_err(SyncError::Db)?;
             }
         }
         Ok(())
@@ -163,19 +150,17 @@ impl AddrIndexDb {
     ) -> Result<(), SyncError> {
         let txid_hex = hex::encode(txid);
         // htx: secondary index — one write per tx (idempotent)
-        self.db.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
-            .map_err(|e| SyncError::Db(e.to_string()))?;
+        self.kv.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
+            .map_err(SyncError::Db)?;
         for inp in &tx.inputs {
             if inp.is_coinbase() { continue; }
             if let Ok(Some(entry)) = utxo_db.get_utxo(&inp.prev_txid, inp.prev_vout) {
                 if entry.script_pubkey.is_empty() { continue; }
                 let script = hex::encode(&entry.script_pubkey);
                 let atx_key = Self::atx_key(&script, height, &txid_hex);
-                self.db.put(atx_key.as_bytes(), b"")
-                    .map_err(|e| SyncError::Db(e.to_string()))?;
+                self.kv.put(atx_key.as_bytes(), b"").map_err(SyncError::Db)?;
                 self.sub_from_balance(&script, entry.value)?;
             }
-            // UTXO not found → silently skip (intra-block spend edge case)
         }
         Ok(())
     }
@@ -188,15 +173,13 @@ impl AddrIndexDb {
         height: u64,
     ) -> Result<(), SyncError> {
         let txid_hex = hex::encode(txid);
-        // htx: secondary index — one write per tx (idempotent)
-        self.db.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
-            .map_err(|e| SyncError::Db(e.to_string()))?;
+        self.kv.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
+            .map_err(SyncError::Db)?;
         for out in &tx.outputs {
             if out.script_pubkey.is_empty() { continue; }
             let script = hex::encode(&out.script_pubkey);
             let atx_key = Self::atx_key(&script, height, &txid_hex);
-            self.db.put(atx_key.as_bytes(), b"")
-                .map_err(|e| SyncError::Db(e.to_string()))?;
+            self.kv.put(atx_key.as_bytes(), b"").map_err(SyncError::Db)?;
             self.add_to_balance(&script, out.value)?;
         }
         Ok(())
@@ -206,16 +189,14 @@ impl AddrIndexDb {
     /// Trả empty Vec nếu htx: chưa được index (data cũ trước v18.4).
     pub fn get_txids_at_height(&self, height: u64, limit: usize) -> Vec<String> {
         let prefix = format!("htx:{:016x}:", height);
-        let mode   = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
-        let mut out = Vec::new();
-        for item in self.db.iterator(mode) {
-            if out.len() >= limit { break; }
-            let Ok((k, _)) = item else { continue };
-            let key = std::str::from_utf8(&k).unwrap_or("");
-            if !key.starts_with(&prefix) { break; }
-            out.push(key[prefix.len()..].to_string());
-        }
-        out
+        self.kv.scan_prefix(prefix.as_bytes())
+            .into_iter()
+            .take(limit)
+            .filter_map(|(k, _)| {
+                let key = std::str::from_utf8(&k).ok()?;
+                Some(key[prefix.len()..].to_string())
+            })
+            .collect()
     }
 
     /// TxIDs gần nhất, newest-first. Dùng cho list API cursor-based (v18.5).
@@ -225,24 +206,19 @@ impl AddrIndexDb {
             None    => b"htx:\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff".to_vec(),
             Some(h) => format!("htx:{:016x}:", h).into_bytes(),
         };
-        let iter = self.db.iterator(IteratorMode::From(&seek_buf, Direction::Reverse));
-        let mut out = Vec::new();
-        for item in iter {
-            if out.len() >= limit { break; }
-            let Ok((k, _)) = item else { continue };
-            let key = std::str::from_utf8(&k).unwrap_or("");
-            if !key.starts_with("htx:") { break; }
-            let mut parts = key.splitn(3, ':');
-            let _ = parts.next();
-            let h = match parts.next().and_then(|s| u64::from_str_radix(s, 16).ok()) {
-                Some(h) => h, None => continue,
-            };
-            let txid = match parts.next() {
-                Some(t) => t.to_string(), None => continue,
-            };
-            out.push((h, txid));
-        }
-        out
+        self.kv.scan_rev(&seek_buf)
+            .into_iter()
+            .take(limit)
+            .filter_map(|(k, _)| {
+                let key = std::str::from_utf8(&k).ok()?;
+                if !key.starts_with("htx:") { return None; }
+                let mut parts = key.splitn(3, ':');
+                let _ = parts.next();
+                let h = parts.next().and_then(|s| u64::from_str_radix(s, 16).ok())?;
+                let txid = parts.next()?.to_string();
+                Some((h, txid))
+            })
+            .collect()
     }
 
     // ── Queries ────────────────────────────────────────────────────────────────
@@ -260,19 +236,18 @@ impl AddrIndexDb {
             Some(h) => format!("atx:{}:{:016x}:", script_hex, h),
             None    => prefix.clone(),
         };
-        let mode = IteratorMode::From(start.as_bytes(), Direction::Forward);
-        let mut out = Vec::new();
-        for item in self.db.iterator(mode) {
-            if out.len() >= limit { break; }
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            let key = std::str::from_utf8(&k).unwrap_or("");
-            if !key.starts_with(&prefix) { break; }
-            let rest = &key[prefix.len()..]; // "{height:016x}:{txid}"
-            if let Some((h_str, txid)) = rest.split_once(':') {
-                let height = u64::from_str_radix(h_str, 16).unwrap_or(0);
-                out.push(AddrTxEntry { height, txid: txid.to_string() });
-            }
-        }
+        let out = self.kv.scan_from(start.as_bytes())
+            .into_iter()
+            .take_while(|(k, _)| k.starts_with(prefix.as_bytes()))
+            .take(limit)
+            .filter_map(|(k, _)| {
+                let key = std::str::from_utf8(&k).ok()?;
+                let rest = &key[prefix.len()..];
+                let (h_str, txid) = rest.split_once(':')?;
+                let height = u64::from_str_radix(h_str, 16).ok()?;
+                Some(AddrTxEntry { height, txid: txid.to_string() })
+            })
+            .collect();
         Ok(out)
     }
 
@@ -283,21 +258,18 @@ impl AddrIndexDb {
 
     /// Top-N holders by balance (descending).
     pub fn get_rich_list(&self, limit: usize) -> Result<Vec<(String, u64)>, SyncError> {
-        let prefix = "rich:";
-        let mode = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
-        let mut out = Vec::new();
-        for item in self.db.iterator(mode) {
-            if out.len() >= limit { break; }
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            let key = std::str::from_utf8(&k).unwrap_or("");
-            if !key.starts_with(prefix) { break; }
-            let rest = &key[prefix.len()..]; // "{inv:020}:{script}"
-            if let Some((inv_str, script)) = rest.split_once(':') {
-                let inv: u64 = inv_str.parse().unwrap_or(0);
-                let balance = u64::MAX - inv;
-                out.push((script.to_string(), balance));
-            }
-        }
+        let prefix = b"rich:";
+        let out = self.kv.scan_prefix(prefix)
+            .into_iter()
+            .take(limit)
+            .filter_map(|(k, _)| {
+                let key = std::str::from_utf8(&k).ok()?;
+                let rest = &key["rich:".len()..];
+                let (inv_str, script) = rest.split_once(':')?;
+                let inv: u64 = inv_str.parse().ok()?;
+                Some((script.to_string(), u64::MAX - inv))
+            })
+            .collect();
         Ok(out)
     }
 
@@ -308,28 +280,21 @@ impl AddrIndexDb {
     pub fn get_tx_height(&self, script_hex: &str, txid_hex: &str) -> Option<u64> {
         let prefix = format!("atx:{}:", script_hex);
         let suffix = format!(":{}", txid_hex);
-        let mode = IteratorMode::From(prefix.as_bytes(), Direction::Forward);
-        for item in self.db.iterator(mode) {
-            let Ok((k, _)) = item else { break };
-            let key = std::str::from_utf8(&k).ok()?;
-            if !key.starts_with(&prefix) { break; }
-            if key.ends_with(&suffix) {
-                // "atx:{script_hex}:{height:016x}:{txid_hex}"
-                let rest = &key[prefix.len()..]; // "{height:016x}:{txid_hex}"
-                if let Some((h_str, _)) = rest.split_once(':') {
-                    return u64::from_str_radix(h_str, 16).ok();
-                }
-            }
-        }
-        None
+        self.kv.scan_prefix(prefix.as_bytes())
+            .into_iter()
+            .find_map(|(k, _)| {
+                let key = std::str::from_utf8(&k).ok()?;
+                if !key.ends_with(&suffix) { return None; }
+                let rest = &key[prefix.len()..];
+                let (h_str, _) = rest.split_once(':')?;
+                u64::from_str_radix(h_str, 16).ok()
+            })
     }
 
     // ── Height tracking ────────────────────────────────────────────────────────
 
     pub fn get_addr_height(&self) -> Result<Option<u64>, SyncError> {
-        match self.db.get(b"meta:addr_height")
-            .map_err(|e| SyncError::Db(e.to_string()))?
-        {
+        match self.kv.get(b"meta:addr_height").map_err(SyncError::Db)? {
             None => Ok(None),
             Some(v) if v.len() == 8 => {
                 Ok(Some(u64::from_le_bytes(v[..8].try_into().unwrap())))
@@ -339,8 +304,8 @@ impl AddrIndexDb {
     }
 
     pub fn set_addr_height(&self, height: u64) -> Result<(), SyncError> {
-        self.db.put(b"meta:addr_height", &height.to_le_bytes())
-            .map_err(|e| SyncError::Db(e.to_string()))
+        self.kv.put(b"meta:addr_height", &height.to_le_bytes())
+            .map_err(SyncError::Db)
     }
 }
 
@@ -364,21 +329,13 @@ pub fn rebuild_balances_from_utxo(
     addr_db:  &AddrIndexDb,
     utxo_db:  &crate::pkt_utxo_sync::UtxoSyncDb,
 ) -> Result<u64, crate::pkt_sync::SyncError> {
-    use rocksdb::Direction;
     use crate::pkt_sync::SyncError;
     use crate::pkt_utxo_sync::UtxoEntry;
 
     addr_db.clear_balance_index()?;
 
-    let prefix = "utxo:";
-    let raw    = utxo_db.raw_db();
-    let mode   = rocksdb::IteratorMode::From(prefix.as_bytes(), Direction::Forward);
     let mut count = 0u64;
-
-    for item in raw.iterator(mode) {
-        let (k, v) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-        let key = std::str::from_utf8(&k).unwrap_or("");
-        if !key.starts_with(prefix) { break; }
+    for (_, v) in utxo_db.raw_kv().scan_prefix(b"utxo:") {
         let entry: UtxoEntry = serde_json::from_slice(&v)
             .map_err(|e| SyncError::Db(e.to_string()))?;
         if !entry.script_pubkey.is_empty() {

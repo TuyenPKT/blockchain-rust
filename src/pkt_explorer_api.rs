@@ -25,7 +25,6 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use rocksdb::IteratorMode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -163,12 +162,7 @@ pub fn query_utxos(
     let prefix = hex::decode(script_hex).unwrap_or_default();
     let mut out = Vec::new();
 
-    let iter = utxo_db.raw_db()
-        .iterator(IteratorMode::Start);
-
-    for item in iter {
-        let (k, v) = item.map_err(|e| e.to_string())?;
-        if !k.starts_with(b"utxo:") { continue; }
+    for (_, v) in utxo_db.raw_kv().scan_prefix(b"utxo:") {
         if let Ok(entry) = serde_json::from_slice::<UtxoEntry>(&v) {
             if prefix.is_empty() || entry.script_pubkey.starts_with(&prefix) {
                 out.push(format_utxo_json(&entry));

@@ -1,6 +1,6 @@
 # CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v24.6.1 ✅**
+**Version hiện tại: v25.4 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt
@@ -117,7 +117,8 @@ bs58 = "0.5"
 tokio = { version = "1", features = ["full"] }
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
-rocksdb = "0.21"
+rocksdb = "0.21"                       # fallback (--no-default-features)
+redb = { version = "2", optional = true }  # default backend (v25.2)
 axum = { version = "0.7", features = ["ws"] }
 async-graphql = { version = "7", features = ["tracing"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -226,10 +227,15 @@ index.html                  ← embedded via include_bytes! — rebuild khi sử
 ~~v23.6~~ Wire Mempool Bridge · ~~v23.7~~ UTXO Snapshot · ~~v23.8~~ Full Node Mode
 ~~v23.8.1~~ Security Patch (15 issues)
 
-### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ← ĐANG LÀM
+### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ✅
 
 ~~v24.0~~ Node Onboarding · ~~v24.1~~ EVM Address · ~~v24.2~~ Network-aware Paths
 ~~v24.3~~ Nav Toggle · ~~v24.4~~ Mining Pool · ~~v24.5~~ LZ4 Compression
 ~~v24.6~~ Tokenomics 21M PKT · ~~v24.6.1~~ Network Config (pkt_config.rs)
 v24.7 — Testnet Faucet · v24.8 — Developer Docs · v24.9 — Multi-node Bootstrap
 v24.10 — Mainnet Prep (checkpoints, genesis verify, tokenomics audit)
+
+### Era 32 — Storage Migration redb (v25.x) ← ĐANG LÀM
+
+~~v25.0~~ RocksKv Abstraction · ~~v25.1~~ RedbKv + feature flag · ~~v25.2~~ redb Default
+~~v25.3~~ VPS Migration + Re-sync · ~~v25.4~~ In-Process Sync (redb hoạt động trên VPS)

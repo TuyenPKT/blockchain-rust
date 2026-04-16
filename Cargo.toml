@@ -92,13 +92,16 @@ libp2p = { version = "0.53", features = ["tcp", "noise", "yamux", "mdns", "tokio
 futures = "0.3"
 # v24.1: EVM-compatible address (Keccak256 + EIP-55)
 sha3 = "0.10"
+# v25.1: redb — pure-Rust KV backend (opt-in, replaces RocksDB)
+redb = { version = "2", optional = true }
 
 [features]
-default = []
+default = ["use-redb"]
 fuzz = ["proptest"]
 integration = []          # v16.2: E2E integration tests (cargo test --features integration)
 opencl = ["dep:ocl"]
 cuda = ["dep:cust"]
+use-redb = ["dep:redb"]   # v25.2: redb là default — cargo build --no-default-features để dùng RocksDB
 
 [dev-dependencies]
 proptest = "1.4"

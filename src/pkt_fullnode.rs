@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-//! v23.8 — Full Node Mode
+//! v25.4 — Full Node Mode (in-process sync)
 //!
 //! Chạy sync + pktscan web server trong một process duy nhất.
 //!
@@ -11,30 +11,19 @@
 //! ## Architecture
 //!
 //! ```
-//! Main thread  ──► pktscan_api::serve(port)   REST API + Web UI (blocking)
-//! Watcher thread ► monitor sync child, auto-restart nếu crash
-//! Sync child   ──► OS subprocess `blockchain-rust sync [peer]`
-//!                  (RocksDB write lock riêng biệt — không conflict với web read-only)
+//! Tokio runtime  ──► pktscan_api::serve(port)          REST API + Web UI (async)
+//! spawn_blocking  ──► loop { pkt_sync::run_sync(peer) } sync loop (blocking thread)
 //! ```
 //!
-//! Tách sync thành OS subprocess giải quyết DB locking: sync giữ write lock,
-//! web handlers mở read-only per-request (đã hoạt động với 2-process model hiện tại).
+//! v25.4: sync chạy trong blocking thread (tokio::task::spawn_blocking) thay vì
+//! OS subprocess. Cùng process → DB_REGISTRY chia sẻ Arc<Database> → redb hoạt động.
 
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
-/// Recover from Mutex PoisonError thay vì panic.
-macro_rules! lock_or_recover {
-    ($mutex:expr) => {
-        $mutex.lock().unwrap_or_else(|p| p.into_inner())
-    };
-}
-
-const DEFAULT_PORT:         u16  = 8081;
-const DEFAULT_PEER:         &str = "seed.testnet.oceif.com:8333";
-const WATCHER_INTERVAL_SECS: u64 = 10;
-const RESTART_DELAY_SECS:    u64 = 5;
+const DEFAULT_PORT:        u16  = 8081;
+const DEFAULT_PEER:        &str = "seed.testnet.oceif.com:8333";
+const RESTART_DELAY_SECS:  u64  = 5;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -74,65 +63,6 @@ pub fn parse_fullnode_args(args: &[String]) -> FullnodeConfig {
     FullnodeConfig { port, peer, mainnet }
 }
 
-// ── Sync subprocess ───────────────────────────────────────────────────────────
-
-/// Internal: spawn sync với explicit exe path (testable).
-pub fn spawn_sync_with_exe(
-    exe:     &Path,
-    peer:    &str,
-    mainnet: bool,
-) -> Result<std::process::Child, String> {
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg("sync").arg(peer);
-    if mainnet { cmd.arg("--mainnet"); }
-    // Inherit stdout/stderr → sync logs hiện trên terminal cùng với web logs
-    cmd.spawn().map_err(|e| format!("spawn sync failed: {}", e))
-}
-
-/// Spawn sync subprocess dùng current binary.
-pub fn spawn_sync_process(peer: &str, mainnet: bool) -> Result<std::process::Child, String> {
-    let exe = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("blockchain-rust"));
-    spawn_sync_with_exe(&exe, peer, mainnet)
-}
-
-// ── Watcher thread ────────────────────────────────────────────────────────────
-
-/// Spawn background thread theo dõi sync child — tự restart nếu exit bất thường.
-fn start_watcher(
-    child:   Arc<Mutex<std::process::Child>>,
-    peer:    String,
-    mainnet: bool,
-) {
-    std::thread::Builder::new()
-        .name("sync-watcher".into())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_secs(WATCHER_INTERVAL_SECS));
-
-                let status_str = {
-                    let mut g = lock_or_recover!(child);
-                    g.try_wait().ok().flatten().map(|s| s.to_string())
-                };
-
-                if let Some(status) = status_str {
-                    eprintln!("[fullnode] sync exited ({}) — restarting in {}s",
-                        status, RESTART_DELAY_SECS);
-                    std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
-
-                    match spawn_sync_process(&peer, mainnet) {
-                        Ok(new_child) => {
-                            println!("[fullnode] sync restarted — pid={}", new_child.id());
-                            *lock_or_recover!(child) = new_child;
-                        }
-                        Err(e) => eprintln!("[fullnode] respawn failed: {}", e),
-                    }
-                }
-            }
-        })
-        .ok();
-}
-
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 pub fn cmd_fullnode(args: &[String]) {
@@ -141,31 +71,28 @@ pub fn cmd_fullnode(args: &[String]) {
     println!("[fullnode] port={}  peer={}  network={}",
         cfg.port, cfg.peer, if cfg.mainnet { "mainnet" } else { "testnet" });
 
-    // 1. Spawn sync subprocess
-    let sync_child = match spawn_sync_process(&cfg.peer, cfg.mainnet) {
-        Ok(c) => {
-            println!("[fullnode] sync started — pid={}", c.id());
-            Arc::new(Mutex::new(c))
-        }
-        Err(e) => {
-            eprintln!("[fullnode] {}", e);
-            std::process::exit(1);
-        }
-    };
+    let peer    = cfg.peer.clone();
+    let mainnet = cfg.mainnet;
 
-    // 2. Auto-restart watcher
-    start_watcher(Arc::clone(&sync_child), cfg.peer.clone(), cfg.mainnet);
+    let rt = tokio::runtime::Runtime::new()
+        .expect("tokio runtime");
 
-    // 3. pktscan REST API (blocking — runs until Ctrl+C or error)
-    println!("[fullnode] web server on :{}", cfg.port);
-    let bc = crate::storage::load_or_new();
-    let db = Arc::new(tokio::sync::Mutex::new(bc));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(crate::pktscan_api::serve(db, cfg.port));
+    rt.block_on(async move {
+        // 1. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
+        tokio::task::spawn_blocking(move || {
+            loop {
+                crate::pkt_sync::run_sync(&peer, mainnet);
+                eprintln!("[fullnode] sync terminated — restarting in {}s", RESTART_DELAY_SECS);
+                std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
+            }
+        });
 
-    // 4. Cleanup: kill sync on exit
-    let _ = lock_or_recover!(sync_child).kill();
-    let _ = lock_or_recover!(sync_child).wait();
+        // 2. pktscan REST API (async — chạy đến khi Ctrl+C)
+        println!("[fullnode] web server on :{}", cfg.port);
+        let bc = crate::storage::load_or_new();
+        let db = Arc::new(tokio::sync::Mutex::new(bc));
+        crate::pktscan_api::serve(db, cfg.port).await;
+    });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -275,36 +202,4 @@ mod tests {
         assert_eq!(cfg.port, 1);
     }
 
-    // ── spawn_sync_with_exe ───────────────────────────────────────────────────
-
-    #[test]
-    fn test_spawn_sync_nonexistent_binary_returns_err() {
-        let result = spawn_sync_with_exe(
-            Path::new("/nonexistent/binary/blockchain-rust-test-xyz"),
-            "localhost:8333",
-            false,
-        );
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_spawn_sync_nonexistent_binary_err_contains_spawn() {
-        let err = spawn_sync_with_exe(
-            Path::new("/nonexistent/binary/xyz"),
-            "localhost:8333",
-            false,
-        ).unwrap_err();
-        assert!(err.contains("spawn sync failed"));
-    }
-
-    #[test]
-    fn test_spawn_sync_uses_sync_arg() {
-        // Verify the command is built correctly by using `echo` as exe
-        // `echo sync peer` succeeds and writes to stdout (we ignore output)
-        let echo = std::process::Command::new("echo")
-            .arg("sync")
-            .arg("localhost:8333")
-            .output();
-        assert!(echo.is_ok());
-    }
 }

@@ -122,6 +122,7 @@ mod devnet;
 mod docs_gen;
 mod integration_test;
 mod hot_reload;
+mod pkt_kv;
 mod pkt_wire;
 mod pkt_peer;
 mod pkt_sync;

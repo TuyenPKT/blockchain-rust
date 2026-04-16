@@ -4,6 +4,135 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v25.4 — In-Process Sync / Remove Subprocess (2026-04-16)
+
+### Added
+- `src/pkt_sync.rs` — `pub fn run_sync(peer, mainnet)` + `fn run_sync_inner(peer_addr, cfg)`
+  - Trích xuất body `cmd_sync` thành hàm có thể gọi in-process
+  - `std::process::exit(1/0)` → `return` — không kill toàn bộ process
+  - `cmd_sync` delegate sang `run_sync_inner` (không thay đổi CLI behavior)
+- `src/pkt_fullnode.rs` — thay subprocess bằng `tokio::task::spawn_blocking`
+  - `loop { run_sync(peer, mainnet); sleep(RESTART_DELAY_SECS); }` — auto-restart in-process
+  - Xóa: `spawn_sync_with_exe`, `spawn_sync_process`, `start_watcher`, watcher thread, Mutex<Child>
+  - Đơn giản hơn: 30 dòng thay vì 70 dòng subprocess+watcher
+
+### Files
+- `src/pkt_sync.rs` — `run_sync` + `run_sync_inner` (thêm), `cmd_sync` delegate
+- `src/pkt_fullnode.rs` — refactor hoàn toàn phần sync, xóa subprocess code
+
+### Tests
+- 2457 passed (redb default)
+
+### Gotcha
+- `tokio::task::spawn_blocking` → redb `DB_REGISTRY` chia sẻ `Arc<Database>` giữa sync thread và API — hoạt động vì cùng process
+- VPS build phải chạy trên Linux (`cargo build --release` trực tiếp trên VPS) — Mac binary không chạy được trên Linux
+- Deploy flow: `rsync src/` → `cargo build --release` (VPS) → `cp target/ ~/bin/` → `rm -rf target/`
+
+---
+
+## v25.3 — VPS Migration + Re-sync (2026-04-16)
+
+### Added
+- Tất cả systemd service files cập nhật path → `/home/tuyenpkt/bin/blockchain-rust`
+  - `fullnode.service`, `blockchain-api.service`, `pkt-miner.service`, `pkt-pool.service`
+  - `pkt-sync.service`, `pktscan.service`, `blockchain-node-main.service`
+- VPS disk freed: 100% → 51% (xóa `~/blockchain-rust/target/`, EGG-Project clone cũ)
+- Build `--no-default-features` (RocksDB) cho VPS vì `pkt_fullnode` spawn subprocess → redb incompatible
+
+### Gotcha
+- VPS dùng RocksDB build (`--no-default-features`) vì `pkt_fullnode` spawn sync process qua `std::process::Command`
+  → redb exclusive file lock bị conflict khi 2 process cùng mở DB
+  → v25.4 sẽ refactor sync thành tokio task để redb hoạt động
+- Service files trước đây trỏ `target/release/` bên trong repo → cần xóa/rebuild thì services chết
+  → Đã fix: tất cả trỏ `~/bin/blockchain-rust` (stable path)
+
+### Deployment
+```bash
+# Build RocksDB binary cho VPS:
+cargo build --release --no-default-features
+scp target/release/blockchain-rust tuyenpkt@180.93.1.235:~/bin/
+sudo systemctl restart fullnode blockchain-api pkt-miner pkt-pool
+```
+
+---
+
+## v25.2 — redb Default Backend (2026-04-16)
+
+### Added
+- `Cargo.toml` — `default = ["use-redb"]` — redb là backend mặc định
+- `src/pkt_kv.rs` — `DB_REGISTRY: LazyLock<Mutex<HashMap<PathBuf, Weak<Database>>>>`
+  - `RedbKv::acquire()` — shared Arc<Database> cho cùng path trong 1 process
+  - Fix: `open_ro` cùng path với `open_rw` → share Arc thay vì lock lại file
+  - `open_rw/ro` dùng `path/data.redb` (file inside directory — same path API)
+
+### Build modes
+```bash
+cargo build                          # redb (default)
+cargo build --no-default-features    # RocksDB fallback
+```
+
+### Tests
+- 2460 passed (redb default), 2460 passed (RocksDB --no-default-features)
+
+### Gotcha
+- VPS cần delete old RocksDB dirs và re-sync sau khi deploy binary mới:
+  ```bash
+  sudo systemctl stop blockchain-node pkt-fullnode
+  rm -rf ~/.pkt/testnet/syncdb ~/.pkt/testnet/utxodb ~/.pkt/testnet/addr_index
+  sudo systemctl start blockchain-node pkt-fullnode
+  ```
+  (testnet ~22 blocks → re-sync trong vài giây)
+- `data.redb` file nằm bên trong directory: `~/.pkt/testnet/syncdb/data.redb`
+
+---
+
+## v25.1 — RedbKv Backend (2026-04-16)
+
+### Added
+- `src/pkt_kv.rs` — thêm `RedbKv` (pure-Rust redb v2.6.3 backend) + `Kv` type alias
+  - `RedbKv::open_rw/open_ro` — single `kv` table, ACID transactions
+  - `write_batch` — nhiều ops trong 1 transaction
+  - `scan_from/scan_rev/scan_prefix` — range scans qua redb Range iterator
+- `Cargo.toml` — `redb = { version = "2", optional = true }`, feature `use-redb`
+- `src/pkt_sync.rs`, `pkt_utxo_sync.rs`, `pkt_addr_index.rs` — đổi `RocksKv` → `Kv` type alias
+
+### Files
+- `src/pkt_kv.rs` — NEW `RedbKv` + `Kv` alias (v25.0 `RocksKv` giữ nguyên)
+- `Cargo.toml` — redb dep + feature flag
+- `src/pkt_sync.rs` / `pkt_utxo_sync.rs` / `pkt_addr_index.rs` — dùng `Kv` thay `RocksKv`
+
+### Tests
+- 2460 passed (default RocksDB), build `--features use-redb` pass
+
+### Gotcha
+- redb không hỗ trợ multi-process concurrent access (file lock độc quyền)
+  → `open_ro` với redb = full open, không phải shared read-only như RocksDB
+  → OK với pkt-fullnode (sync + API cùng process), cần redesign nếu tách process
+- Mỗi single-op `put`/`delete` = 1 redb transaction → dùng `write_batch` cho bulk writes
+- Switch backend: `cargo build --features use-redb` (không cần sửa code)
+
+---
+
+## v25.0 — RocksKv Abstraction Layer (2026-04-16)
+
+### Added
+- `src/pkt_kv.rs` — `RocksKv` wrapper + `BatchOp` enum
+  - 7 ops: `open_rw/ro`, `get/put/delete`, `write_batch`, `scan_all/from/rev/prefix`
+- Refactor `SyncDb`, `UtxoSyncDb`, `AddrIndexDb` — `db: DB` → `kv: RocksKv`
+- `pkt_snapshot.rs`, `pkt_explorer_api.rs` — dùng `scan_prefix`/`write_batch` thay `DB` trực tiếp
+- `raw_db()` → `raw_kv()` trên `UtxoSyncDb`
+
+### Files
+- `src/pkt_kv.rs` — NEW
+- `src/pkt_sync.rs` / `pkt_utxo_sync.rs` / `pkt_addr_index.rs` — internal refactor
+- `src/pkt_snapshot.rs` / `pkt_explorer_api.rs` — dùng `raw_kv()`
+- `src/lib.rs` / `src/main.rs` — `pub mod pkt_kv`
+
+### Tests
+- 2460 passed; 0 failed (no behavior change)
+
+---
+
 ## v24.6.1 — Network Config (2026-04-14)
 
 ### Added

@@ -70,7 +70,6 @@ fn default_snapshot_path(height: u64) -> PathBuf {
 /// Dump toàn bộ UTXO set từ `utxo_db` ra file NDJSON tại `output_path`.
 /// Dòng đầu = `SnapshotHeader`, mỗi dòng sau = `UtxoEntry` JSON.
 pub fn dump_snapshot(utxo_db: &UtxoSyncDb, output_path: &Path) -> Result<SnapshotHeader, SyncError> {
-    use rocksdb::{Direction, IteratorMode};
 
     let height   = utxo_db.get_utxo_height()?.unwrap_or(0);
     let tip_raw  = utxo_db.get_tip_hash()?;
@@ -91,13 +90,8 @@ pub fn dump_snapshot(utxo_db: &UtxoSyncDb, output_path: &Path) -> Result<Snapsho
     writeln!(w, "{}", header_json).map_err(|e| SyncError::Db(e.to_string()))?;
 
     // Dòng 2+: UTXOs, scan prefix "utxo:"
-    let db   = utxo_db.raw_db();
-    let iter = db.iterator(IteratorMode::From(b"utxo:", Direction::Forward));
     let mut written = 0u64;
-
-    for item in iter {
-        let (k, v) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-        if !k.starts_with(b"utxo:") { break; }
+    for (_, v) in utxo_db.raw_kv().scan_prefix(b"utxo:") {
         let entry: UtxoEntry = serde_json::from_slice(&v)
             .map_err(|e| SyncError::Db(e.to_string()))?;
         let line = serde_json::to_string(&entry)
@@ -117,7 +111,6 @@ pub fn dump_snapshot(utxo_db: &UtxoSyncDb, output_path: &Path) -> Result<Snapsho
 /// Load snapshot từ `input_path` vào `utxo_db`.
 /// Ghi đè dữ liệu cũ: xoá tất cả key "utxo:*" trước, sau đó insert từ file.
 pub fn load_snapshot(input_path: &Path, utxo_db: &UtxoSyncDb) -> Result<SnapshotHeader, SyncError> {
-    use rocksdb::{Direction, IteratorMode, WriteBatch};
 
     let file   = File::open(input_path).map_err(|e| SyncError::Db(e.to_string()))?;
     let reader = BufReader::new(file);
@@ -134,16 +127,13 @@ pub fn load_snapshot(input_path: &Path, utxo_db: &UtxoSyncDb) -> Result<Snapshot
     }
 
     // Xoá tất cả key "utxo:*" hiện tại (batch delete)
-    let db = utxo_db.raw_db();
     {
-        let iter = db.iterator(IteratorMode::From(b"utxo:", Direction::Forward));
-        let mut batch = WriteBatch::default();
-        for item in iter {
-            let (k, _) = item.map_err(|e| SyncError::Db(e.to_string()))?;
-            if !k.starts_with(b"utxo:") { break; }
-            batch.delete(&k);
-        }
-        db.write(batch).map_err(|e| SyncError::Db(e.to_string()))?;
+        let existing = utxo_db.raw_kv().scan_prefix(b"utxo:");
+        let ops: Vec<crate::pkt_kv::BatchOp<'_>> = existing
+            .iter()
+            .map(|(k, _)| crate::pkt_kv::BatchOp::Delete(k))
+            .collect();
+        utxo_db.raw_kv().write_batch(&ops).map_err(SyncError::Db)?;
     }
 
     // Insert từng dòng = UtxoEntry

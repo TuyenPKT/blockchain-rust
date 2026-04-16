@@ -17,6 +17,7 @@ pub mod pkt_genesis;
 pub mod pkt_config;
 pub mod evm_address;
 pub mod pkt_paths;
+pub mod pkt_kv;
 pub mod pkt_wire;
 pub mod pkt_peer;
 pub mod pkt_checkpoints;
