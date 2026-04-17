@@ -1,27 +1,29 @@
 #![allow(dead_code)]
-//! v25.4 — Full Node Mode (in-process sync)
+//! v25.6 — Full Node Mode (in-process sync + P2P listener)
 //!
-//! Chạy sync + pktscan web server trong một process duy nhất.
+//! Chạy sync + pktscan web server + P2P listener trong một process duy nhất.
 //!
 //! ```bash
-//! blockchain-rust fullnode [port] [peer] [--mainnet]
-//! # Defaults: port=8081  peer=seed.testnet.oceif.com:8333  testnet
+//! blockchain-rust fullnode [port] [peer] [--mainnet] [--p2p-port N]
+//! # Defaults: port=8081  peer=seed.testnet.oceif.com:8333  p2p=8333  testnet
 //! ```
 //!
 //! ## Architecture
 //!
 //! ```
-//! Tokio runtime  ──► pktscan_api::serve(port)          REST API + Web UI (async)
-//! spawn_blocking  ──► loop { pkt_sync::run_sync(peer) } sync loop (blocking thread)
+//! Tokio runtime  ──► pktscan_api::serve(port)           REST API + Web UI (async)
+//! spawn_blocking  ──► loop { pkt_sync::run_sync(peer) }  sync loop (blocking thread)
+//! thread          ──► run_pkt_node(p2p_port)             P2P listener (blocking thread)
 //! ```
 //!
-//! v25.4: sync chạy trong blocking thread (tokio::task::spawn_blocking) thay vì
-//! OS subprocess. Cùng process → DB_REGISTRY chia sẻ Arc<Database> → redb hoạt động.
+//! v25.6: gộp blockchain-node.service vào fullnode — 1 process duy nhất,
+//! không còn 2 process cùng ghi ~/.pkt/testnet/ → redb không bị conflict.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 const DEFAULT_PORT:        u16  = 8081;
+const DEFAULT_P2P_PORT:    u16  = 8333;
 const DEFAULT_PEER:        &str = "seed.testnet.oceif.com:8333";
 const RESTART_DELAY_SECS:  u64  = 5;
 
@@ -29,27 +31,41 @@ const RESTART_DELAY_SECS:  u64  = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FullnodeConfig {
-    pub port:    u16,
-    pub peer:    String,
-    pub mainnet: bool,
+    pub port:     u16,
+    pub p2p_port: u16,
+    pub peer:     String,
+    pub mainnet:  bool,
 }
 
 impl Default for FullnodeConfig {
     fn default() -> Self {
         FullnodeConfig {
-            port:    DEFAULT_PORT,
-            peer:    DEFAULT_PEER.to_string(),
-            mainnet: false,
+            port:     DEFAULT_PORT,
+            p2p_port: DEFAULT_P2P_PORT,
+            peer:     DEFAULT_PEER.to_string(),
+            mainnet:  false,
         }
     }
 }
 
-/// Parse CLI args: `[port_u16] [host:port_peer] [--mainnet]`
+/// Parse CLI args: `[port_u16] [host:port_peer] [--mainnet] [--p2p-port N]`
 /// Thứ tự không quan trọng — nhận biết bằng type/format.
 pub fn parse_fullnode_args(args: &[String]) -> FullnodeConfig {
-    // Port: first arg that parses as u16
-    let port = args.iter()
-        .find_map(|a| a.parse::<u16>().ok())
+    // --p2p-port N
+    let p2p_port = args.windows(2)
+        .find(|w| w[0] == "--p2p-port")
+        .and_then(|w| w[1].parse::<u16>().ok())
+        .unwrap_or(DEFAULT_P2P_PORT);
+
+    // Port: first arg that parses as u16 (không phải sau --p2p-port)
+    let skip_next: std::collections::HashSet<usize> = args.windows(2)
+        .enumerate()
+        .filter(|(_, w)| w[0] == "--p2p-port")
+        .map(|(i, _)| i + 1)
+        .collect();
+    let port = args.iter().enumerate()
+        .filter(|(i, _)| !skip_next.contains(i))
+        .find_map(|(_, a)| a.parse::<u16>().ok())
         .unwrap_or(DEFAULT_PORT);
 
     // Peer: first arg chứa ':' và không parse được thành u16
@@ -60,7 +76,7 @@ pub fn parse_fullnode_args(args: &[String]) -> FullnodeConfig {
 
     let mainnet = args.iter().any(|a| a == "--mainnet");
 
-    FullnodeConfig { port, peer, mainnet }
+    FullnodeConfig { port, p2p_port, peer, mainnet }
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -68,17 +84,28 @@ pub fn parse_fullnode_args(args: &[String]) -> FullnodeConfig {
 pub fn cmd_fullnode(args: &[String]) {
     let cfg = parse_fullnode_args(args);
 
-    println!("[fullnode] port={}  peer={}  network={}",
-        cfg.port, cfg.peer, if cfg.mainnet { "mainnet" } else { "testnet" });
+    println!("[fullnode] port={}  p2p={}  peer={}  network={}",
+        cfg.port, cfg.p2p_port, cfg.peer,
+        if cfg.mainnet { "mainnet" } else { "testnet" });
 
-    let peer    = cfg.peer.clone();
-    let mainnet = cfg.mainnet;
+    let peer     = cfg.peer.clone();
+    let mainnet  = cfg.mainnet;
+    let p2p_port = cfg.p2p_port;
 
     let rt = tokio::runtime::Runtime::new()
         .expect("tokio runtime");
 
     rt.block_on(async move {
-        // 1. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
+        // 1. P2P listener (blocking thread — pkt_node spawn internal threads per peer)
+        let node_cfg = if mainnet {
+            crate::pkt_node::NodeConfig::mainnet(p2p_port)
+        } else {
+            crate::pkt_node::NodeConfig::testnet(p2p_port)
+        };
+        let shared_chain = Arc::new(std::sync::Mutex::new(crate::storage::load_or_new()));
+        crate::pkt_node::run_pkt_node(node_cfg, Arc::clone(&shared_chain));
+
+        // 2. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
         tokio::task::spawn_blocking(move || {
             loop {
                 crate::pkt_sync::run_sync(&peer, mainnet);
@@ -87,7 +114,7 @@ pub fn cmd_fullnode(args: &[String]) {
             }
         });
 
-        // 2. pktscan REST API (async — chạy đến khi Ctrl+C)
+        // 3. pktscan REST API (async — chạy đến khi Ctrl+C)
         println!("[fullnode] web server on :{}", cfg.port);
         let bc = crate::storage::load_or_new();
         let db = Arc::new(tokio::sync::Mutex::new(bc));
@@ -110,16 +137,32 @@ mod tests {
     #[test]
     fn test_defaults_no_args() {
         let cfg = parse_fullnode_args(&[]);
-        assert_eq!(cfg.port,    DEFAULT_PORT);
-        assert_eq!(cfg.peer,    DEFAULT_PEER);
+        assert_eq!(cfg.port,     DEFAULT_PORT);
+        assert_eq!(cfg.p2p_port, DEFAULT_P2P_PORT);
+        assert_eq!(cfg.peer,     DEFAULT_PEER);
         assert!(!cfg.mainnet);
     }
 
     #[test]
     fn test_custom_port() {
         let cfg = parse_fullnode_args(&sv(&["9090"]));
-        assert_eq!(cfg.port, 9090);
-        assert_eq!(cfg.peer, DEFAULT_PEER);
+        assert_eq!(cfg.port,     9090);
+        assert_eq!(cfg.p2p_port, DEFAULT_P2P_PORT);
+        assert_eq!(cfg.peer,     DEFAULT_PEER);
+    }
+
+    #[test]
+    fn test_custom_p2p_port() {
+        let cfg = parse_fullnode_args(&sv(&["--p2p-port", "9333"]));
+        assert_eq!(cfg.p2p_port, 9333);
+        assert_eq!(cfg.port,     DEFAULT_PORT);
+    }
+
+    #[test]
+    fn test_p2p_port_not_confused_with_api_port() {
+        let cfg = parse_fullnode_args(&sv(&["8081", "--p2p-port", "9333"]));
+        assert_eq!(cfg.port,     8081);
+        assert_eq!(cfg.p2p_port, 9333);
     }
 
     #[test]
@@ -154,9 +197,10 @@ mod tests {
 
     #[test]
     fn test_all_args_together() {
-        let cfg = parse_fullnode_args(&sv(&["8082", "mynode.example.com:8333", "--mainnet"]));
-        assert_eq!(cfg.port,    8082);
-        assert_eq!(cfg.peer,    "mynode.example.com:8333");
+        let cfg = parse_fullnode_args(&sv(&["8082", "mynode.example.com:8333", "--mainnet", "--p2p-port", "9333"]));
+        assert_eq!(cfg.port,     8082);
+        assert_eq!(cfg.p2p_port, 9333);
+        assert_eq!(cfg.peer,     "mynode.example.com:8333");
         assert!(cfg.mainnet);
     }
 
@@ -185,8 +229,9 @@ mod tests {
     #[test]
     fn test_default_instance() {
         let cfg = FullnodeConfig::default();
-        assert_eq!(cfg.port,    DEFAULT_PORT);
-        assert_eq!(cfg.peer,    DEFAULT_PEER);
+        assert_eq!(cfg.port,     DEFAULT_PORT);
+        assert_eq!(cfg.p2p_port, DEFAULT_P2P_PORT);
+        assert_eq!(cfg.peer,     DEFAULT_PEER);
         assert!(!cfg.mainnet);
     }
 
