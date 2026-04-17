@@ -96,22 +96,26 @@ pub fn cmd_fullnode(args: &[String]) {
         .expect("tokio runtime");
 
     rt.block_on(async move {
-        // 1. Template server (p2p_port+1 = 8334) — pool và miner kết nối vào đây
-        // NOTE: P2P listener (8333) KHÔNG chạy trong fullnode vì sync peer = localhost
-        // → self-loop: P2P listener trống → sync detect "chain changed" → reset loop
-        // Để chạy P2P listener: dùng `blockchain-rust pkt-node 8333` độc lập
-        // và đảm bảo sync peer là external node (không phải chính VPS này).
+        // 1. P2P listener (8333) + template server (8334) — chia sẻ shared_chain
+        //
+        // shared_chain là nguồn sự thật duy nhất:
+        //   - Template server nhận NewBlock từ miner → commit vào shared_chain + DB
+        //   - P2P listener serve blocks từ shared_chain → sync đọc được block mới
+        //   - Sync kết nối localhost:8333, nhận block, cập nhật secondary indexes
+        //
+        // Không còn self-loop vì P2P listener KHÔNG trống — nó phản ánh chain thật
+        // (khởi tạo từ DB + được template server cập nhật real-time).
         let shared_chain = Arc::new(std::sync::Mutex::new(crate::storage::load_or_new()));
+        let node_cfg = if mainnet {
+            crate::pkt_node::NodeConfig::mainnet(p2p_port)
+        } else {
+            crate::pkt_node::NodeConfig::testnet(p2p_port)
+        };
+        let relay_hub     = crate::pkt_node::run_pkt_node(node_cfg, Arc::clone(&shared_chain));
+        let template_port = p2p_port + 1;
         {
-            let node_cfg = if mainnet {
-                crate::pkt_node::NodeConfig::mainnet(p2p_port)
-            } else {
-                crate::pkt_node::NodeConfig::testnet(p2p_port)
-            };
-            let relay_hub    = Arc::new(crate::pkt_relay::RelayHub::new());
-            let chain_tmpl   = Arc::clone(&shared_chain);
-            let hub_tmpl     = Arc::clone(&relay_hub);
-            let template_port = node_cfg.port + 1;
+            let chain_tmpl = Arc::clone(&shared_chain);
+            let hub_tmpl   = Arc::clone(&relay_hub);
             std::thread::spawn(move || {
                 crate::pkt_node::run_template_server(template_port, chain_tmpl, hub_tmpl);
             });
