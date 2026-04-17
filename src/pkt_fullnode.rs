@@ -122,9 +122,16 @@ pub fn cmd_fullnode(args: &[String]) {
         }
 
         // 2. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
+        // Sau mỗi lần sync terminate (kể cả DB reset), reload shared_chain từ DB
+        // để P2P listener không serve stale tip → tránh "chain changed" loop.
+        let shared_for_sync = Arc::clone(&shared_chain);
         tokio::task::spawn_blocking(move || {
             loop {
                 crate::pkt_sync::run_sync(&peer, mainnet);
+                // Reload shared_chain từ DB (sync có thể đã reset DB)
+                if let Ok(mut chain) = shared_for_sync.lock() {
+                    *chain = crate::storage::load_or_new();
+                }
                 eprintln!("[fullnode] sync terminated — restarting in {}s", RESTART_DELAY_SECS);
                 std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
             }
