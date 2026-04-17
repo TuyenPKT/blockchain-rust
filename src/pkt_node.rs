@@ -604,7 +604,7 @@ pub fn parse_node_args(args: &[String]) -> NodeConfig {
 //
 // Miner kết nối 127.0.0.1:(p2p_port+1) thay vì testnet node.
 
-type SharedChain = Arc<Mutex<crate::chain::Blockchain>>;
+pub type SharedChain = Arc<Mutex<crate::chain::Blockchain>>;
 
 fn handle_template_client(
     mut stream: std::net::TcpStream,
@@ -690,7 +690,7 @@ fn handle_template_client(
     }
 }
 
-fn run_template_server(port: u16, chain: SharedChain, relay_hub: Arc<RelayHub>) {
+pub fn run_template_server(port: u16, chain: SharedChain, relay_hub: Arc<RelayHub>) {
     let addr = format!("0.0.0.0:{}", port);
     let listener = match TcpListener::bind(&addr) {
         Ok(l) => l,
