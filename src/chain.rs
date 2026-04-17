@@ -13,8 +13,8 @@ use crate::staking::StakingPool;
 use crate::reward::RewardEngine;
 
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
-const BLOCK_TIME_TARGET_SECS: i64 = 60;  // 1 phút/block — phù hợp hashrate ~4 MH/s
-const MAX_DIFFICULTY: usize = 8;          // diff=9 cần ~286 phút ở 4 MH/s → bất khả thi
+const BLOCK_TIME_TARGET_SECS: i64 = 10;  // 10s/block — phù hợp hashrate ~1.5 MH/s VPS
+const MAX_DIFFICULTY: usize = 7;          // diff=7 ≈ 3 phút tối đa ở 1.5 MH/s
 const MAX_BLOCK_TX: usize = 100;
 
 pub struct Blockchain {

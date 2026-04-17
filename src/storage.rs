@@ -148,7 +148,7 @@ pub fn load_or_new() -> Blockchain {
             // v5.5: Kiểm tra và repair nếu phát hiện crash mid-write
             crate::wal::check_and_recover(&mut bc);
             println!(
-                "  📦 Loaded from RocksDB: height={}, utxos={}",
+                "  📦 Loaded from DB: height={}, utxos={}",
                 bc.chain.len() - 1,
                 bc.utxo_set.utxos.len()
             );
