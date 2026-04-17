@@ -141,6 +141,17 @@ pub fn snapshot_info() -> Result<Option<SnapshotInfo>, String> {
 use crate::chain::Blockchain;
 use crate::utxo::UtxoSet;
 
+/// Đọc height tip từ DB mà không load toàn bộ chain.
+/// Trả về 0 nếu DB chưa có dữ liệu.
+pub fn db_tip_height() -> u64 {
+    let Ok(db) = open_db() else { return 0; };
+    db.get(META_HEIGHT)
+        .ok()
+        .flatten()
+        .and_then(|v| std::str::from_utf8(&v).ok().and_then(|s| s.parse::<u64>().ok()))
+        .unwrap_or(0)
+}
+
 /// Load snapshot vào Blockchain struct. Nếu không có → genesis.
 pub fn load_or_new() -> Blockchain {
     match try_load_blockchain() {
@@ -163,6 +174,11 @@ pub fn load_or_new() -> Blockchain {
             Blockchain::new()
         }
     }
+}
+
+/// Phiên bản public, không in stdout — dùng bởi background refresh trong pktscan_api.
+pub fn try_load_blockchain_silent() -> Result<Option<Blockchain>, String> {
+    try_load_blockchain()
 }
 
 fn try_load_blockchain() -> Result<Option<Blockchain>, String> {

@@ -812,19 +812,27 @@ pub async fn serve(state: ScanDb, port: u16) {
     use crate::oracle::{OracleRegistry, LendingProtocol};
     use std::sync::Arc as StdArc;
 
-    // Sync chain + utxo_set + difficulty từ RocksDB mỗi 5s.
-    // Chỉ overwrite data fields — giữ nguyên mempool, staking, token_registry in-memory.
+    // Sync chain + utxo_set + difficulty từ RocksDB khi height thay đổi.
+    // Kiểm tra height mỗi 1s (nhanh, chỉ đọc meta key); chỉ load full khi có block mới.
+    // Giữ nguyên mempool, staking, token_registry in-memory.
     {
         let db_reload = Arc::clone(&state);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                let fresh = crate::storage::load_or_new();
-                let mut bc = db_reload.lock().await;
-                if fresh.chain.len() > bc.chain.len() {
-                    bc.chain      = fresh.chain;
-                    bc.utxo_set   = fresh.utxo_set;
-                    bc.difficulty = fresh.difficulty;
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                let db_height = crate::storage::db_tip_height();
+                let cur_len   = db_reload.lock().await.chain.len() as u64;
+                // cur_len - 1 = current height (genesis = height 0)
+                if db_height + 1 > cur_len {
+                    // Có block mới — load full (không print stdout)
+                    if let Ok(Some(fresh)) = crate::storage::try_load_blockchain_silent() {
+                        let mut bc = db_reload.lock().await;
+                        if fresh.chain.len() > bc.chain.len() {
+                            bc.chain      = fresh.chain;
+                            bc.utxo_set   = fresh.utxo_set;
+                            bc.difficulty = fresh.difficulty;
+                        }
+                    }
                 }
             }
         });
