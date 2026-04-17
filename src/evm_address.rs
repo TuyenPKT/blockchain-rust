@@ -1,82 +1,58 @@
 #![allow(dead_code)]
-//! v24.1 — EVM-Compatible Address Format
+//! v25.6 — PKT Address Format (0x-prefixed)
 //!
-//! Địa chỉ `0x...` tương thích ETH/BNB — Keccak-256 + EIP-55 checksum.
+//! Địa chỉ `0x...` — PKT dùng RIPEMD160(BLAKE3(compressed_pubkey)).
+//! Không dùng Keccak256 (đó là Ethereum). Consistent với pkt_script::verify_p2pkh_input.
 //!
-//! ## Quy trình derive (giống Ethereum hoàn toàn):
-//!   1. Uncompressed pubkey 64 bytes (bỏ prefix 0x04)
-//!   2. Keccak256(64 bytes) → 32 bytes
-//!   3. Lấy 20 bytes cuối → raw address
-//!   4. EIP-55 checksum: Keccak256(lowercase_hex), capitalize nếu nibble ≥ 8
-//!   5. Prepend `0x`
-//!
-//! ## Ví dụ kết quả:
-//!   `0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed`
+//! ## Quy trình derive:
+//!   1. compressed pubkey 33 bytes
+//!   2. BLAKE3(33 bytes) → 32 bytes
+//!   3. RIPEMD160(32 bytes) → 20 bytes (hash160)
+//!   4. "0x" + hex(hash160) → 42 ký tự
 //!
 //! ## Public API
 //!   `pubkey_to_evm_address(pubkey: &[u8]) -> String`   — từ 33/65-byte pubkey
 //!   `raw_to_evm_address(bytes: &[u8; 20]) -> String`   — từ 20-byte hash
 //!   `is_valid_evm_address(s: &str) -> bool`            — validate format
 
-use sha3::{Digest, Keccak256};
 
-// ── Core: pubkey → EVM address ─────────────────────────────────────────────
+// ── Core: pubkey → PKT address ─────────────────────────────────────────────
 
-/// Derive EVM-compatible địa chỉ từ secp256k1 public key.
+/// Derive PKT address từ secp256k1 public key.
 ///
 /// Chấp nhận:
 ///   - 33 bytes (compressed, 0x02/0x03 prefix)
-///   - 65 bytes (uncompressed, 0x04 prefix)
+///   - 65 bytes (uncompressed, 0x04 prefix) → tự động convert sang compressed
 ///
-/// Returns `"0x" + 40-char EIP-55 checksummed hex`.
+/// hash160 = RIPEMD160(BLAKE3(compressed)) — consistent với pkt_script::verify_p2pkh_input.
+/// Returns `"0x" + hex(hash160)` — 42 ký tự.
 pub fn pubkey_to_evm_address(pubkey_bytes: &[u8]) -> Result<String, String> {
-    // Chuyển sang uncompressed 64 bytes (không có prefix 0x04)
-    let uncompressed_64 = match pubkey_bytes.len() {
-        33 => {
-            // Compressed → uncompressed bằng secp256k1
-            use secp256k1::PublicKey;
-            let pk = PublicKey::from_slice(pubkey_bytes)
-                .map_err(|e| format!("invalid compressed pubkey: {e}"))?;
-            let full = pk.serialize_uncompressed(); // 65 bytes: 0x04 + X + Y
-            full[1..].to_vec()                      // bỏ 0x04 prefix → 64 bytes
-        }
+    use ripemd::{Ripemd160, Digest as _};
+    // Lấy compressed pubkey 33 bytes
+    let compressed: Vec<u8> = match pubkey_bytes.len() {
+        33 => pubkey_bytes.to_vec(),
         65 => {
             if pubkey_bytes[0] != 0x04 {
                 return Err("uncompressed pubkey must start with 0x04".into());
             }
-            pubkey_bytes[1..].to_vec() // bỏ 0x04 prefix → 64 bytes
+            // uncompressed → compressed qua secp256k1
+            use secp256k1::PublicKey;
+            let pk = PublicKey::from_slice(pubkey_bytes)
+                .map_err(|e| format!("invalid uncompressed pubkey: {e}"))?;
+            pk.serialize().to_vec() // 33 bytes compressed
         }
         n => return Err(format!("pubkey must be 33 or 65 bytes, got {n}")),
     };
 
-    // Keccak256(64 bytes) → 32 bytes → take last 20 bytes
-    let hash: [u8; 32] = Keccak256::digest(&uncompressed_64).into();
-    let raw: [u8; 20] = hash[12..].try_into()
-        .map_err(|_| "slice error".to_string())?;
-
+    // RIPEMD160(BLAKE3(compressed)) → 20 bytes
+    let b3  = blake3::hash(&compressed);
+    let raw: [u8; 20] = Ripemd160::digest(b3.as_bytes()).into();
     Ok(raw_to_evm_address(&raw))
 }
 
-/// Chuyển 20-byte raw address → EIP-55 checksummed `0x...` string.
+/// Chuyển 20-byte hash160 → `0x...` string (lowercase hex, không EIP-55).
 pub fn raw_to_evm_address(raw: &[u8; 20]) -> String {
-    let hex_lower = hex::encode(raw); // 40 lowercase hex chars
-    let checksum_hash: [u8; 32] = Keccak256::digest(hex_lower.as_bytes()).into();
-
-    let mut result = String::with_capacity(42);
-    result.push_str("0x");
-
-    for (i, c) in hex_lower.chars().enumerate() {
-        // nibble index i → byte index i/2, high nibble if i even, low if odd
-        let nibble_byte = checksum_hash[i / 2];
-        let nibble = if i % 2 == 0 { nibble_byte >> 4 } else { nibble_byte & 0x0f };
-        if nibble >= 8 {
-            result.push(c.to_ascii_uppercase());
-        } else {
-            result.push(c);
-        }
-    }
-
-    result
+    format!("0x{}", hex::encode(raw))
 }
 
 /// Parse `0x...` hoặc `0X...` → [u8; 20]. Không validate EIP-55.
@@ -148,30 +124,25 @@ mod tests {
     }
 
     #[test]
-    fn test_eip55_checksum_mixed_case() {
+    fn test_address_is_lowercase_hex() {
+        // PKT address = 0x + lowercase hex (không EIP-55)
         let pk = make_pubkey(5);
         let addr = pubkey_to_evm_address(&pk).unwrap();
-        // Địa chỉ phải có mixed case (không toàn lowercase, không toàn uppercase)
-        let hex_part = &addr[2..]; // bỏ 0x
-        let has_upper = hex_part.chars().any(|c| c.is_ascii_uppercase());
-        let has_lower = hex_part.chars().any(|c| c.is_ascii_lowercase());
-        // EIP-55 thường tạo mixed case (với xác suất ~50% mỗi ký tự)
-        // Chỉ fail nếu hoàn toàn lowercase hoặc uppercase với seed > 0
-        let _ = (has_upper, has_lower); // deterministic — chỉ kiểm tra roundtrip
-        // Validate EIP-55: re-apply checksum và so sánh
+        assert!(addr[2..].chars().all(|c| !c.is_ascii_uppercase()),
+            "PKT address phải lowercase hex");
+        // roundtrip: parse → raw_to_evm_address → same
         let raw = parse_evm_address(&addr).unwrap();
-        let rechecksum = raw_to_evm_address(&raw);
-        assert_eq!(addr, rechecksum, "EIP-55 checksum phải idempotent");
+        assert_eq!(addr, raw_to_evm_address(&raw));
     }
 
     #[test]
     fn test_raw_to_evm_address_known_vector() {
-        // Test vector từ EIP-55 spec: address chỉ digit → không uppercase
-        let raw = [0x52u8, 0x90, 0x8F, 0x89, 0x8b, 0x73, 0x18, 0x6c, 0xc0,
+        let raw = [0x52u8, 0x90, 0x8f, 0x89, 0x8b, 0x73, 0x18, 0x6c, 0xc0,
                    0x8e, 0x13, 0xdb, 0xf1, 0x84, 0xf9, 0x2e, 0xef, 0x37, 0x59, 0x58];
         let addr = raw_to_evm_address(&raw);
         assert!(addr.starts_with("0x"));
         assert_eq!(addr.len(), 42);
+        assert!(addr[2..].chars().all(|c| !c.is_ascii_uppercase()));
     }
 
     #[test]

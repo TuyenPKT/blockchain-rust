@@ -755,14 +755,15 @@ async fn peer_scan(seed_addr: String) -> Result<Vec<PeerInfo>, String> {
 
 // ── Wallet ────────────────────────────────────────────────────────────────────
 
-/// PKT hash160: RIPEMD160(blake3(pubkey)) — khác Bitcoin (dùng blake3 thay SHA256).
-/// Derive EVM address từ compressed secp256k1 pubkey (33 bytes).
-/// Pipeline: compressed → uncompressed 64B → Keccak256 → last 20B → EIP-55.
+/// PKT hash160: RIPEMD160(BLAKE3(compressed_pubkey)) — PKT dùng blake3 thay SHA256.
+/// Address format: "0x" + hex(hash160) — 42 ký tự.
+/// Consistent với pkt_script::verify_p2pkh_input.
 fn evm_address_from_pubkey(pk: &secp256k1::PublicKey) -> String {
-    let uncompressed = pk.serialize_uncompressed(); // 65 bytes: 0x04 + X + Y
-    let hash: [u8; 32] = Keccak256::digest(&uncompressed[1..]).into(); // hash 64 bytes
-    let raw = &hash[12..]; // last 20 bytes
-    eip55_checksum(raw)
+    use ripemd::{Ripemd160, Digest as _};
+    let compressed = pk.serialize(); // 33 bytes
+    let b3   = blake3::hash(&compressed);
+    let hash160: [u8; 20] = Ripemd160::digest(b3.as_bytes()).into();
+    format!("0x{}", hex::encode(hash160))
 }
 
 /// EIP-55: Keccak256(lowercase_hex) → capitalize nếu nibble ≥ 8.
@@ -950,7 +951,7 @@ struct UtxoInput {
 }
 
 /// Build + sign P2PKH legacy transaction (PKT dùng P2PKH, không phải segwit).
-/// Signing: blake3-double-hash của sighash preimage (PKT dùng blake3 thay SHA256d).
+/// Signing: BLAKE3(BLAKE3(preimage)) — PKT dùng blake3-double-hash thay SHA256d.
 #[tauri::command]
 fn wallet_tx_build(
     privkey_hex: String,
@@ -1009,10 +1010,10 @@ fn wallet_tx_build(
         preimage.extend_from_slice(&0u32.to_le_bytes());  // locktime
         preimage.extend_from_slice(&1u32.to_le_bytes());  // SIGHASH_ALL
 
-        // PKT wire sighash: SHA256d (same as Bitcoin P2PKH)
-        let h1  = sha2::Sha256::digest(&preimage);
-        let h2  = sha2::Sha256::digest(&h1);
-        let msg = Message::from_slice(&h2).map_err(|e| format!("msg error: {}", e))?;
+        // PKT sighash: BLAKE3(BLAKE3(preimage)) — xem pkt_script::pkt_double_hash
+        let h1  = blake3::hash(&preimage);
+        let h2  = blake3::hash(h1.as_bytes());
+        let msg = Message::from_slice(h2.as_bytes()).map_err(|e| format!("msg error: {}", e))?;
         let sig = secp.sign_ecdsa(&msg, &sk);
         let mut der = sig.serialize_der().to_vec();
         der.push(0x01); // SIGHASH_ALL
