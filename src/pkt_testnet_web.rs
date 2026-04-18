@@ -341,11 +341,10 @@ async fn ps_balance(
             let effective_script = if balance == 0 {
                 if let Some(legacy) = any_addr_to_script_hex_legacy(&addr) {
                     let legacy_bal = adb.get_balance(&legacy).unwrap_or(0);
-                    if legacy_bal > 0 { balance = legacy_bal; legacy }
-                    else { script.clone() }
-                } else { script.clone() }
-            } else { script.clone() };
-            let address = script_hex_to_address(&effective_script).unwrap_or_else(|| addr.clone());
+                    if legacy_bal > 0 { balance = legacy_bal; legacy } else { script }
+                } else { script }
+            } else { script };
+            let address = script_hex_to_address(&effective_script).unwrap_or(addr);
             Json(json!({
                 "address": address,
                 "balance": balance,
