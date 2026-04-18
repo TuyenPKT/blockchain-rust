@@ -392,6 +392,22 @@ pub fn cmd_pool(args: &[String]) {
     run_pool_server(miner_port, shared);
 }
 
+/// Khởi động pool trong current thread (blocking).
+/// Dùng bởi fullnode: gọi trong thread::spawn để không block.
+pub fn run_pool(node_addr: &str, miner_port: u16, stats_port: u16) {
+    let shared = Arc::new(PoolShared::new(node_addr));
+    match shared.refresh_template() {
+        Some(Message::Template { height, .. }) =>
+            println!("[pool] initial template: height={}", height),
+        Some(_) => println!("[pool] initial template: fetched"),
+        None    => eprintln!("[pool] warning: upstream {} not reachable (pool will retry)", node_addr),
+    }
+    run_template_refresh(Arc::clone(&shared));
+    let stats_shared = Arc::clone(&shared);
+    thread::spawn(move || run_stats_server(stats_port, stats_shared));
+    run_pool_server(miner_port, shared);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn unix_now() -> u64 {

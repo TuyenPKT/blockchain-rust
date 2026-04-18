@@ -24,6 +24,8 @@ use std::time::Duration;
 
 const DEFAULT_PORT:        u16  = 8081;
 const DEFAULT_P2P_PORT:    u16  = 8333;
+const DEFAULT_POOL_PORT:   u16  = 8337;
+const DEFAULT_STATS_PORT:  u16  = 8338;
 const DEFAULT_PEER:        &str = "seed.testnet.oceif.com:8333";
 const RESTART_DELAY_SECS:  u64  = 5;
 
@@ -121,7 +123,19 @@ pub fn cmd_fullnode(args: &[String]) {
             });
         }
 
-        // 2. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
+        // 2. Pool proxy (8337) — external miners kết nối vào đây
+        // Proxy tới template server (p2p_port+1) — chạy trong thread riêng.
+        {
+            let node_addr  = format!("127.0.0.1:{}", template_port);
+            let pool_port  = DEFAULT_POOL_PORT;
+            let stats_port = DEFAULT_STATS_PORT;
+            std::thread::spawn(move || {
+                crate::pkt_pool::run_pool(&node_addr, pool_port, stats_port);
+            });
+            println!("[fullnode] pool proxy on :{} → template :{}", pool_port, template_port);
+        }
+
+        // 3. Sync loop trong blocking thread (redb-safe: cùng process = shared Arc<Database>)
         // Sau mỗi lần sync terminate (kể cả DB reset), reload shared_chain từ DB
         // để P2P listener không serve stale tip → tránh "chain changed" loop.
         let shared_for_sync = Arc::clone(&shared_chain);
