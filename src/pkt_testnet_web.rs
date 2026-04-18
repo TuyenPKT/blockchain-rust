@@ -276,7 +276,8 @@ impl PathState {
 }
 
 fn not_synced() -> Response {
-    not_synced()
+    (StatusCode::SERVICE_UNAVAILABLE,
+     Json(json!({"error": "not_synced", "message": "Node is not yet synced"}))).into_response()
 }
 
 async fn ps_sync_status(State(ps): State<PathState>) -> impl IntoResponse {
