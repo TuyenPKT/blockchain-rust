@@ -125,16 +125,8 @@ impl AddrIndexDb {
 
     /// Clear all bal: and rich: entries (before rebuilding from UTXO set).
     pub fn clear_balance_index(&self) -> Result<(), SyncError> {
-        for prefix in &[b"bal:".as_ref(), b"rich:"] {
-            let keys: Vec<Vec<u8>> = self.kv.scan_prefix(prefix)
-                .into_iter()
-                .map(|(k, _)| k)
-                .collect();
-            for key in keys {
-                self.kv.delete(&key).map_err(SyncError::Db)?;
-            }
-        }
-        Ok(())
+        self.kv.delete_prefix(b"bal:").map_err(SyncError::Db)?;
+        self.kv.delete_prefix(b"rich:").map_err(SyncError::Db)
     }
 
     // ── Indexing ───────────────────────────────────────────────────────────────

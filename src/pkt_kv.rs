@@ -122,6 +122,30 @@ mod redb_impl {
             txn.commit().map_err(|e| e.to_string())
         }
 
+        /// Xóa tất cả keys có prefix trong 1 write transaction thay vì N.
+        /// Scan keys trong read txn trước (redb không cho read+write cùng lúc),
+        /// sau đó commit 1 lần duy nhất.
+        pub fn delete_prefix(&self, prefix: &[u8]) -> Result<(), String> {
+            let keys: Vec<Vec<u8>> = {
+                let txn   = self.db.begin_read().map_err(|e| e.to_string())?;
+                let table = txn.open_table(TABLE).map_err(|e| e.to_string())?;
+                table.range(prefix..).map_err(|e| e.to_string())?
+                    .filter_map(|r| r.ok())
+                    .map(|(k, _)| k.value().to_vec())
+                    .take_while(|k| k.starts_with(prefix))
+                    .collect()
+            };
+            if keys.is_empty() { return Ok(()); }
+            let txn = self.db.begin_write().map_err(|e| e.to_string())?;
+            {
+                let mut table = txn.open_table(TABLE).map_err(|e| e.to_string())?;
+                for key in &keys {
+                    table.remove(key.as_slice()).map_err(|e| e.to_string())?;
+                }
+            }
+            txn.commit().map_err(|e| e.to_string())
+        }
+
         // ── Batch write ───────────────────────────────────────────────────────
 
         /// Áp dụng nhiều put/delete trong 1 transaction — dùng cho bulk ops.
@@ -186,3 +210,48 @@ pub use redb_impl::RedbKv;
 
 /// KV backend duy nhất: redb (pure Rust).
 pub type Kv = RedbKv;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    static LOCK: Mutex<()> = Mutex::new(());
+
+    fn temp_kv() -> Kv {
+        let _g = LOCK.lock().unwrap();
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("pkt_kv_test_{}", ts));
+        Kv::open_rw(&path).unwrap()
+    }
+
+    #[test]
+    fn test_delete_prefix_removes_matching_keys() {
+        let kv = temp_kv();
+        kv.put(b"bal:abc", b"1").unwrap();
+        kv.put(b"bal:def", b"2").unwrap();
+        kv.put(b"rich:xyz", b"3").unwrap();
+        kv.delete_prefix(b"bal:").unwrap();
+        assert!(kv.get(b"bal:abc").unwrap().is_none());
+        assert!(kv.get(b"bal:def").unwrap().is_none());
+        assert!(kv.get(b"rich:xyz").unwrap().is_some(), "other prefix untouched");
+    }
+
+    #[test]
+    fn test_delete_prefix_empty_is_noop() {
+        let kv = temp_kv();
+        kv.put(b"other:key", b"v").unwrap();
+        kv.delete_prefix(b"bal:").unwrap();
+        assert!(kv.get(b"other:key").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_delete_prefix_all_keys_removed() {
+        let kv = temp_kv();
+        for i in 0u8..10 {
+            kv.put(&[b'p', b':', i], b"v").unwrap();
+        }
+        kv.delete_prefix(b"p:").unwrap();
+        assert!(kv.scan_prefix(b"p:").is_empty());
+    }
+}
