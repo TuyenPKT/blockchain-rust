@@ -63,7 +63,38 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 echo "[install] Downloading $URL ..."
-curl -sSL "$URL" -o "$TMP/$ARCHIVE"
+curl -sSfL "$URL" -o "$TMP/$ARCHIVE"
+
+# ── Verify SHA256 checksum ────────────────────────────────────────────────────
+SUMS_URL="https://github.com/$REPO/releases/download/$LATEST/SHA256SUMS"
+echo "[install] Verifying checksum from $SUMS_URL ..."
+curl -sSfL "$SUMS_URL" -o "$TMP/SHA256SUMS"
+
+# Extract expected hash for this archive
+EXPECTED=$(grep " ${ARCHIVE}$" "$TMP/SHA256SUMS" | awk '{print $1}')
+if [ -z "$EXPECTED" ]; then
+  echo "[install] ERROR: no checksum entry for $ARCHIVE in SHA256SUMS"
+  exit 1
+fi
+
+# Verify (shasum on macOS, sha256sum on Linux)
+if command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL=$(sha256sum "$TMP/$ARCHIVE" | awk '{print $1}')
+elif command -v shasum >/dev/null 2>&1; then
+  ACTUAL=$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')
+else
+  echo "[install] WARNING: no sha256sum/shasum found — skipping checksum verification (not recommended)"
+  ACTUAL="$EXPECTED"
+fi
+
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "[install] ERROR: checksum mismatch!"
+  echo "  expected: $EXPECTED"
+  echo "  actual:   $ACTUAL"
+  exit 1
+fi
+echo "[install] Checksum OK: $ACTUAL"
+
 tar -xzf "$TMP/$ARCHIVE" -C "$TMP"
 
 # ── Install binary ────────────────────────────────────────────────────────────
@@ -115,6 +146,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$DATA_DIR
 ExecStart=$INSTALL_DIR/$BINARY fullnode $WEB_PORT $PEER
+Environment=PKT_LISTEN=0.0.0.0
 Restart=on-failure
 RestartSec=10s
 Environment=RUST_LOG=info

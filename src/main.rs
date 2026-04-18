@@ -98,6 +98,7 @@ mod webhook;
 mod write_api;
 mod scam_registry;
 mod address_watch;
+mod url_guard;
 mod multi_chain;
 mod cli_token;
 mod cli_contract;

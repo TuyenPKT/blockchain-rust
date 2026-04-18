@@ -180,8 +180,11 @@ impl ApiKeyStore {
         if raw_key.is_empty() {
             return None;
         }
+        use subtle::ConstantTimeEq;
         let h = hash_api_key(raw_key);
-        self.data.keys.iter().find(|e| e.key_hash == h).map(|e| &e.role)
+        self.data.keys.iter().find(|e| {
+            e.key_hash.as_bytes().ct_eq(h.as_bytes()).into()
+        }).map(|e| &e.role)
     }
 
     /// Remove a key by key_id.  Returns `true` if found and removed.

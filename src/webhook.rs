@@ -311,6 +311,9 @@ async fn register_webhook(
     if parsed.url.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"url required"}))).into_response();
     }
+    if let Err(e) = crate::url_guard::validate_callback_url(&parsed.url) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response();
+    }
     let events: Vec<WebhookEventType> = parsed.events.iter()
         .filter_map(|s| WebhookEventType::from_str(s))
         .collect();

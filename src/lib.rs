@@ -8,6 +8,7 @@ pub mod script;
 pub mod transaction;
 pub mod reward;
 pub mod api_auth;
+pub mod url_guard;
 pub mod pkt_address;
 pub mod pkt_health;
 pub mod pkt_export;

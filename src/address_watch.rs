@@ -310,9 +310,9 @@ async fn post_watch(
         return err_resp(StatusCode::BAD_REQUEST, e);
     }
 
-    // Validate callback_url (basic: must start with http)
-    if !r.callback_url.starts_with("http://") && !r.callback_url.starts_with("https://") {
-        return err_resp(StatusCode::BAD_REQUEST, "callback_url must be http or https");
+    // Validate callback_url — reject SSRF targets (loopback, private, link-local)
+    if let Err(e) = crate::url_guard::validate_callback_url(&r.callback_url) {
+        return err_resp(StatusCode::BAD_REQUEST, e);
     }
 
     // start_height = chain tip so watches only fire on NEW activity

@@ -92,6 +92,8 @@ futures = "0.3"
 sha3 = "0.10"
 # v25.5: redb — pure-Rust KV backend (unconditional, RocksDB removed)
 redb = "2"
+# security: constant-time comparison cho API key hash
+subtle = "2"
 
 [features]
 default = []

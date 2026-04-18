@@ -28,8 +28,9 @@
 use std::path::PathBuf;
 
 use axum::{
-    extract::State,
+    extract::{Request, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::post,
     Json, Router,
@@ -103,6 +104,7 @@ impl RpcResponse {
 pub struct RpcState {
     pub sync_path:    PathBuf,
     pub mempool_path: PathBuf,
+    pub auth:         crate::api_auth::AuthDb,
 }
 
 impl RpcState {
@@ -349,8 +351,30 @@ fn method_getnetworkinfo(id: Value, state: &RpcState) -> RpcResponse {
 
 async fn handle_rpc(
     State(state): State<RpcState>,
-    body: axum::body::Bytes,
+    request: Request,
 ) -> impl IntoResponse {
+    // Require a valid API key (any role) — reject unauthenticated callers
+    let has_role = request.extensions().get::<crate::api_auth::ApiRole>().is_some();
+    if !has_role {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "jsonrpc": "2.0",
+                "error": {"code": -32600, "message": "API key required — X-Api-Key header"},
+                "id": null
+            })),
+        ).into_response();
+    }
+
+    let body = match axum::body::to_bytes(request.into_body(), 64 * 1024).await {
+        Ok(b)  => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({
+            "jsonrpc": "2.0",
+            "error": {"code": -32700, "message": "cannot read request body"},
+            "id": null
+        }))).into_response(),
+    };
+
     // Parse request body
     let req: RpcRequest = match serde_json::from_slice(&body) {
         Ok(r)  => r,
@@ -371,13 +395,19 @@ async fn handle_rpc(
 // ── Router ────────────────────────────────────────────────────────────────────
 
 /// Build JSON-RPC router với default DB paths.
-pub fn rpc_router() -> Router {
+/// `auth` được dùng bởi `auth_middleware` để gắn ApiRole vào request trước khi handle_rpc kiểm tra.
+pub fn rpc_router(auth: crate::api_auth::AuthDb) -> Router {
     let state = RpcState {
         sync_path:    crate::pkt_testnet_web::default_sync_db_path(),
         mempool_path: crate::pkt_mempool_sync::default_mempool_db_path(),
+        auth:         auth.clone(),
     };
     Router::new()
         .route("/rpc", post(handle_rpc))
+        .layer(middleware::from_fn_with_state(
+            auth,
+            crate::api_auth::auth_middleware,
+        ))
         .with_state(state)
 }
 
@@ -403,7 +433,11 @@ mod tests {
         let sync_path    = std::env::temp_dir().join(format!("pkt_rpc_state_sync_{}_{}", pid, n));
         let mempool_path = std::env::temp_dir().join(format!("pkt_rpc_state_mem_{}_{}", pid, n));
         let sdb = SyncDb::open(&sync_path).unwrap();
-        let state = RpcState { sync_path, mempool_path };
+        let state = RpcState {
+            sync_path,
+            mempool_path,
+            auth: crate::api_auth::ApiKeyStore::load_default(),
+        };
         (sdb, state)
     }
 
