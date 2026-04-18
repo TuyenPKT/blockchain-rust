@@ -22,6 +22,7 @@ use std::process::Child;
 use std::sync::{Arc, Mutex};
 
 use axum::{
+    response::Response,
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::IntoResponse,
@@ -262,6 +263,20 @@ impl PathState {
     fn open_label(&self) -> Option<LabelDb> {
         LabelDb::open_read_only(&self.label_path).ok()
     }
+
+    fn open_sdb(&self) -> Option<SyncDb> {
+        SyncDb::open_read_only(&self.sync_path).ok()
+    }
+
+    fn sync_height(&self) -> u64 {
+        self.open_sdb()
+            .and_then(|sdb| sdb.get_sync_height().ok().flatten())
+            .unwrap_or(0)
+    }
+}
+
+fn not_synced() -> Response {
+    not_synced()
 }
 
 async fn ps_sync_status(State(ps): State<PathState>) -> impl IntoResponse {
@@ -277,7 +292,7 @@ async fn ps_sync_status(State(ps): State<PathState>) -> impl IntoResponse {
 
 async fn ps_stats(State(ps): State<PathState>) -> impl IntoResponse {
     match ps.open() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some((sdb, udb)) => {
             let state = TestnetState::new(sdb, udb);
             let stats = crate::pkt_explorer_api::query_sync_stats(&state.sync_db, &state.utxo_db);
@@ -291,7 +306,7 @@ async fn ps_headers(
     Query(params): Query<HeaderCursorParams>,
 ) -> impl IntoResponse {
     match ps.open() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some((sdb, _udb)) => {
             match crate::pkt_explorer_api::query_headers(
                 &sdb, params.limit.min(100), params.cursor,
@@ -315,7 +330,7 @@ async fn ps_header(
     Path(height): Path<u64>,
 ) -> impl IntoResponse {
     match ps.open() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some((sdb, _udb)) => match crate::pkt_explorer_api::query_header(&sdb, height) {
             Ok(Some(v)) => Json(v).into_response(),
             Ok(None)    => (StatusCode::NOT_FOUND, Json(json!({"error":"not found"}))).into_response(),
@@ -334,7 +349,7 @@ async fn ps_balance(
                            Json(json!({"error":"invalid address"}))).into_response(),
     };
     match ps.open_addr() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some(adb) => {
             // Thử raw P2PKH format trước (data mới), fallback JSON format (data cũ)
             let mut balance = adb.get_balance(&script).unwrap_or(0);
@@ -359,7 +374,7 @@ async fn ps_utxos(
     Path(script): Path<String>,
 ) -> impl IntoResponse {
     match ps.open() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some((_sdb, udb)) => {
             // Nếu input là bech32/Base58 address, decode sang script_hex trước
             let script_wire   = any_addr_to_script_hex(&script);
@@ -396,7 +411,7 @@ async fn ps_addr_utxos(
         return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid address"}))).into_response();
     }
     match ps.open() {
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"not synced"}))).into_response(),
+        None => not_synced(),
         Some((_sdb, udb)) => {
             // Thử wire format trước, nếu rỗng thử legacy
             let mut utxos = Vec::new();
@@ -911,7 +926,7 @@ async fn ps_tx_broadcast(
     }
 
     // 4. Fire-and-forget relay — không block response, raw moved vào closure (không clone)
-    let our_height = ps.open().and_then(|(sdb, _)| sdb.get_sync_height().ok().flatten()).unwrap_or(0) as i32;
+    let our_height = ps.sync_height() as i32;
     let cfg = PeerConfig { our_height, connect_timeout_secs: 5, read_timeout_secs: 3, max_retries: 0, ..Default::default() };
     tokio::spawn(tokio::task::spawn_blocking(move || {
         let addr_str = format!("{}:{}", cfg.host, cfg.port);
