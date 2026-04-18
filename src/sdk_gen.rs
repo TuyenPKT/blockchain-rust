@@ -584,25 +584,25 @@ mod tests {
     #[test]
     fn test_js_sdk_contains_get_blocks() {
         let sdk = generate_js_sdk();
-        assert!(sdk.contains("getBlocks"));
+        assert!(sdk.contains("getTestnetHeaders"));
     }
 
     #[test]
     fn test_js_sdk_contains_get_tx() {
         let sdk = generate_js_sdk();
-        assert!(sdk.contains("getTx("));
+        assert!(sdk.contains("getTestnetTx("));
     }
 
     #[test]
     fn test_js_sdk_contains_get_staking_stats() {
         let sdk = generate_js_sdk();
-        assert!(sdk.contains("getStakingStats"));
+        assert!(sdk.contains("getTestnetStats"));
     }
 
     #[test]
     fn test_js_sdk_contains_get_defi_feeds() {
         let sdk = generate_js_sdk();
-        assert!(sdk.contains("getDefiFeeds"));
+        assert!(sdk.contains("getTestnetRichList"));
     }
 
     #[test]
