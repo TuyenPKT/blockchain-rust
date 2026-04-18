@@ -17,9 +17,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 use tauri::Emitter;
-use sha3::{Keccak256, Digest as Keccak256Digest};
 use hmac::{Hmac, Mac};
-use sha2::Sha512;
+use sha2::{Sha512, Digest as Sha2Digest};
 use axum;
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -766,18 +765,6 @@ fn evm_address_from_pubkey(pk: &secp256k1::PublicKey) -> String {
     format!("0x{}", hex::encode(hash160))
 }
 
-/// EIP-55: Keccak256(lowercase_hex) → capitalize nếu nibble ≥ 8.
-fn eip55_checksum(raw20: &[u8]) -> String {
-    let hex_lower = hex::encode(raw20);
-    let chk: [u8; 32] = Keccak256::digest(hex_lower.as_bytes()).into();
-    let mut out = String::with_capacity(42);
-    out.push_str("0x");
-    for (i, c) in hex_lower.chars().enumerate() {
-        let nibble = if i % 2 == 0 { chk[i / 2] >> 4 } else { chk[i / 2] & 0x0f };
-        out.push(if nibble >= 8 { c.to_ascii_uppercase() } else { c });
-    }
-    out
-}
 
 /// Parse EVM address `0x...` → [u8; 20].
 fn parse_evm_address(addr: &str) -> Result<[u8; 20], String> {
@@ -790,7 +777,7 @@ fn parse_evm_address(addr: &str) -> Result<[u8; 20], String> {
     bytes.try_into().map_err(|_| "slice error".to_string())
 }
 
-/// Tạo ví PKT mới: secp256k1 keypair → EVM address (Keccak256 + EIP-55).
+/// Tạo ví PKT mới: secp256k1 keypair → EVM address (RIPEMD160(BLAKE3)).
 #[tauri::command]
 fn wallet_generate(_network: String) -> Result<serde_json::Value, String> {
     let secp = secp256k1::Secp256k1::new();
