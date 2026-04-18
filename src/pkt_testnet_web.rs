@@ -901,71 +901,46 @@ async fn ps_tx_broadcast(
         }
     };
 
-    // 3. Relay lên PKT testnet peer (fire-and-forget, 10s timeout)
-    let our_height = ps.open().and_then(|(sdb, _)| sdb.get_sync_height().ok().flatten()).unwrap_or(0) as i32;
-    let cfg = PeerConfig { our_height, connect_timeout_secs: 10, read_timeout_secs: 10, max_retries: 0, ..Default::default() };
-    let relay_err: Option<String> = tokio::task::spawn_blocking({
-        let raw = raw.clone();
-        let _txid_bytes: [u8; 32] = hex::decode(&txid).ok()
-            .and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32]);
-        move || {
-            let addr_str = format!("{}:{}", cfg.host, cfg.port);
-            let sock_addr = {
-                use std::net::ToSocketAddrs;
-                match addr_str.to_socket_addrs().ok().and_then(|mut i| i.next()) {
-                    Some(a) => a,
-                    None    => return Err(format!("cannot resolve {}", addr_str)),
-                }
-            };
-            let Ok(mut stream) = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(cfg.connect_timeout_secs))
-            else { return Err("connect failed".to_string()); };
-            stream.set_read_timeout(Some(Duration::from_secs(cfg.read_timeout_secs))).ok();
-            if do_handshake(&mut stream, &cfg).is_err() { return Err("handshake failed".to_string()); }
-
-            // Gửi TX trực tiếp dưới dạng "tx" message
-            let mut cmd = [0u8; 12];
-            cmd[..2].copy_from_slice(b"tx");
-            let tx_msg = PktMsg::Unknown { command: cmd, payload: raw };
-            if send_msg(&mut stream, tx_msg, TESTNET_MAGIC).is_err() { return Err("send tx failed".to_string()); }
-            let _ = stream.flush();
-
-            // Đọc response 3s để bắt reject message
-            stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
-            loop {
-                match crate::pkt_peer::recv_msg(&mut stream, TESTNET_MAGIC) {
-                    Ok(PktMsg::Ping { nonce }) => {
-                        let _ = send_msg(&mut stream, PktMsg::Pong { nonce }, TESTNET_MAGIC);
-                    }
-                    Ok(PktMsg::Unknown { command, payload }) => {
-                        let cmd_str = std::str::from_utf8(&command)
-                            .unwrap_or("?").trim_matches('\0');
-                        if cmd_str == "reject" {
-                            let reason = String::from_utf8_lossy(&payload).to_string();
-                            return Err(format!("rejected: {}", reason));
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(_) => break, // timeout → không có reject → ok
-                }
-            }
-            Ok::<(), String>(())
-        }
-    }).await.ok().and_then(|r| r.err());
-
-    if let Some(err) = relay_err {
-        (StatusCode::BAD_GATEWAY, Json(json!({"error": format!("relay: {}", err), "txid": txid}))).into_response()
-    } else {
-        // v23.6: store broadcast TX in local MempoolDb so miner template includes it
-        if let Ok(mdb) = MempoolDb::open(&ps.mempool_path) {
-            let ts_ns = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0);
-            // fee_rate unknown without UTXO lookup — use min (1 msat/vB) so TX is included
-            let _ = mdb.put_tx(&txid, &raw, 1, ts_ns);
-        }
-        Json(json!({"txid": txid, "status": "broadcast"})).into_response()
+    // 3. Store vào local mempool ngay — miner template sẽ bao gồm TX này
+    if let Ok(mdb) = MempoolDb::open(&ps.mempool_path) {
+        let ts_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let _ = mdb.put_tx(&txid, &raw, 1, ts_ns);
     }
+
+    // 4. Fire-and-forget relay — không block response, raw moved vào closure (không clone)
+    let our_height = ps.open().and_then(|(sdb, _)| sdb.get_sync_height().ok().flatten()).unwrap_or(0) as i32;
+    let cfg = PeerConfig { our_height, connect_timeout_secs: 5, read_timeout_secs: 3, max_retries: 0, ..Default::default() };
+    tokio::spawn(tokio::task::spawn_blocking(move || {
+        let addr_str = format!("{}:{}", cfg.host, cfg.port);
+        let sock_addr = {
+            use std::net::ToSocketAddrs;
+            match addr_str.to_socket_addrs().ok().and_then(|mut i| i.next()) {
+                Some(a) => a,
+                None    => return,
+            }
+        };
+        let Ok(mut stream) = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(cfg.connect_timeout_secs))
+        else { return };
+        stream.set_read_timeout(Some(Duration::from_secs(cfg.read_timeout_secs))).ok();
+        if do_handshake(&mut stream, &cfg).is_err() { return; }
+        let mut cmd = [0u8; 12];
+        cmd[..2].copy_from_slice(b"tx");
+        let tx_msg = PktMsg::Unknown { command: cmd, payload: raw };
+        if send_msg(&mut stream, tx_msg, TESTNET_MAGIC).is_err() { return; }
+        let _ = stream.flush();
+        // Đọc reject message nếu có (best-effort, 3s)
+        loop {
+            match crate::pkt_peer::recv_msg(&mut stream, TESTNET_MAGIC) {
+                Ok(PktMsg::Ping { nonce }) => { let _ = send_msg(&mut stream, PktMsg::Pong { nonce }, TESTNET_MAGIC); }
+                Ok(_) | Err(_) => break,
+            }
+        }
+    }));
+
+    Json(json!({"txid": txid, "status": "broadcast"})).into_response()
 }
 
 // ── Search handler ─────────────────────────────────────────────────────────────
