@@ -204,12 +204,13 @@
 
 <!-- ── Hero ── -->
 <div class="dev-hero">
-  <div class="hero-badge">Developer Portal · v19.9</div>
+  <div class="hero-badge">Developer Portal · v24.8</div>
   <h1>Build on <span style="color:var(--accent)">PKT</span></h1>
   <p>REST API, WebSocket, JS/TS SDK, và Webhooks — mọi thứ cần để xây dựng ứng dụng trên nền PKT blockchain.</p>
   <div class="hero-btns">
     <a class="btn-hero-primary" href="#quickstart">Quickstart</a>
-    <a class="btn-hero-ghost"   href="/blockchain-rust/playground">API Playground</a>
+    <a class="btn-hero-ghost"   href="#api-reference">API Reference</a>
+    <a class="btn-hero-ghost"   href="/blockchain-rust/playground">Playground</a>
     <a class="btn-hero-ghost"   href="/blockchain-rust/webhooks">Webhooks</a>
   </div>
 </div>
@@ -465,8 +466,18 @@ app.<span class="c-fn">post</span>(<span class="c-str">'/hook'</span>, (req, res
     </div>
   </div>
 
+  <!-- ── API Reference (Swagger UI) ── -->
+  <div id="api-reference">
+    <div class="section-title">API Reference</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div id="swagger-ui"></div>
+    </div>
+  </div>
+
 </div><!-- /dev-body -->
 
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
 <script src="/blockchain-rust/web/js/shared.js?v=24.0"></script>
 <script>
 function copyCode(btn) {
@@ -477,6 +488,15 @@ function copyCode(btn) {
     setTimeout(() => { btn.textContent = orig; }, 1500);
   });
 }
+
+SwaggerUIBundle({
+  url:    (window.API_BASE || '') + '/api/openapi.json',
+  dom_id: '#swagger-ui',
+  presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+  layout: 'BaseLayout',
+  deepLinking: true,
+  defaultModelsExpandDepth: 0,
+});
 </script>
 </body>
 </html>

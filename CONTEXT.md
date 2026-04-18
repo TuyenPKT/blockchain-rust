@@ -98,7 +98,7 @@
 - [x] v24.6 — **Tokenomics 21M PKT**: `INITIAL_BLOCK_REWARD=20 PKT`, `HALVING_INTERVAL=525,000 blocks` (~365 ngày), `MAX_SUPPLY=21,000,000 PKT` chính xác
 - [x] v24.6.1 — **Network Config**: `src/pkt_config.rs` single source of truth cho tất cả network params; fix hardcode `Node.tsx` (8334→8333), `address.js` (API_BASE), `lib.rs` (seed_p2p())
 - [ ] v24.7 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
-- [ ] v24.8 — **Developer Docs**: OpenAPI spec đầy đủ; quick-start guide
+- [x] v24.8 — **Developer Docs**: OpenAPI 3.0.3 spec (`GET /api/openapi.json`); Swagger UI nhúng vào dev portal
 - [ ] v24.9 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
 - [ ] v24.10 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
 

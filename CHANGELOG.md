@@ -4,6 +4,29 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.8 — Developer Docs (2026-04-18)
+
+### Added
+- `GET /api/openapi.json` — OpenAPI 3.0.3 spec với tất cả routes `/api/testnet/*` thực tế (cập nhật từ v9.8 lên v24.8)
+- Merge `openapi_router()` vào `testnet_web_router()` sau `with_state` (tránh `Router<PathState>` type mismatch)
+- `pub mod openapi` trong `lib.rs` để `pkt_testnet_web` có thể dùng `crate::openapi`
+- Swagger UI (CDN unpkg v5) nhúng vào `web/dev/index.html` — load spec từ `/api/openapi.json`
+- Nút "API Reference" trong hero buttons → scroll xuống Swagger UI
+
+### Files
+- `src/openapi.rs` — rewrite hoàn toàn: đúng routes `/api/testnet/*`, server URL `oceif.com`, version `24.8`, schemas đầy đủ
+- `src/lib.rs` — thêm `pub mod openapi`
+- `src/pkt_testnet_web.rs` — merge `openapi_router()` sau `with_state(ps)`
+- `web/dev/index.html` — Swagger UI section, nút API Reference, badge v24.8
+
+### Tests
+- +20 tests openapi (23 total trong module)
+
+### Gotcha
+- `openapi_router()` trả `Router<()>` — phải merge sau `.with_state(ps)` (không phải trước), vì trước đó router đã typed `Router<PathState>`
+
+---
+
 ## v25.5 — Remove RocksDB (2026-04-16)
 
 ### Added

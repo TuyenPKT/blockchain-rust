@@ -39,3 +39,4 @@ pub mod pkt_snapshot;
 pub mod pkt_explorer_api;
 pub mod pkt_sync_ui;
 pub mod pkt_testnet_web;
+pub mod openapi;
