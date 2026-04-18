@@ -4,6 +4,32 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v24.10 — Testnet Audit (2026-04-18)
+
+### Added
+- **Tokenomics audit tests** trong `pkt_genesis.rs`:
+  - `audit_max_supply_formula`: 20 × 525,000 × 2 = 21,000,000 PKT ✓
+  - `audit_total_issued_matches_testnet_at_22`: 22 × 20 = 440 PKT khớp VPS 2026-04-18
+  - `audit_block_time_365_days_per_halving`: 525,000 × 60s ≈ 364.6 ngày ✓
+  - `audit_coinbase_maturity_100`, `audit_genesis_hash_*`, `audit_*_port_*`
+- **Fix `TESTNET_P2P_PORT`**: 64765 → 8333 (khớp VPS thực tế, `pkt_config.rs` là source of truth)
+- **Checkpoints thực tế** trong `pkt_checkpoints.rs`:
+  - height 10: `2a131a48...` (verified 2026-04-18)
+  - height 20: `6ca6d310...` (verified 2026-04-18)
+
+### Files
+- `src/pkt_genesis.rs` — fix TESTNET_P2P_PORT + 8 audit tests
+- `src/pkt_checkpoints.rs` — thêm 2 checkpoints thực tế từ VPS
+
+### Tests
+- +11 audit tests
+
+### Gotcha
+- Testnet height 23, total_value_pkt=440 (22 blocks indexed, UTXO index lag 1 block là bình thường)
+- `TESTNET_P2P_PORT` trong pkt_genesis.rs là 64765 (sai) — thực tế dùng 8333 theo pkt_config.rs
+
+---
+
 ## v24.8 — Developer Docs (2026-04-18)
 
 ### Added

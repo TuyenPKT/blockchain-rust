@@ -65,6 +65,16 @@ pub const TESTNET_CHECKPOINTS: &[Checkpoint] = &[
         0,
         b"00da8943f3f7684e0b8dac45d18978666773411d6c6a818b7bd75ea1f31cc970",
     ),
+    // height 10 — verified 2026-04-18 via /api/testnet/block/10
+    Checkpoint::from_hex(
+        10,
+        b"2a131a485119536fd2d2c80cf61cfbde7858ed39ca88ba0e6451bc51347fc648",
+    ),
+    // height 20 — verified 2026-04-18 via /api/testnet/block/20
+    Checkpoint::from_hex(
+        20,
+        b"6ca6d310d1724e99614d3b6a3acf7a1e5ed83dda3a5c7e8d636d3240522cac0a",
+    ),
 ];
 
 pub const MAINNET_CHECKPOINTS: &[Checkpoint] = &[

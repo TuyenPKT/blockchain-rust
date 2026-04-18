@@ -100,7 +100,7 @@
 - [ ] v24.7 — **Testnet Faucet**: Web UI → gửi test PKT; rate-limit 1/IP/24h
 - [x] v24.8 — **Developer Docs**: OpenAPI 3.0.3 spec (`GET /api/openapi.json`); Swagger UI nhúng vào dev portal
 - [ ] v24.9 — **Multi-node Bootstrap**: 3+ bootstrap nodes độc lập; peer health monitoring
-- [ ] v24.10 — **Mainnet Prep**: checkpoints thực tế, genesis verify, tokenomics audit
+- [x] v24.10 — **Testnet Audit**: tokenomics verify (21M PKT ✓), genesis hash verify, checkpoints height 10+20, fix TESTNET_P2P_PORT 64765→8333
 
 ### Era 32 — Storage Migration redb (v25.x) ← ĐANG LÀM
 - [x] v25.0 — **RocksKv Abstraction**: `src/pkt_kv.rs` trait `Kv`; `RocksKv` impl; tất cả callers dùng `Kv` interface

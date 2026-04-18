@@ -46,7 +46,7 @@ pub const REGTEST_MAGIC:  [u8; 4] = [0xda, 0xb5, 0xbf, 0xfa];
 // ── Network ports ───────────────────────────────────────────────────────────
 
 pub const MAINNET_P2P_PORT:  u16 = 64764;
-pub const TESTNET_P2P_PORT:  u16 = 64765;
+pub const TESTNET_P2P_PORT:  u16 = 8333;   // OCEIF testnet thực tế (pkt_config.rs là source of truth)
 pub const REGTEST_P2P_PORT:  u16 = 18444;
 
 pub const MAINNET_RPC_PORT:  u16 = 64766;
@@ -606,5 +606,69 @@ mod tests {
         for peer in TESTNET_BOOTSTRAP_PEERS {
             assert!(peer.contains(':'), "peer '{}' missing port", peer);
         }
+    }
+
+    // ── Tokenomics audit ──────────────────────────────────────────────────
+
+    #[test]
+    fn audit_max_supply_formula() {
+        // 20 PKT/block × 525,000 blocks = 10,500,000 PKT/era
+        // Tổng chuỗi hình học: era0 × 2 = 21,000,000 PKT
+        let era0 = INITIAL_BLOCK_REWARD_PKT * HALVING_INTERVAL;
+        assert_eq!(era0 * 2, MAX_SUPPLY_PKT, "MAX_SUPPLY = 2 × first_era_total");
+    }
+
+    #[test]
+    fn audit_total_issued_matches_testnet_at_22() {
+        // Testnet ngày 2026-04-18: height=23, total_value_pkt=440 (22 blocks mined)
+        // UTXO index lag 1 block → 22 × 20 = 440 PKT
+        let p = PktNetworkParams::testnet();
+        let issued_pkt = total_issued_to(22, &p) / PAKLETS_PER_PKT;
+        assert_eq!(issued_pkt, 440, "22 blocks × 20 PKT = 440 PKT");
+    }
+
+    #[test]
+    fn audit_testnet_port_matches_actual_network() {
+        // VPS thực tế chạy trên port 8333 — phải khớp với TESTNET_P2P_PORT
+        assert_eq!(TESTNET_P2P_PORT, 8333, "TESTNET_P2P_PORT phải là 8333 (thực tế VPS)");
+    }
+
+    #[test]
+    fn audit_mainnet_port_matches_actual_network() {
+        assert_eq!(MAINNET_P2P_PORT, 64764, "MAINNET_P2P_PORT phải là 64764");
+    }
+
+    #[test]
+    fn audit_genesis_hash_starts_with_zeros() {
+        // Hash hợp lệ phải bắt đầu bằng ít nhất 2 số 0 (difficulty proof)
+        assert!(TESTNET_GENESIS_HASH.starts_with("00"), "testnet genesis hash must start with 00");
+        assert!(MAINNET_GENESIS_HASH.starts_with("00"), "mainnet genesis hash must start with 00");
+    }
+
+    #[test]
+    fn audit_genesis_hash_length_64() {
+        assert_eq!(TESTNET_GENESIS_HASH.len(), 64);
+        assert_eq!(MAINNET_GENESIS_HASH.len(), 64);
+        assert_eq!(REGTEST_GENESIS_HASH.len(), 64);
+    }
+
+    #[test]
+    fn audit_genesis_timestamp_after_2026() {
+        // OCEIF launch: 2026-04-07 → unix > 1_775_000_000
+        assert!(TESTNET_GENESIS_TIME > 1_775_000_000, "testnet genesis timestamp quá cũ");
+        assert!(MAINNET_GENESIS_TIME > 1_775_000_000, "mainnet genesis timestamp quá cũ");
+    }
+
+    #[test]
+    fn audit_block_time_365_days_per_halving() {
+        // 525,000 blocks × 60s = 31,500,000s ≈ 364.6 ngày (~1 năm)
+        let secs = HALVING_INTERVAL * TARGET_BLOCK_TIME_SECS;
+        let days = secs / 86_400;
+        assert!((360..=370).contains(&days), "halving interval phải ~365 ngày, got {days}");
+    }
+
+    #[test]
+    fn audit_coinbase_maturity_100() {
+        assert_eq!(COINBASE_MATURITY, 100, "coinbase maturity chuẩn Bitcoin = 100 blocks");
     }
 }
