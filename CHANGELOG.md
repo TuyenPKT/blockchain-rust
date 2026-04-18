@@ -4,6 +4,43 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v25.7 — Security Hardening (2026-04-19)
+
+### Added
+- `src/url_guard.rs` — SSRF guard: `validate_callback_url()` block loopback/RFC1918/link-local/IPv4-mapped IPv6; 14 tests
+- `subtle = "2"` dep — constant-time API key hash comparison trong `api_auth.rs::validate()`
+- `POST /rpc` yêu cầu API key: `rpc_router(auth)` + `auth_middleware` + 401 nếu thiếu role
+- Default bind `127.0.0.1` (opt-in `PKT_LISTEN=0.0.0.0`); systemd unit set `PKT_LISTEN=0.0.0.0` tự động
+- `is_valid_date_format()` trong `audit_log.rs` — chặn path traversal qua `?date=../..`
+- GraphQL `.limit_depth(5)` + `.limit_complexity(100)` — chặn DoS query
+- `ZtConfig.trust_proxy: bool` từ `PKT_TRUSTED_PROXY=1` — XFF chỉ tin khi có proxy
+- `ZtConfig.max_tracked_ips: 10_000` — cap rate-limit map, purge expired, fail-closed khi full
+- SHA256SUMS verification trong `install.sh` trước khi extract binary
+
+### Files
+- `src/url_guard.rs` — mới
+- `src/api_auth.rs` — constant-time validate()
+- `src/webhook.rs` — validate_callback_url()
+- `src/address_watch.rs` — validate_callback_url()
+- `src/pkt_rpc.rs` — auth + ApiRole check, rpc_router(auth)
+- `src/pktscan_api.rs` — bind 127.0.0.1, rpc_router nhận auth_db
+- `src/audit_log.rs` — is_valid_date_format()
+- `src/graphql.rs` — limit_depth + limit_complexity
+- `src/zt_middleware.rs` — trust_proxy, max_tracked_ips, extract_ip_with_trust
+- `src/lib.rs`, `src/main.rs` — pub mod url_guard
+- `install.sh` — SHA256SUMS + PKT_LISTEN trong systemd
+- `Cargo.toml` — subtle = "2"
+
+### Tests
+- 2473 passed (0 failed)
+
+### Gotcha
+- `subtle::ConstantTimeEq` yêu cầu cả hai slice cùng độ dài — blake3 hex luôn 64 chars nên OK
+- `url_guard` không resolve DNS → không chặn DNS rebinding (cần network-level firewall cho egress)
+- `trust_proxy=false` → tất cả anon vào bucket "unknown", rate limit vẫn hoạt động nhưng không phân biệt IP
+
+---
+
 ## v24.10 — Testnet Audit (2026-04-18)
 
 ### Added

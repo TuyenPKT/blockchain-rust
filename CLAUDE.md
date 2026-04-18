@@ -1,6 +1,6 @@
 # CLAUDE.md — Open Consensus Execution Interface Framework
 
-**Version hiện tại: v25.5 ✅**
+**Version hiện tại: v25.7 ✅**
 
 ## Quy tắc cốt lõi
 - Bắt buộc dùng Tiếng Việt

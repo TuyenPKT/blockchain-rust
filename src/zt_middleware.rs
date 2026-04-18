@@ -40,7 +40,7 @@ use tokio::sync::Mutex;
 /// Tunable parameters for the Zero-Trust middleware.
 #[derive(Debug, Clone)]
 pub struct ZtConfig {
-    /// Max requests per IP per window. Default: 100.
+    /// Max requests per IP per window. Default: 600.
     pub max_per_window: u32,
     /// Sliding-window length in seconds. Default: 60.
     pub window_secs: u64,
@@ -50,16 +50,27 @@ pub struct ZtConfig {
     pub max_path_len: usize,
     /// Audit log file path. `None` disables file logging.
     pub log_path: Option<PathBuf>,
+    /// Max number of unique IPs tracked in rate-limit map.
+    /// Prevents unbounded memory growth when XFF headers are spoofed.
+    /// Default: 10_000. When full, expired entries are purged first; if still
+    /// full the new IP is rate-limited without being tracked (fail-closed).
+    pub max_tracked_ips: usize,
+    /// Trust X-Forwarded-For / X-Real-IP headers for the client IP.
+    /// Set to `true` only when the server is behind a trusted reverse proxy.
+    /// Default: reads `PKT_TRUSTED_PROXY=1` env var; otherwise `false`.
+    pub trust_proxy: bool,
 }
 
 impl Default for ZtConfig {
     fn default() -> Self {
         ZtConfig {
-            max_per_window: 600,
-            window_secs:    60,
-            max_query_len:  512,
-            max_path_len:   256,
-            log_path:       Some(default_log_path()),
+            max_per_window:  600,
+            window_secs:     60,
+            max_query_len:   512,
+            max_path_len:    256,
+            log_path:        Some(default_log_path()),
+            max_tracked_ips: 10_000,
+            trust_proxy:     std::env::var("PKT_TRUSTED_PROXY").as_deref() == Ok("1"),
         }
     }
 }
@@ -128,14 +139,29 @@ impl ZtState {
     pub async fn check_rate(&self, ip: &str) -> bool {
         let now = unix_now();
         let mut counts = self.rate_counts.lock().await;
-        let entry = counts.entry(ip.to_string()).or_insert((0, now));
-        // Roll window when expired
-        if now.saturating_sub(entry.1) >= self.config.window_secs {
-            *entry = (1, now);
-            return true;
+
+        // Fast-path: already tracked
+        if let Some(entry) = counts.get_mut(ip) {
+            if now.saturating_sub(entry.1) >= self.config.window_secs {
+                *entry = (1, now);
+                return true;
+            }
+            entry.0 += 1;
+            return entry.0 <= self.config.max_per_window;
         }
-        entry.0 += 1;
-        entry.0 <= self.config.max_per_window
+
+        // New IP — enforce map size cap
+        if counts.len() >= self.config.max_tracked_ips {
+            // Purge expired entries first
+            counts.retain(|_, (_, ts)| now.saturating_sub(*ts) < self.config.window_secs);
+            // If still full, reject without tracking (fail-closed)
+            if counts.len() >= self.config.max_tracked_ips {
+                return false;
+            }
+        }
+
+        counts.insert(ip.to_string(), (1, now));
+        true
     }
 
     /// Current request count for an IP in the active window.
@@ -205,7 +231,7 @@ pub async fn zt_middleware(
     next:      Next,
 ) -> Response {
     let start  = Instant::now();
-    let ip     = extract_ip(&request);
+    let ip     = extract_ip_with_trust(&request, zt.config.trust_proxy);
     let method = request.method().as_str().to_string();
     let path   = request.uri().path().to_string();
     let query  = request.uri().query().map(str::to_string);
@@ -247,7 +273,13 @@ pub async fn zt_middleware(
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Extract client IP: X-Forwarded-For → X-Real-IP → "unknown".
-pub fn extract_ip(req: &Request<Body>) -> String {
+/// Extract client IP.  Only reads proxy headers if `trust_proxy = true`
+/// (set via `PKT_TRUSTED_PROXY=1`).  Otherwise returns "unknown" to prevent
+/// rate-limit bypass via spoofed X-Forwarded-For headers.
+pub fn extract_ip_with_trust(req: &Request<Body>, trust_proxy: bool) -> String {
+    if !trust_proxy {
+        return "unknown".to_string();
+    }
     if let Some(fwd) = req.headers().get("x-forwarded-for") {
         if let Ok(s) = fwd.to_str() {
             let first = s.split(',').next().unwrap_or("").trim();
@@ -258,6 +290,11 @@ pub fn extract_ip(req: &Request<Body>) -> String {
         if let Ok(s) = real.to_str() { return s.trim().to_string(); }
     }
     "unknown".to_string()
+}
+
+// Back-compat alias — always trust (used by audit_log where IP is forensics-only)
+pub fn extract_ip(req: &Request<Body>) -> String {
+    extract_ip_with_trust(req, true)
 }
 
 fn attach_req_id(response: &mut Response, req_id: &str) {

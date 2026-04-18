@@ -174,6 +174,17 @@ fn open_log_file(dir: &PathBuf, date: &str) -> Option<BufWriter<File>> {
 }
 
 /// Current date as "YYYY-MM-DD" (UTC approximation from unix timestamp).
+/// Kiểm tra date string có đúng format YYYY-MM-DD không — chặn path traversal.
+fn is_valid_date_format(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 10 { return false; }
+    b[0..4].iter().all(|c| c.is_ascii_digit())
+        && b[4] == b'-'
+        && b[5..7].iter().all(|c| c.is_ascii_digit())
+        && b[7] == b'-'
+        && b[8..10].iter().all(|c| c.is_ascii_digit())
+}
+
 pub fn today_str() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -308,7 +319,14 @@ async fn get_admin_logs(
             .into_response();
     }
 
-    let date   = q.date.clone().unwrap_or_else(today_str);
+    let date = q.date.clone().unwrap_or_else(today_str);
+    // Validate date format YYYY-MM-DD to prevent path traversal
+    if !is_valid_date_format(&date) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "date must be YYYY-MM-DD" })),
+        ).into_response();
+    }
     let limit  = q.limit.unwrap_or(100).min(500);
     let offset = q.offset.unwrap_or(0);
 

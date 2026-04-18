@@ -149,6 +149,8 @@ impl QueryRoot {
 pub fn build_schema(chain: ChainState) -> GqlSchema {
     Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
         .data(chain)
+        .limit_depth(5)        // ngăn deeply-nested query DoS
+        .limit_complexity(100) // tổng "cost" tối đa per query
         .finish()
 }
 
