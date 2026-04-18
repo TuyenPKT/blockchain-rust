@@ -391,7 +391,7 @@ mod tests {
         let p = PktNetworkParams::testnet();
         assert!(p.is_testnet());
         assert_eq!(p.hrp, "tpkt");
-        assert_eq!(p.p2p_port, 64765);
+        assert_eq!(p.p2p_port, TESTNET_P2P_PORT);
     }
 
     #[test]
