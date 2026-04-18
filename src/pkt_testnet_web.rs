@@ -1129,35 +1129,39 @@ async fn ps_health(State(ps): State<PathState>) -> impl IntoResponse {
 async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
     use crate::pkt_analytics::{load_recent_headers, bits_to_difficulty, estimate_hashrate_from};
 
+    // Mở mỗi DB đúng 1 lần — dùng lại xuyên suốt handler
+    let sdb = SyncDb::open_read_only(&ps.sync_path).ok();
+    let udb = UtxoSyncDb::open_read_only(&ps.utxo_path).ok();
+    let adb = ps.open_addr();
+    let mdb = ps.open_mempool();
+    let ldb = ps.open_label();
+
     // ── Chain stats ────────────────────────────────────────────────────────────
-    let (height, tip_hash, synced, utxo_count, total_value_sat) =
-        match (SyncDb::open_read_only(&ps.sync_path).ok(), ps.open()) {
-            (Some(sdb), Some((_, udb))) => {
-                // get_sync_height() có thể trả None nếu chưa ghi meta — fallback đọc từ headers
-                let h = sdb.get_sync_height().ok().flatten()
-                    .or_else(|| {
-                        use crate::pkt_analytics::load_recent_headers;
-                        load_recent_headers(&sdb, 1).ok()
-                            .and_then(|v| v.into_iter().next())
-                            .map(|(h, _)| h)
-                    })
-                    .unwrap_or(0);
-                let tip = sdb.get_tip_hash().ok().flatten()
-                    .map(hex::encode)
-                    .unwrap_or_else(|| "0".repeat(64));
-                let synced = h > 0;
-                let cnt    = udb.count_utxos().unwrap_or(0);
-                let val    = udb.total_value().unwrap_or(0);
-                (h, tip, synced, cnt, val)
-            }
-            _ => (0u64, "0".repeat(64), false, 0u64, 0u64),
-        };
+    let (height, tip_hash, synced, utxo_count, total_value_sat) = match (&sdb, &udb) {
+        (Some(sdb), Some(udb)) => {
+            let h = sdb.get_sync_height().ok().flatten()
+                .or_else(|| {
+                    load_recent_headers(sdb, 1).ok()
+                        .and_then(|v| v.into_iter().next())
+                        .map(|(h, _)| h)
+                })
+                .unwrap_or(0);
+            let tip = sdb.get_tip_hash().ok().flatten()
+                .map(hex::encode)
+                .unwrap_or_else(|| "0".repeat(64));
+            let synced = h > 0;
+            let cnt    = udb.count_utxos().unwrap_or(0);
+            let val    = udb.total_value().unwrap_or(0);
+            (h, tip, synced, cnt, val)
+        }
+        _ => (0u64, "0".repeat(64), false, 0u64, 0u64),
+    };
 
     // ── Hashrate & block_time avg (last 10 blocks) ─────────────────────────────
-    let (hashrate, block_time_avg, difficulty) = match SyncDb::open_read_only(&ps.sync_path).ok() {
+    let (hashrate, block_time_avg, difficulty) = match &sdb {
         None => (0.0f64, 0.0f64, 0.0f64),
         Some(sdb) => {
-            let headers = load_recent_headers(&sdb, 11).unwrap_or_default();
+            let headers = load_recent_headers(sdb, 11).unwrap_or_default();
             if headers.len() < 2 {
                 (0.0, 0.0, 0.0)
             } else {
@@ -1181,7 +1185,7 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
     };
 
     // ── Mempool ────────────────────────────────────────────────────────────────
-    let (mempool_count, mempool_top_fee_msat_vb) = match ps.open_mempool() {
+    let (mempool_count, mempool_top_fee_msat_vb) = match &mdb {
         None => (0u64, 0u64),
         Some(mdb) => {
             let cnt = mdb.count().unwrap_or(0) as u64;
@@ -1193,10 +1197,9 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
     };
 
     // ── Rich top 5 ─────────────────────────────────────────────────────────────
-    let rich_top5: Vec<Value> = match ps.open_addr() {
+    let rich_top5: Vec<Value> = match &adb {
         None => vec![],
         Some(adb) => {
-            let ldb = ps.open_label();
             adb.get_rich_list(5).unwrap_or_default().into_iter()
                 .map(|(script, bal)| {
                     let address = script_hex_to_address(&script);
@@ -1217,20 +1220,19 @@ async fn ps_summary(State(ps): State<PathState>) -> impl IntoResponse {
 
     // Block reward thực tế từ coinbase TX của block mới nhất
     // Trả 0 nếu chưa có data — không dùng formula lý thuyết vì testnet params khác mainnet
-    let block_reward: u64 = if height == 0 {
-        0
-    } else {
-        ps.open_addr()
-            .and_then(|adb| adb.get_txids_at_height(height, 1).into_iter().next())
-            .and_then(|coinbase_txid| {
-                ps.open().map(|(_, udb)| {
+    let block_reward: u64 = match (height, &adb, &udb) {
+        (0, _, _) => 0,
+        (h, Some(adb), Some(udb)) => {
+            adb.get_txids_at_height(h, 1).into_iter().next()
+                .map(|coinbase_txid| {
                     udb.scan_tx_outputs(&coinbase_txid)
                        .iter()
                        .map(|u| u.value)
                        .sum::<u64>()
                 })
-            })
-            .unwrap_or(0)
+                .unwrap_or(0)
+        }
+        _ => 0,
     };
 
     Json(json!({
