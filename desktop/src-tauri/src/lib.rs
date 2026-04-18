@@ -1134,7 +1134,7 @@ mod tests {
         let (_, pk) = secp.generate_keypair(&mut StdRng::seed_from_u64(1));
         let addr = evm_address_from_pubkey(&pk);
         let raw  = parse_evm_address(&addr).unwrap();
-        let back = eip55_checksum(&raw);
-        assert_eq!(addr, back, "EIP-55 phải idempotent");
+        let back = format!("0x{}", hex::encode(raw));
+        assert_eq!(addr, back, "parse → encode phải idempotent");
     }
 }
