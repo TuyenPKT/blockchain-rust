@@ -97,10 +97,6 @@
 - [x] v24.5 — **LZ4 Compression**: `db_opts()` trong `pkt_paths.rs`; bật LZ4 cho 7 RocksDB opens; tiết kiệm ~40-60% disk
 - [x] v24.6 — **Tokenomics 21M PKT**: `INITIAL_BLOCK_REWARD=20 PKT`, `HALVING_INTERVAL=525,000 blocks` (~365 ngày), `MAX_SUPPLY=21,000,000 PKT` chính xác
 - [x] v24.6.1 — **Network Config**: `src/pkt_config.rs` single source of truth cho tất cả network params; fix hardcode `Node.tsx` (8334→8333), `address.js` (API_BASE), `lib.rs` (seed_p2p())
-- ~~v24.7 — Testnet Faucet~~ (skipped — nhảy lên Era 32)
-- ~~v24.8 — Developer Docs~~ (skipped)
-- ~~v24.9 — Multi-node Bootstrap~~ (skipped)
-- ~~v24.10 — Mainnet Prep~~ (skipped)
 
 ### Era 32 — Storage Migration redb (v25.x) ← ĐANG LÀM
 - [x] v25.0 — **RocksKv Abstraction**: `src/pkt_kv.rs` trait `Kv`; `RocksKv` impl; tất cả callers dùng `Kv` interface
