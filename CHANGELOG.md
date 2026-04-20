@@ -4,6 +4,149 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v27.1 — CALL/CREATE Sub-execution EVM (2026-04-20)
+
+### Added
+- `src/evm_state.rs` — `WorldState` shared mutable EVM world state:
+  - `codes`, `balances`, `storage`, `nonces` HashMaps
+  - `get/set_code`, `get/set_balance`, `transfer()`, `get/set_storage`, `inc_nonce()`
+  - `create_address(deployer, nonce)` — SHA256(deployer || nonce)[12:]
+  - `create2_address(deployer, salt, code_hash)` — SHA256(0xFF || deployer || salt || code_hash)[12:]
+  - 11 tests
+- `src/pkt_evm.rs` — Real sub-execution cho CALL/CREATE:
+  - `Evm::new_with_world(ctx, code, storage, world)` — constructor dùng shared WorldState
+  - `EvmResult.reverted: bool` — phân biệt success vs revert
+  - `BALANCE (0x31)` — đọc từ WorldState thay vì trả 0
+  - `CREATE / CREATE2 (0xF0/0xF5)` — sub-EVM thật: snapshot→run→store code hoặc revert
+  - `CALL / CALLCODE / DELEGATECALL / STATICCALL (0xF1/0xF2/0xF4/0xFA)` — sub-EVM thật: lookup code từ WorldState, snapshot/restore on REVERT, depth guard (max 10)
+  - 6 tests: CALL to contract, CALL to EOA, CALL revert rolls back, CREATE deploys, BALANCE reads WorldState, depth limit
+- `src/gas_model.rs` — `GAS_CODEDEPOSIT = 200` (per byte stored bytecode)
+
+### Files
+- `src/evm_state.rs` — **NEW** (WorldState)
+- `src/pkt_evm.rs` — sub-execution, WorldState integration
+- `src/gas_model.rs` — GAS_CODEDEPOSIT
+- `src/lib.rs` — `pub mod evm_state`
+
+### Tests
+- +17 tests (11 WorldState + 6 sub-execution) → **909 total**
+
+### Breaking / Gotcha
+- `Evm::new_with_world()` argument order: `(ctx, code, storage, world)` — đúng thứ tự này
+- `Rc<RefCell<WorldState>>` shared giữa parent/child EVM — borrow_mut() trong sub-call không conflict vì Rc không Send
+- CREATE push order: EVM pops val (top), off, len — nên push len trước, off, val cuối (val on top)
+
+---
+
+## v27.0 — Bitcoin Script Parity (2026-04-20)
+
+### Added
+- `src/script.rs` — Hoàn chỉnh Bitcoin Script VM:
+  - Opcodes mới: `OpIf / OpElse / OpEndIf` (branching), `OpCheckLockTimeVerify` (CLTV BIP65), `OpCheckSequenceVerify` (CSV BIP112), `OpSha256`, `OpNip`, `OpSize`
+  - `SpendContext { lock_time, sequence }` — context cho timelock validation
+  - `execute_with_context()` — chạy script với CLTV/CSV check
+  - `run_ops()` — xử lý conditional branching (cond_stack)
+  - Script builders: `cltv_p2pkh()`, `csv_p2pkh()`, `htlc_offered()` (2-branch OP_IF/ELSE/ENDIF)
+  - 20 tests mới (CLTV, CSV, HTLC, OP_IF, OpSha256, OpNip, OpSize)
+- `src/taproot.rs` — Schnorr + MAST (BIP340/341/342), đã có từ trước, nay được registered:
+  - `tagged_hash()`, `schnorr_sign()`, `schnorr_verify()`, `x_only()`
+  - `TapLeaf / TapBranch / TapNode` (MAST Merkle tree), `tap_tweak_pubkey()`
+  - `TaprootOutput` (key path + script path spend, proof verification)
+  - `KeyAggContext` (MuSig2 simplified aggregation)
+  - 13 tests: sign/verify roundtrip, domain separation, TapBranch sorted, key path verify, script path verify, MuSig2
+- `src/lightning.rs` — Lightning Network payment channels, đã có từ trước, nay được registered:
+  - `Channel`: open/fund/send_payment/send_htlc/settle_htlc/cooperative_close/force_close
+  - `CommitmentTx`, `RevocationSecret`, `Htlc`, `HtlcDirection`, `LightningNode`
+  - Penalty mechanism: `check_penalty()` trả revocation secret nếu counterparty broadcast TX cũ
+  - 13 tests: channel lifecycle, HTLC settle, wrong preimage, cooperative close, penalty, revocation uniqueness
+- `src/wallet.rs` — registered trong lib.rs (dependency của lightning.rs)
+
+### Files
+- `src/script.rs` — extended (CLTV, CSV, OP_IF, HTLC, SpendContext)
+- `src/taproot.rs` — registered + 13 tests added
+- `src/lightning.rs` — registered + 13 tests added
+- `src/lib.rs` — pub mod wallet, taproot, lightning
+
+### Tests
+- +49 tests (892 lib total)
+
+### Gotcha
+- `OpNum(n)` encode: LE bytes của i64, strip trailing zeros → stack item. `le_bytes_to_u64()` decode ngược lại không strip sign bit (unsigned LE for timelocks)
+- CLTV không pop stack (để OP_DROP tiếp theo dùng) — match Bitcoin spec
+- `cond_stack` must be empty at end of script execution; unbalanced OP_IF → false
+- `Wallet` cần registered trong lib.rs vì `lightning.rs` depends on `crate::wallet::Wallet`
+- taproot.rs dùng blake3 thay SHA256 cho tagged_hash — internal format, khác BIP340 hoàn toàn
+
+---
+
+## v26.1 — Ethereum PoW Parity (2026-04-19)
+
+### Added
+- `src/rlp.rs` — RLP encoder/decoder: `Rlp::Bytes/List`, `encode()`, `decode()`, `uint()`, `empty()`; 14 tests
+- `src/uncle.rs` — Uncle/Ommer system: `uncle_miner_reward()` (7/8 block_reward formula), `nephew_reward()` (/32), `validate_uncle()` (depth ≤ 7, duplicate check, future block), `UnclePool`; 15 tests
+- `src/evm_precompiles.rs` — EVM precompiles 0x01–0x09: ecRecover (secp256k1 recover), SHA256, RIPEMD160, Identity, ModExp (small), BN128Add/Mul/Pairing/Blake2F stubs; 15 tests
+- `src/abi.rs` — Solidity ABI encoder/decoder: `AbiValue`, `AbiType`, `encode()`, `decode()`, `encode_call()`, `function_selector()` (SHA256[0..4]), ERC-20 selectors; 20 tests
+- `src/receipts.rs` — Transaction receipts storage: bloom filter (256-byte, 3-hash SHA256), `ReceiptDb::put_block_receipts/get_tx_receipt/get_block_receipts/count()` via redb; 10 tests
+- `src/transaction.rs` — EIP-155 replay protection: `eip155_signing_data(chain_id)` appends chain_id+0+0 before signing hash
+- CALL opcodes in `pkt_evm.rs` now dispatch to precompiles (0x01–0x09), depth guard 10 for non-precompile sub-calls
+
+### Files
+- `src/rlp.rs` — mới
+- `src/uncle.rs` — mới
+- `src/evm_precompiles.rs` — mới
+- `src/abi.rs` — mới
+- `src/receipts.rs` — mới
+- `src/pkt_evm.rs` — CALL precompile dispatch
+- `src/transaction.rs` — eip155_signing_data
+- `src/pkt_wire.rs` — nonce u32→u64, `WIRE_HEADER_LEN=84`, `decode_headers` 80→84
+- `src/pkt_genesis.rs` — nonce/header u32→u64
+- `src/pkt_sync.rs` — save/load_header 80→84 (with 80-byte backward migration)
+- `src/pkt_analytics.rs`, `src/pkt_node.rs`, `src/pkt_explorer_api.rs`, `src/pkt_reorg.rs` — nonce type cascade fix
+- `Cargo.toml` — secp256k1 "recovery" feature; `tempfile = "3"` dev-dep
+- `src/lib.rs`, `src/main.rs` — pub mod rlp, uncle, evm_precompiles, abi, receipts
+
+### Tests
+- +74 tests (843 total lib)
+
+### Gotcha
+- `WireBlockHeader.nonce` changed u32→u64: header is now 84 bytes (was 80). `load_header` zero-pads old 80-byte DB entries for backward compatibility
+- `decode_headers()` updated: reads 84+1=85 bytes per header (was 81)
+- secp256k1 "recovery" feature required for `RecoverableSignature` / `recover_ecdsa()`
+- ABI `encode_bytes_payload()` extracted to handle `Bytes` and `String` separately (Rust match arm type mismatch)
+- `redb 2`: `ReadableTable::len()` not available — use iterator count instead
+- `validate_uncle()` checks `SameAsParent` before `Duplicate` — pass distinct `parent_hash` when testing duplicate error path
+
+---
+
+## v26.0 — Full EVM Stack (2026-04-19)
+
+### Added
+- `src/gas_model.rs` — EIP-1559 gas model: `next_base_fee()`, `burn_amount()`, `intrinsic_gas()`, `memory_gas()`, `GasHeader`; gas cost table (Berlin/London); 13 tests
+- `src/pkt_evm.rs` — Full EVM bytecode executor: U256 ([u64;4] LE), 140+ opcodes (STOP→SELFDESTRUCT+PUSH1..PUSH32+DUP+SWAP+LOG), EIP-2929 warm/cold storage, memory expansion gas, JUMPDEST pre-scan, REVERT/RETURN, static call guard; 27 tests
+- `src/eth_rpc.rs` — `eth_*` JSON-RPC 2.0 namespace (POST /eth): `eth_chainId`, `eth_blockNumber`, `eth_getBalance`, `eth_getTransactionCount`, `eth_getBlockByNumber/Hash`, `eth_getTransactionByHash`, `eth_call`, `eth_estimateGas`, `eth_sendRawTransaction`, `eth_getLogs`, `eth_gasPrice`, `net_version`, `web3_clientVersion`; 17 tests
+- `src/eth_wire.rs` — ETH/68 P2P wire protocol: all 13 message types (Status, NewBlockHashes, Transactions, GetBlockHeaders, BlockHeaders, GetBlockBodies, BlockBodies, NewBlock, NewPooledTxHashes, GetPooledTxs, PooledTxs, GetReceipts, Receipts) + `FrameCodec` (1-byte id + 4-byte LE len + JSON body); 18 tests
+- `POST /eth` mounted trong `pktscan_api::serve()` — EthRpcState(chain_id=1) shared state
+
+### Files
+- `src/gas_model.rs` — mới
+- `src/pkt_evm.rs` — mới
+- `src/eth_rpc.rs` — mới
+- `src/eth_wire.rs` — mới
+- `src/pktscan_api.rs` — mount eth_rpc_router
+- `src/lib.rs`, `src/main.rs` — pub mod gas_model, pkt_evm, eth_rpc, eth_wire
+
+### Tests
+- +75 tests (774 total lib)
+
+### Gotcha
+- U256 division dùng bit-shift long division O(256) — đủ cho EVM, không cần crate thêm
+- `eth_call` thực thi EVM bytecode từ `code_store` — cần deploy contract qua state trước khi call
+- `FrameCodec` dùng JSON thay RLP — dễ debug, cần thay bằng RLP khi kết nối geth thật
+- CALL/CREATE opcodes trong `pkt_evm.rs` là stub (depth guard + return 1) — sub-execution chưa có
+- `eth_sendRawTransaction` trả SHA256(raw_tx_bytes) làm tx hash — chưa parse RLP signed tx
+
+---
+
 ## v25.7 — Security Hardening (2026-04-19)
 
 ### Added

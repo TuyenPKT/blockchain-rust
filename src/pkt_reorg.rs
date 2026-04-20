@@ -420,7 +420,7 @@ mod tests {
         // Save checkpoint and matching header
         let delta = BlockDelta::new(hash);
         rdb.save_delta(7, &delta).unwrap();
-        sdb.save_header(7, &[0u8; 80]).unwrap(); // raw header → hash != 0xAA, will mismatch
+        sdb.save_header(7, &[0u8; crate::pkt_wire::WIRE_HEADER_LEN]).unwrap(); // raw header → hash != 0xAA, will mismatch
         // Different hashes → reorg detected
         // (saved raw header [0;80] has different hash than [0xAA;32])
         let detected = rdb.detect_reorg(&sdb, 7).unwrap();

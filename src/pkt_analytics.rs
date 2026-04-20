@@ -238,7 +238,7 @@ mod tests {
 
     static DB_LOCK: Mutex<()> = Mutex::new(());
 
-    fn make_header(ts: u32, bits: u32) -> [u8; 80] {
+    fn make_header(ts: u32, bits: u32) -> [u8; crate::pkt_wire::WIRE_HEADER_LEN] {
         WireBlockHeader {
             version:     1,
             prev_block:  [0u8; 32],

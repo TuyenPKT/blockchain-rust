@@ -330,7 +330,9 @@ impl InvItem {
     }
 }
 
-/// Block header (80 bytes on the wire).
+/// Block header (84 bytes on the wire — nonce upgraded to u64).
+///
+/// Layout: version(4) + prev_block(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(8) = 84
 #[derive(Debug, Clone)]
 pub struct WireBlockHeader {
     pub version:     i32,
@@ -338,26 +340,28 @@ pub struct WireBlockHeader {
     pub merkle_root: [u8; 32],
     pub timestamp:   u32,
     pub bits:        u32,
-    pub nonce:       u32,
+    pub nonce:       u64, // upgraded from u32 → u64 (v26.1)
 }
 
+pub const WIRE_HEADER_LEN: usize = 84; // 4+32+32+4+4+8
+
 impl WireBlockHeader {
-    /// Serialize to 80 bytes (Bitcoin wire format).
-    pub fn to_bytes(&self) -> [u8; 80] {
-        let mut buf = [0u8; 80];
+    /// Serialize to 84 bytes.
+    pub fn to_bytes(&self) -> [u8; WIRE_HEADER_LEN] {
+        let mut buf = [0u8; WIRE_HEADER_LEN];
         buf[0..4].copy_from_slice(&self.version.to_le_bytes());
         buf[4..36].copy_from_slice(&self.prev_block);
         buf[36..68].copy_from_slice(&self.merkle_root);
         buf[68..72].copy_from_slice(&self.timestamp.to_le_bytes());
         buf[72..76].copy_from_slice(&self.bits.to_le_bytes());
-        buf[76..80].copy_from_slice(&self.nonce.to_le_bytes());
+        buf[76..84].copy_from_slice(&self.nonce.to_le_bytes());
         buf
     }
 
-    /// Parse from 80 bytes.
+    /// Parse from 84 bytes.
     pub fn from_bytes(b: &[u8]) -> Result<Self, WireError> {
-        if b.len() < 80 {
-            return Err(WireError::NotEnoughData { need: 80, have: b.len() });
+        if b.len() < WIRE_HEADER_LEN {
+            return Err(WireError::NotEnoughData { need: WIRE_HEADER_LEN, have: b.len() });
         }
         Ok(WireBlockHeader {
             version:     i32::from_le_bytes(b[0..4].try_into().unwrap()),
@@ -365,7 +369,7 @@ impl WireBlockHeader {
             merkle_root: b[36..68].try_into().unwrap(),
             timestamp:   u32::from_le_bytes(b[68..72].try_into().unwrap()),
             bits:        u32::from_le_bytes(b[72..76].try_into().unwrap()),
-            nonce:       u32::from_le_bytes(b[76..80].try_into().unwrap()),
+            nonce:       u64::from_le_bytes(b[76..84].try_into().unwrap()),
         })
     }
 
@@ -377,8 +381,8 @@ impl WireBlockHeader {
         second.into()
     }
 
-    /// SHA256d of a raw 80-byte header (no parsing needed).
-    pub fn block_hash_of_bytes(raw: &[u8; 80]) -> [u8; 32] {
+    /// SHA256d of a raw 84-byte header (no parsing needed).
+    pub fn block_hash_of_bytes(raw: &[u8; WIRE_HEADER_LEN]) -> [u8; 32] {
         let first  = Sha256::digest(raw.as_ref());
         let second = Sha256::digest(&first);
         second.into()
@@ -652,12 +656,12 @@ fn decode_headers(data: &[u8]) -> Result<PktMsg, WireError> {
     let (count, mut off) = decode_varint(data)?;
     let mut headers = Vec::with_capacity(count as usize);
     for _ in 0..count {
-        // 80 bytes header + 1 byte txn_count (always 0)
-        if data.len() < off + 81 {
-            return Err(WireError::NotEnoughData { need: off + 81, have: data.len() });
+        // WIRE_HEADER_LEN bytes header + 1 byte txn_count (always 0)
+        if data.len() < off + WIRE_HEADER_LEN + 1 {
+            return Err(WireError::NotEnoughData { need: off + WIRE_HEADER_LEN + 1, have: data.len() });
         }
-        headers.push(WireBlockHeader::from_bytes(&data[off..off+80])?);
-        off += 81; // skip txn_count byte
+        headers.push(WireBlockHeader::from_bytes(&data[off..off+WIRE_HEADER_LEN])?);
+        off += WIRE_HEADER_LEN + 1; // skip txn_count byte
     }
     Ok(PktMsg::Headers { headers })
 }
@@ -1033,7 +1037,7 @@ mod tests {
             nonce:       99999,
         };
         let bytes = hdr.to_bytes();
-        assert_eq!(bytes.len(), 80);
+        assert_eq!(bytes.len(), WIRE_HEADER_LEN);
         let decoded = WireBlockHeader::from_bytes(&bytes).unwrap();
         assert_eq!(decoded.version,     hdr.version);
         assert_eq!(decoded.prev_block,  hdr.prev_block);

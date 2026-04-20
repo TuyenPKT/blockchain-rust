@@ -71,21 +71,21 @@ pub const REGTEST_BOOTSTRAP_PEERS: &[&str] = &[];   // regtest: local only
 /// Mined: cargo run -- mine-genesis "OCEIF mainnet genesis 2026 — ..."
 pub const MAINNET_GENESIS_HASH: &str =
     "00000ccc1a0ff73c2050c13af51956439c3c4f8be40c8e98753386f4a4f896d2";
-pub const MAINNET_GENESIS_NONCE: u32 = 190223;
+pub const MAINNET_GENESIS_NONCE: u64 = 190223;
 pub const MAINNET_GENESIS_BITS:  u32 = 0x1f00ffff;
 pub const MAINNET_GENESIS_TIME:  u64 = 1_775_526_006; // 2026-04-07T01:40:06Z
 
 /// Mined: cargo run -- mine-genesis --testnet "OCEIF testnet genesis 2026"
 pub const TESTNET_GENESIS_HASH: &str =
     "00da8943f3f7684e0b8dac45d18978666773411d6c6a818b7bd75ea1f31cc970";
-pub const TESTNET_GENESIS_NONCE: u32 = 156;
+pub const TESTNET_GENESIS_NONCE: u64 = 156;
 pub const TESTNET_GENESIS_BITS:  u32 = 0x2000ffff;
 pub const TESTNET_GENESIS_TIME:  u64 = 1_775_528_821; // 2026-04-07T02:27:01Z
 
 /// Mined: cargo run -- mine-genesis --bits 0x207fffff "OCEIF regtest genesis 2026"
 pub const REGTEST_GENESIS_HASH: &str =
     "357e6f921e94a9952e2b0c83bbe14ea2076fde7c20886f481c021206b8764e14";
-pub const REGTEST_GENESIS_NONCE: u32 = 1;
+pub const REGTEST_GENESIS_NONCE: u64 = 1;
 pub const REGTEST_GENESIS_BITS:  u32 = 0x207fffff;
 pub const REGTEST_GENESIS_TIME:  u64 = 1_775_528_821; // 2026-04-07T02:27:01Z
 
@@ -261,10 +261,10 @@ impl PktGenesisBlock {
 /// Kết quả sau khi mine genesis block thành công
 #[derive(Debug, Clone)]
 pub struct MinedGenesis {
-    pub nonce:     u32,
+    pub nonce:     u64, // upgraded from u32 → u64 (v26.1)
     pub hash_hex:  String,  // display order (reversed)
     pub hash_raw:  [u8; 32], // SHA256d raw
-    pub header:    [u8; 80],
+    pub header:    [u8; crate::pkt_wire::WIRE_HEADER_LEN], // 84 bytes (v26.1)
     pub bits:      u32,
     pub timestamp: u32,
     pub merkle_root: [u8; 32],
@@ -282,7 +282,8 @@ pub fn mine_genesis(bits: u32, timestamp: u32, message: &[u8]) -> MinedGenesis {
     let mut merkle_root = [0u8; 32];
     merkle_root.copy_from_slice(&mr_second);
 
-    let mut header = [0u8; 80];
+    use crate::pkt_wire::WIRE_HEADER_LEN;
+    let mut header = [0u8; WIRE_HEADER_LEN]; // 84 bytes (v26.1: nonce u64)
     // version = 1
     header[0..4].copy_from_slice(&1i32.to_le_bytes());
     // prev_block = 0
@@ -292,6 +293,7 @@ pub fn mine_genesis(bits: u32, timestamp: u32, message: &[u8]) -> MinedGenesis {
     header[68..72].copy_from_slice(&timestamp.to_le_bytes());
     // bits
     header[72..76].copy_from_slice(&bits.to_le_bytes());
+    // nonce at [76..84] — 8 bytes (u64 LE)
 
     // Tính target từ bits
     let target = compact_target_to_bytes(bits);
@@ -299,8 +301,8 @@ pub fn mine_genesis(bits: u32, timestamp: u32, message: &[u8]) -> MinedGenesis {
     eprintln!("[genesis] Mining with bits=0x{:08x}", bits);
     eprintln!("[genesis] Target: {}", hex::encode(target));
 
-    for nonce in 0u32..=u32::MAX {
-        header[76..80].copy_from_slice(&nonce.to_le_bytes());
+    for nonce in 0u64..u64::MAX {
+        header[76..84].copy_from_slice(&nonce.to_le_bytes());
 
         let first  = Sha256::digest(&header);
         let second = Sha256::digest(&first);
@@ -342,7 +344,7 @@ pub fn print_genesis_result(g: &MinedGenesis, message: &[u8]) {
     println!("  // Paste vào pkt_genesis.rs:");
     println!("  pub const MAINNET_GENESIS_HASH: &str = \"{}\";", g.hash_hex);
     println!("  pub const MAINNET_GENESIS_TIME: u64 = {};", g.timestamp);
-    println!("  pub const MAINNET_GENESIS_NONCE: u32 = {};", g.nonce);
+    println!("  pub const MAINNET_GENESIS_NONCE: u64 = {};", g.nonce);
     println!("  pub const MAINNET_GENESIS_BITS: u32 = 0x{:08x};", g.bits);
     println!("══════════════════════════════════════════");
 }

@@ -180,7 +180,7 @@ fn blocks_to_wire_headers(
             merkle_root,
             timestamp:   block.timestamp as u32,
             bits:        0x207f_ffff,
-            nonce:       (block.nonce & 0xFFFF_FFFF) as u32,
+            nonce:       block.nonce,
         };
         prev = wh.block_hash(); // SHA256d của wire bytes → dùng làm prev_block cho header tiếp
         headers.push(wh);

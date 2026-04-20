@@ -932,6 +932,7 @@ pub async fn serve(state: ScanDb, port: u16) {
         .merge(crate::ws_live::live_router())          // v14.8: embedded /static/live.js
         .merge(crate::pkt_testnet_web::testnet_web_router()) // v15.6: /api/testnet/* + /static/testnet.js
         .merge(crate::pkt_rpc::rpc_router(Arc::clone(&auth_db))) // v19.2: POST /rpc JSON-RPC 2.0 (yêu cầu API key)
+        .merge(crate::eth_rpc::eth_rpc_router(crate::eth_rpc::EthRpcState::new(1))) // v26.0: POST /eth — eth_* JSON-RPC namespace
         .merge(crate::key_api::key_router(auth_db_keys))  // v19.9: GET/POST/DELETE /api/keys
         .merge(crate::web_serve::web_router(Arc::clone(&auth_db))) // web/: ServeDir /web/** + /address/:a + /block/:h + /rx/:id
         .layer(middleware::from_fn_with_state(

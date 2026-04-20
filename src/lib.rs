@@ -5,10 +5,23 @@
 
 // ── Base types ────────────────────────────────────────────────────────────────
 pub mod script;
+pub mod wallet;
+pub mod taproot;
+pub mod lightning;
 pub mod transaction;
 pub mod reward;
 pub mod api_auth;
 pub mod url_guard;
+pub mod rlp;
+pub mod gas_model;
+pub mod evm_state;
+pub mod pkt_evm;
+pub mod evm_precompiles;
+pub mod abi;
+pub mod eth_rpc;
+pub mod eth_wire;
+pub mod uncle;
+pub mod receipts;
 pub mod pkt_address;
 pub mod pkt_health;
 pub mod pkt_export;

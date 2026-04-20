@@ -344,3 +344,160 @@ impl KeyAggContext {
         format!("{}-key MuSig2 aggregate", self.pubkeys.len())
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use secp256k1::{Secp256k1, SecretKey};
+
+    fn test_keypair() -> (SecretKey, secp256k1::PublicKey) {
+        let secp = Secp256k1::new();
+        let mut bytes = [0u8; 32];
+        bytes[31] = 1; // minimal valid secret key
+        let sk = SecretKey::from_slice(&bytes).unwrap();
+        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        (sk, pk)
+    }
+
+    fn test_keypair2() -> (SecretKey, secp256k1::PublicKey) {
+        let secp = Secp256k1::new();
+        let mut bytes = [0u8; 32];
+        bytes[31] = 2;
+        let sk = SecretKey::from_slice(&bytes).unwrap();
+        let pk = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        (sk, pk)
+    }
+
+    #[test]
+    fn test_tagged_hash_deterministic() {
+        let h1 = tagged_hash("TapLeaf", b"data");
+        let h2 = tagged_hash("TapLeaf", b"data");
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_tagged_hash_domain_separated() {
+        let h1 = tagged_hash("TapLeaf",   b"data");
+        let h2 = tagged_hash("TapBranch", b"data");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn test_schnorr_sign_verify_roundtrip() {
+        let (sk, _) = test_keypair();
+        let msg = b"test message for schnorr";
+        let sig = schnorr_sign(&sk, msg);
+        let secp = Secp256k1::new();
+        let pk   = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let xonly = x_only(&pk);
+        assert!(schnorr_verify(&xonly, msg, &sig));
+    }
+
+    #[test]
+    fn test_schnorr_verify_wrong_msg() {
+        let (sk, _) = test_keypair();
+        let sig   = schnorr_sign(&sk, b"correct message");
+        let secp  = Secp256k1::new();
+        let pk    = secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let xonly = x_only(&pk);
+        assert!(!schnorr_verify(&xonly, b"wrong message", &sig));
+    }
+
+    #[test]
+    fn test_tapleaf_hash_deterministic() {
+        let leaf = TapLeaf::new(vec![0x01, 0x02, 0x03]);
+        assert_eq!(leaf.hash(), leaf.hash());
+    }
+
+    #[test]
+    fn test_tapbranch_sorted() {
+        let l1 = TapLeaf::new(vec![1]);
+        let l2 = TapLeaf::new(vec![2]);
+        let branch_ab = TapNode::Branch(
+            Box::new(TapNode::Leaf(l1.clone())),
+            Box::new(TapNode::Leaf(l2.clone())),
+        );
+        let branch_ba = TapNode::Branch(
+            Box::new(TapNode::Leaf(l2.clone())),
+            Box::new(TapNode::Leaf(l1.clone())),
+        );
+        // TapBranch sorts its children, so hash should be equal regardless of order
+        assert_eq!(branch_ab.hash(), branch_ba.hash());
+    }
+
+    #[test]
+    fn test_tap_tweak_hash_deterministic() {
+        let (_, pk) = test_keypair();
+        let xonly   = x_only(&pk);
+        let h1 = tap_tweak_hash(&xonly, None);
+        let h2 = tap_tweak_hash(&xonly, None);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_tap_tweak_hash_with_root_differs() {
+        let (_, pk) = test_keypair();
+        let xonly = x_only(&pk);
+        let root  = [0xABu8; 32];
+        assert_ne!(tap_tweak_hash(&xonly, None), tap_tweak_hash(&xonly, Some(&root)));
+    }
+
+    #[test]
+    fn test_taproot_key_path_only_creation() {
+        let (sk, pk) = test_keypair();
+        let output = TaprootOutput::key_path_only(pk).with_secret_key(&sk);
+        let xonly = output.output_key_xonly();
+        assert_eq!(xonly.len(), 32);
+        assert!(output.merkle_root.is_none());
+    }
+
+    #[test]
+    fn test_taproot_key_path_verify() {
+        let (sk, pk) = test_keypair();
+        let output = TaprootOutput::key_path_only(pk).with_secret_key(&sk);
+        let msg     = b"spending transaction sighash";
+        let sk_tweaked = output.tweaked_secret.unwrap();
+        let sig    = schnorr_sign(&sk_tweaked, msg);
+        assert!(output.verify_key_path(msg, &sig));
+    }
+
+    #[test]
+    fn test_taproot_script_path_verify() {
+        let (_, pk) = test_keypair();
+        let leaf    = TapLeaf::new(vec![0x51]); // OP_1
+        let tree    = TapNode::Leaf(leaf.clone());
+        let output  = TaprootOutput::with_scripts(pk, tree);
+
+        let proof = vec![]; // single leaf → empty proof
+        assert!(output.verify_script_path(&leaf, &proof));
+    }
+
+    #[test]
+    fn test_taproot_script_path_wrong_leaf() {
+        let (_, pk) = test_keypair();
+        let leaf    = TapLeaf::new(vec![0x51]);
+        let tree    = TapNode::Leaf(leaf.clone());
+        let output  = TaprootOutput::with_scripts(pk, tree);
+
+        let wrong_leaf = TapLeaf::new(vec![0x00]);
+        assert!(!output.verify_script_path(&wrong_leaf, &[]));
+    }
+
+    #[test]
+    fn test_musig2_aggregate_deterministic() {
+        let (_, pk1) = test_keypair();
+        let (_, pk2) = test_keypair2();
+        let ctx1 = KeyAggContext::new(vec![pk1.clone(), pk2.clone()]);
+        let ctx2 = KeyAggContext::new(vec![pk1, pk2]);
+        assert_eq!(ctx1.aggregate_xonly(), ctx2.aggregate_xonly());
+    }
+
+    #[test]
+    fn test_musig2_describe() {
+        let (_, pk) = test_keypair();
+        let ctx = KeyAggContext::new(vec![pk]);
+        assert!(ctx.describe().contains("MuSig2"));
+    }
+}

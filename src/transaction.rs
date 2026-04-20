@@ -149,6 +149,25 @@ impl Transaction {
         blake3::hash(data.as_bytes()).as_bytes().to_vec()
     }
 
+    #[allow(dead_code)]
+    pub fn eip155_signing_data(&self, chain_id: u64) -> Vec<u8> {
+        use crate::rlp::{Rlp, encode_list};
+        let mut items: Vec<Rlp> = vec![];
+        for inp in &self.inputs {
+            let id_bytes = hex::decode(&inp.tx_id).unwrap_or_default();
+            items.push(Rlp::bytes(id_bytes));
+            items.push(Rlp::uint(inp.output_index as u64));
+        }
+        for out in &self.outputs {
+            items.push(Rlp::uint(out.amount));
+        }
+        items.push(Rlp::uint(chain_id)); // EIP-155: append chain_id
+        items.push(Rlp::empty());        // v = 0
+        items.push(Rlp::empty());        // s = 0
+        use sha2::Digest;
+        sha2::Sha256::digest(&encode_list(&items)).to_vec()
+    }
+
     pub fn calculate_id(&self) -> String { self.calculate_txid() }
 
     #[allow(dead_code)]

@@ -356,7 +356,7 @@ mod tests {
             merkle_root: [height as u8; 32],
             timestamp:   1_700_000_000 + height as u32,
             bits:        0x207fffff,
-            nonce:       height as u32,
+            nonce:       height as u64,
         }
     }
 

@@ -548,7 +548,7 @@ mod tests {
         sdb.set_sync_height(1).unwrap();
         let r = dispatch(&req("getblock", json!([1, 0])), &state);
         let hex_str = r.result.unwrap();
-        assert_eq!(hex_str.as_str().unwrap().len(), 160); // 80 bytes → 160 hex chars
+        assert_eq!(hex_str.as_str().unwrap().len(), 168); // 84 bytes → 168 hex chars
     }
 
     #[test]

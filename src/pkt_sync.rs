@@ -333,20 +333,27 @@ impl SyncDb {
     }
 
     /// Save one raw 80-byte header at `height`.
-    pub fn save_header(&self, height: u64, raw: &[u8; 80]) -> Result<(), SyncError> {
+    pub fn save_header(&self, height: u64, raw: &[u8; crate::pkt_wire::WIRE_HEADER_LEN]) -> Result<(), SyncError> {
         let key = wireheader_key(height);
         self.kv.put(key.as_bytes(), raw.as_ref())
             .map_err(SyncError::Db)
     }
 
-    /// Load raw 80-byte header at `height`.
-    pub fn load_header(&self, height: u64) -> Result<Option<[u8; 80]>, SyncError> {
+    /// Load raw 84-byte header at `height`.
+    pub fn load_header(&self, height: u64) -> Result<Option<[u8; crate::pkt_wire::WIRE_HEADER_LEN]>, SyncError> {
+        use crate::pkt_wire::WIRE_HEADER_LEN;
         let key = wireheader_key(height);
         match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
             None => Ok(None),
-            Some(v) if v.len() == 80 => {
-                let mut raw = [0u8; 80];
+            Some(v) if v.len() == WIRE_HEADER_LEN => {
+                let mut raw = [0u8; WIRE_HEADER_LEN];
                 raw.copy_from_slice(&v);
+                Ok(Some(raw))
+            }
+            // Migrate old 80-byte headers: zero-pad nonce to 8 bytes
+            Some(v) if v.len() == 80 => {
+                let mut raw = [0u8; WIRE_HEADER_LEN];
+                raw[..80].copy_from_slice(&v);
                 Ok(Some(raw))
             }
             Some(v) => Err(SyncError::Db(format!("bad header length {} at {}", v.len(), height))),
@@ -909,7 +916,7 @@ mod tests {
                 merkle_root: [i as u8; 32],
                 timestamp:   1_600_000_000 + i as u32,
                 bits:        0x207f_ffff, // very easy target (skip_pow=true anyway)
-                nonce:       i as u32,
+                nonce:       i as u64,
             };
             prev = h.block_hash();
             headers.push(h);
@@ -1169,8 +1176,9 @@ mod tests {
 
     #[test]
     fn test_syncdb_save_and_load_header() {
+        use crate::pkt_wire::WIRE_HEADER_LEN;
         let db  = SyncDb::open_temp().unwrap();
-        let raw = [0x42u8; 80];
+        let raw = [0x42u8; WIRE_HEADER_LEN];
         db.save_header(100, &raw).unwrap();
         let loaded = db.load_header(100).unwrap();
         assert_eq!(loaded, Some(raw));
@@ -1214,22 +1222,24 @@ mod tests {
 
     #[test]
     fn test_syncdb_count_headers_after_saves() {
+        use crate::pkt_wire::WIRE_HEADER_LEN;
         let db = SyncDb::open_temp().unwrap();
         for i in 0..5u64 {
-            db.save_header(i + 1, &[i as u8; 80]).unwrap();
+            db.save_header(i + 1, &[i as u8; WIRE_HEADER_LEN]).unwrap();
         }
         assert_eq!(db.count_headers().unwrap(), 5);
     }
 
     #[test]
     fn test_syncdb_save_multiple_heights() {
+        use crate::pkt_wire::WIRE_HEADER_LEN;
         let db = SyncDb::open_temp().unwrap();
         for h in [1u64, 100, 500, 999] {
-            let raw: [u8; 80] = [h as u8; 80];
+            let raw: [u8; WIRE_HEADER_LEN] = [h as u8; WIRE_HEADER_LEN];
             db.save_header(h, &raw).unwrap();
         }
-        assert_eq!(db.load_header(100).unwrap(), Some([100u8; 80]));
-        assert_eq!(db.load_header(999).unwrap(), Some([231u8; 80])); // 999 % 256 = 231
+        assert_eq!(db.load_header(100).unwrap(), Some([100u8; WIRE_HEADER_LEN]));
+        assert_eq!(db.load_header(999).unwrap(), Some([231u8; WIRE_HEADER_LEN])); // 999 % 256 = 231
     }
 
     // ── WireBlockHeader roundtrip via SyncDb ─────────────────────────────────

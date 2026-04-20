@@ -388,3 +388,176 @@ impl LightningNode {
 
     pub fn node_id(&self) -> String { self.wallet.public_key_hex() }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallet::Wallet;
+
+    fn alice() -> Wallet { Wallet::new() }
+    fn bob()   -> Wallet { Wallet::new() }
+
+    #[test]
+    fn test_channel_new_is_pending() {
+        let a = alice();
+        let b = bob();
+        let ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        assert_eq!(ch.state, ChannelState::PendingOpen);
+        assert_eq!(ch.capacity, 1_000_000);
+        assert_eq!(ch.local_balance, 1_000_000);
+        assert_eq!(ch.remote_balance, 0);
+    }
+
+    #[test]
+    fn test_channel_open_on_funding() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 500_000);
+        ch.confirm_funding("faketxid", 0);
+        assert_eq!(ch.state, ChannelState::Open);
+        assert!(ch.current_commitment.is_some());
+    }
+
+    #[test]
+    fn test_send_payment_updates_balances() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid1", 0);
+        let result = ch.send_payment(&a, 300_000);
+        assert!(result.is_ok());
+        assert_eq!(ch.local_balance, 700_000);
+        assert_eq!(ch.remote_balance, 300_000);
+    }
+
+    #[test]
+    fn test_send_payment_insufficient_funds() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 100_000);
+        ch.confirm_funding("txid2", 0);
+        let result = ch.send_payment(&a, 200_000);
+        assert!(result.is_err());
+        assert_eq!(ch.local_balance, 100_000); // unchanged
+    }
+
+    #[test]
+    fn test_send_payment_increments_commitment_number() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid3", 0);
+        assert_eq!(ch.commitment_number, 0);
+        ch.send_payment(&a, 1_000).unwrap();
+        assert_eq!(ch.commitment_number, 1);
+        ch.send_payment(&a, 1_000).unwrap();
+        assert_eq!(ch.commitment_number, 2);
+    }
+
+    #[test]
+    fn test_send_htlc_locks_balance() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid4", 0);
+        let htlc_id = ch.send_htlc(100_000, "aabbccddeeff", 500).unwrap();
+        assert_eq!(htlc_id, 0);
+        assert_eq!(ch.local_balance, 1_000_000 - 100); // 100 sat locked
+        assert_eq!(ch.pending_htlcs.len(), 1);
+    }
+
+    #[test]
+    fn test_settle_htlc_correct_preimage() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid5", 0);
+        let preimage = b"test_preimage_32bytes_here______";
+        let hash = hex::encode(blake3::hash(preimage).as_bytes());
+        ch.send_htlc(1000, &hash, 500).unwrap();
+        let preimage_hex = hex::encode(preimage);
+        assert!(ch.settle_htlc(0, &preimage_hex).is_ok());
+        assert_eq!(ch.pending_htlcs.len(), 0);
+    }
+
+    #[test]
+    fn test_settle_htlc_wrong_preimage() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid6", 0);
+        let real = b"real_preimage_32bytes_here______";
+        let hash = hex::encode(blake3::hash(real).as_bytes());
+        ch.send_htlc(1000, &hash, 500).unwrap();
+        let result = ch.settle_htlc(0, &hex::encode(b"wrong_preimage__________________"));
+        assert!(result.is_err());
+        assert_eq!(ch.pending_htlcs.len(), 1); // still pending
+    }
+
+    #[test]
+    fn test_cooperative_close() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid7", 0);
+        ch.send_payment(&a, 300_000).unwrap();
+        let (local, remote) = ch.cooperative_close(1000);
+        assert_eq!(ch.state, ChannelState::Closed);
+        assert_eq!(local,  700_000 - 1000);
+        assert_eq!(remote, 300_000);
+    }
+
+    #[test]
+    fn test_check_penalty_finds_revocation() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid8", 0);
+        ch.send_payment(&a, 1_000).unwrap(); // creates revocation for seq 0
+        let rev = ch.check_penalty(0);
+        assert!(rev.is_some());
+        assert_eq!(rev.unwrap().for_sequence, 0);
+    }
+
+    #[test]
+    fn test_check_penalty_none_for_unknown_sequence() {
+        let a = alice();
+        let b = bob();
+        let mut ch = Channel::new(&a, &b.public_key_hex(), 1_000_000);
+        ch.confirm_funding("txid9", 0);
+        let rev = ch.check_penalty(99);
+        assert!(rev.is_none());
+    }
+
+    #[test]
+    fn test_revocation_secret_unique() {
+        let r1 = RevocationSecret::new(1);
+        let r2 = RevocationSecret::new(1);
+        // Different CSPRNG → different secrets (with overwhelming probability)
+        assert_ne!(r1.secret, r2.secret);
+    }
+
+    #[test]
+    fn test_htlc_can_settle_correct() {
+        let preimage = b"preimage_data_exactly_32_bytes__";
+        let hash  = hex::encode(blake3::hash(preimage).as_bytes());
+        let htlc  = Htlc::new_outgoing(1_000_000, &hash, 100, 0);
+        assert!(htlc.can_settle(&hex::encode(preimage)));
+    }
+
+    #[test]
+    fn test_htlc_can_settle_wrong() {
+        let hash = hex::encode(blake3::hash(b"correct").as_bytes());
+        let htlc = Htlc::new_outgoing(1_000_000, &hash, 100, 0);
+        assert!(!htlc.can_settle(&hex::encode(b"wrong")));
+    }
+
+    #[test]
+    fn test_lightning_node_id() {
+        let w    = alice();
+        let node = LightningNode::new(w);
+        assert!(!node.node_id().is_empty());
+    }
+}
