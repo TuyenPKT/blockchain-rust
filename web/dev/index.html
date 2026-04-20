@@ -907,7 +907,7 @@ function switchTab(tabBarId, panelClass, activeId) {
 }
 
 SwaggerUIBundle({
-  url:    (window.API_BASE || '') + '/api/openapi.json',
+  url:    API_BASE + '/api/openapi.json',
   dom_id: '#swagger-ui',
   presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
   layout: 'BaseLayout',

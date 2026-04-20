@@ -25,8 +25,8 @@ pub fn build_spec() -> Value {
         "openapi": "3.0.3",
         "info": {
             "title":       "PKTScan Testnet API",
-            "version":     "24.8",
-            "description": "PKTScan blockchain explorer REST API — public read-only endpoints. Base URL: https://oceif.com/blockchain-rust"
+            "version":     "27.1",
+            "description": "PKTScan blockchain explorer REST API + ETH JSON-RPC 2.0 — Base URL: https://oceif.com/blockchain-rust"
         },
         "servers": [
             { "url": "https://oceif.com/blockchain-rust", "description": "Testnet (oceif.com)" },
@@ -252,6 +252,39 @@ fn build_paths() -> Value {
                   "responses": { "200": ok_json("SyncStatus") } }
     }));
 
+    // ── ETH JSON-RPC 2.0 ─────────────────────────────────────────────────
+    m.insert("/eth".into(), json!({
+        "post": {
+            "summary": "Ethereum JSON-RPC 2.0 dispatcher (14 methods)", "tags": ["evm"],
+            "description": "Send any ETH JSON-RPC 2.0 request. Supported methods: eth_chainId, eth_blockNumber, eth_getBalance, eth_getTransactionCount, eth_getBlockByNumber, eth_getBlockByHash, eth_getTransactionByHash, eth_call, eth_estimateGas, eth_sendRawTransaction, eth_getLogs, eth_gasPrice, eth_maxPriorityFeePerGas.",
+            "requestBody": {
+                "required": true,
+                "content": {
+                    "application/json": {
+                        "schema": { "$ref": "#/components/schemas/JsonRpcRequest" },
+                        "examples": {
+                            "eth_blockNumber": {
+                                "value": { "jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1 }
+                            },
+                            "eth_getBalance": {
+                                "value": { "jsonrpc": "2.0", "method": "eth_getBalance", "params": ["0xAddress", "latest"], "id": 1 }
+                            },
+                            "eth_call": {
+                                "value": { "jsonrpc": "2.0", "method": "eth_call", "params": [{"to": "0xContract", "data": "0x70a08231..."}, "latest"], "id": 1 }
+                            }
+                        }
+                    }
+                }
+            },
+            "responses": {
+                "200": {
+                    "description": "JSON-RPC response",
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JsonRpcResponse" } } }
+                }
+            }
+        }
+    }));
+
     // ── Meta ──────────────────────────────────────────────────────────────
     m.insert("/api/openapi.json".into(), json!({
         "get": { "summary": "This OpenAPI 3.0.3 spec", "tags": ["meta"],
@@ -393,6 +426,31 @@ fn build_schemas() -> Value {
                 "difficulty":  { "type": "array", "items": { "type": "number" } },
                 "block_times": { "type": "array", "items": { "type": "number" } }
             }
+        },
+        "JsonRpcRequest": {
+            "type": "object",
+            "required": ["jsonrpc", "method", "id"],
+            "properties": {
+                "jsonrpc": { "type": "string", "enum": ["2.0"] },
+                "method":  { "type": "string", "example": "eth_blockNumber" },
+                "params":  { "description": "Method parameters (varies per method)" },
+                "id":      { "description": "Request ID (integer or string)" }
+            }
+        },
+        "JsonRpcResponse": {
+            "type": "object",
+            "properties": {
+                "jsonrpc": { "type": "string", "enum": ["2.0"] },
+                "id":      { "description": "Matches request ID" },
+                "result":  { "description": "Result value (varies per method)" },
+                "error": {
+                    "type": "object",
+                    "properties": {
+                        "code":    { "type": "integer" },
+                        "message": { "type": "string" }
+                    }
+                }
+            }
         }
     })
 }
@@ -454,9 +512,9 @@ mod tests {
     }
 
     #[test]
-    fn test_spec_info_version_24_8() {
+    fn test_spec_info_version() {
         let s = build_spec();
-        assert_eq!(s["info"]["version"].as_str(), Some("24.8"));
+        assert_eq!(s["info"]["version"].as_str(), Some("27.1"));
     }
 
     #[test]
@@ -571,6 +629,19 @@ mod tests {
         let p = pparam("addr", "string", "Address");
         assert_eq!(p["in"].as_str(),        Some("path"));
         assert_eq!(p["required"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_spec_has_eth_rpc_path() {
+        let s = build_spec();
+        assert!(s["paths"]["/eth"]["post"].is_object());
+    }
+
+    #[test]
+    fn test_spec_has_jsonrpc_schemas() {
+        let s = build_spec();
+        assert!(s["components"]["schemas"]["JsonRpcRequest"].is_object());
+        assert!(s["components"]["schemas"]["JsonRpcResponse"].is_object());
     }
 
     #[test]
