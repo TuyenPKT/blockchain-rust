@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@300;400;600;700&display=swap">
-  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=24.0">
+  <link rel="stylesheet" href="/blockchain-rust/web/css/style.css?v=27.1">
   <style>
     /* ── Layout ─────────────────────────────────────────── */
     .dev-hero {
@@ -71,8 +71,32 @@
     }
     @media (max-width: 680px) { .grid-3 { grid-template-columns: 1fr; } }
 
+    .grid-2 {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+    }
+    @media (max-width: 560px) { .grid-2 { grid-template-columns: 1fr; } }
+
     .feature-icon {
       font-size: 1.4rem; margin-bottom: 10px;
+    }
+
+    /* ── What's new banner ──────────────────────────────── */
+    .whats-new {
+      background: rgba(247,161,51,.07);
+      border: 1px solid rgba(247,161,51,.25);
+      border-radius: 12px; padding: 16px 20px;
+      display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+    }
+    .whats-new-tag {
+      font-family: 'JetBrains Mono', monospace; font-size: .7rem; font-weight: 700;
+      background: var(--accent); color: #000; border-radius: 4px;
+      padding: 2px 8px; white-space: nowrap; margin-top: 2px;
+    }
+    .whats-new-body { flex: 1; min-width: 220px; }
+    .whats-new-body strong { font-size: .88rem; display: block; margin-bottom: 6px; }
+    .whats-new-body ul {
+      margin: 0; padding-left: 16px;
+      font-size: .82rem; color: var(--muted); line-height: 1.8;
     }
 
     /* ── Steps ──────────────────────────────────────────── */
@@ -153,6 +177,22 @@
     }
     .ep-auth.write { color: var(--accent); }
 
+    /* ── Tab switcher ────────────────────────────────────── */
+    .tab-bar {
+      display: flex; gap: 4px; margin-bottom: 0;
+      border-bottom: 1px solid var(--border); padding-bottom: 0;
+    }
+    .tab-btn {
+      font-family: 'Sora', sans-serif; font-size: .82rem; font-weight: 600;
+      padding: 8px 18px; cursor: pointer;
+      border: none; background: transparent; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
     /* ── Rate limit table ────────────────────────────────── */
     .rl-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
@@ -198,18 +238,29 @@
     .role-write { background: rgba(247,161,51,.12);  color: var(--accent); }
     .role-admin { background: rgba(240,96,96,.12);   color: var(--red); }
     .role-desc  { font-size: .8rem; color: var(--muted); }
+
+    /* ── Pill tags ───────────────────────────────────────── */
+    .pill {
+      display: inline-block; font-family: 'JetBrains Mono', monospace;
+      font-size: .68rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 20px; margin-right: 4px;
+    }
+    .pill-evm     { background: rgba(121,184,255,.12); color: var(--blue); border: 1px solid rgba(121,184,255,.3); }
+    .pill-script  { background: rgba(62,207,110,.12);  color: var(--green); border: 1px solid rgba(62,207,110,.3); }
+    .pill-chain   { background: rgba(247,161,51,.12);  color: var(--accent); border: 1px solid rgba(247,161,51,.3); }
   </style>
 </head>
 <body>
 
 <!-- ── Hero ── -->
 <div class="dev-hero">
-  <div class="hero-badge">Developer Portal · v24.8</div>
+  <div class="hero-badge">Developer Portal · v19.9</div>
   <h1>Build on <span style="color:var(--accent)">PKT</span></h1>
-  <p>REST API, WebSocket, JS/TS SDK, và Webhooks — mọi thứ cần để xây dựng ứng dụng trên nền PKT blockchain.</p>
+  <p>REST API, ETH JSON-RPC, WebSocket, Script VM, và Lightning — mọi thứ cần để xây dựng ứng dụng trên nền PKT blockchain.</p>
   <div class="hero-btns">
     <a class="btn-hero-primary" href="#quickstart">Quickstart</a>
     <a class="btn-hero-ghost"   href="#api-reference">API Reference</a>
+    <a class="btn-hero-ghost"   href="#evm-rpc">EVM RPC</a>
     <a class="btn-hero-ghost"   href="/blockchain-rust/playground">Playground</a>
     <a class="btn-hero-ghost"   href="/blockchain-rust/webhooks">Webhooks</a>
   </div>
@@ -217,14 +268,45 @@
 
 <div class="dev-body">
 
+  <!-- ── What's New ── -->
+  <div class="whats-new">
+    <div class="whats-new-tag">NEW in v27.x</div>
+    <div class="whats-new-body">
+      <strong>EVM Compatible Layer + Bitcoin Script Parity</strong>
+      <ul>
+        <li>Ethereum JSON-RPC 2.0 — 14 phương thức tại <code>POST /eth</code></li>
+        <li>Full EVM executor — 140+ opcodes, EIP-1559, CALL/CREATE sub-execution với WorldState</li>
+        <li>Bitcoin Script VM — CLTV (BIP65), CSV (BIP112), HTLC, Taproot/Schnorr (BIP340/341)</li>
+        <li>Lightning Network — payment channels, HTLC, revocation &amp; penalty mechanism</li>
+      </ul>
+    </div>
+  </div>
+
   <!-- ── Features ── -->
   <div>
     <div class="section-title">Tính năng</div>
-    <div class="grid-3">
+    <div class="grid-3" style="margin-bottom:14px">
       <div class="card">
         <div class="feature-icon">⚡</div>
         <h3>REST API</h3>
         <p>Blocks, transactions, addresses, UTXOs, mempool — toàn bộ data on-chain qua HTTP JSON.</p>
+      </div>
+      <div class="card">
+        <div class="feature-icon">🔗</div>
+        <h3>ETH JSON-RPC</h3>
+        <p><code>POST /eth</code> — tương thích Ethereum: <code>eth_call</code>, <code>eth_estimateGas</code>, <code>eth_sendRawTransaction</code> và 11 methods khác.</p>
+      </div>
+      <div class="card">
+        <div class="feature-icon">📜</div>
+        <h3>Bitcoin Script VM</h3>
+        <p>CLTV, CSV, HTLC, Taproot/Schnorr, MuSig2 — Script execution hoàn chỉnh với SpendContext.</p>
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <div class="feature-icon">⚡</div>
+        <h3>Lightning Network</h3>
+        <p>Payment channels, HTLC settlement, revocation secret, penalty broadcast — Layer 2 PKT.</p>
       </div>
       <div class="card">
         <div class="feature-icon">🔔</div>
@@ -248,7 +330,7 @@
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
-            <h4>Gọi API không cần auth</h4>
+            <h4>Gọi REST API không cần auth</h4>
             <p>Tất cả endpoint <code>GET /api/testnet/*</code> đều public — không cần API key.</p>
             <div class="code-wrap">
               <div class="code-hdr">
@@ -266,6 +348,50 @@ curl https://oceif.com/blockchain-rust/api/testnet/balance/pkt1q...</div>
 
         <div class="step">
           <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Gọi ETH JSON-RPC <span class="pill pill-evm">EVM</span></h4>
+            <p>Endpoint <code>POST /eth</code> — tương thích hoàn toàn với Ethereum JSON-RPC 2.0.</p>
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash — eth_blockNumber</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'</span></div>
+            </div>
+            <div style="margin-top:10px">
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash — eth_getBalance</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xAddress","latest"],"id":1}'</span></div>
+            </div>
+            </div>
+            <div style="margin-top:10px">
+            <div class="code-wrap">
+              <div class="code-hdr">
+                <span>bash — eth_call (smart contract read)</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{
+    "jsonrpc": "2.0",
+    "method":  "eth_call",
+    "params":  [{"to":"0xContract","data":"0x70a08231..."},"latest"],
+    "id": 1
+  }'</span></div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
           <div class="step-body">
             <h4>Cài JS/TS SDK</h4>
             <p>SDK typed đầy đủ, hỗ trợ REST + JSON-RPC + WebSocket.</p>
@@ -289,14 +415,18 @@ curl https://oceif.com/blockchain-rust/api/testnet/balance/pkt1q...</div>
 });
 
 <span class="c-kw">const</span> summary = <span class="c-kw">await</span> client.<span class="c-fn">getSummary</span>();
-console.<span class="c-fn">log</span>(summary.height, summary.hashrate);</div>
+console.<span class="c-fn">log</span>(summary.height, summary.hashrate);
+
+<span class="c-comment">// EVM — eth_call via JSON-RPC</span>
+<span class="c-kw">const</span> bal = <span class="c-kw">await</span> client.eth.<span class="c-fn">getBalance</span>(<span class="c-str">'0xAddress'</span>);
+console.<span class="c-fn">log</span>(<span class="c-str">'Balance (wei):'</span>, bal);</div>
             </div>
             </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-num">3</div>
+          <div class="step-num">4</div>
           <div class="step-body">
             <h4>Subscribe real-time qua WebSocket</h4>
             <p>Nhận block/tx mới không cần polling.</p>
@@ -317,7 +447,7 @@ client.<span class="c-fn">subscribe</span>(<span class="c-str">'tx'</span>, (tx)
         </div>
 
         <div class="step">
-          <div class="step-num">4</div>
+          <div class="step-num">5</div>
           <div class="step-body">
             <h4>Đăng ký Webhook (cần write API key)</h4>
             <p>Nhận HTTP POST khi có event — không cần giữ WebSocket connection.</p>
@@ -338,9 +468,9 @@ client.<span class="c-fn">subscribe</span>(<span class="c-str">'tx'</span>, (tx)
     </div>
   </div>
 
-  <!-- ── API Endpoints ── -->
+  <!-- ── REST API Endpoints ── -->
   <div id="endpoints">
-    <div class="section-title">API Endpoints</div>
+    <div class="section-title">REST API Endpoints <span class="pill pill-chain">PKT</span></div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="ep-table">
         <thead>
@@ -375,6 +505,283 @@ client.<span class="c-fn">subscribe</span>(<span class="c-str">'tx'</span>, (tx)
     </div>
     <div style="margin-top:10px;text-align:right">
       <a href="/blockchain-rust/playground" style="font-size:.82rem;color:var(--accent)">Thử nghiệm trong API Playground →</a>
+    </div>
+  </div>
+
+  <!-- ── ETH JSON-RPC ── -->
+  <div id="evm-rpc">
+    <div class="section-title">ETH JSON-RPC 2.0 <span class="pill pill-evm">EVM</span></div>
+    <div class="card" style="padding:0 0 12px;overflow:hidden">
+      <div style="padding:16px 20px 12px;border-bottom:1px solid var(--border);font-size:.84rem;color:var(--muted)">
+        Endpoint: <code style="font-family:'JetBrains Mono',monospace;color:var(--blue)">POST /eth</code>
+        &nbsp;·&nbsp; Content-Type: <code style="font-family:'JetBrains Mono',monospace">application/json</code>
+        &nbsp;·&nbsp; Format: <code style="font-family:'JetBrains Mono',monospace">{"jsonrpc":"2.0","method":"...","params":[...],"id":1}</code>
+      </div>
+      <table class="ep-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Mô tả</th>
+            <th>Params</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ep-path">eth_chainId</td>
+            <td>Chain ID của PKT network</td>
+            <td class="ep-auth">—</td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_blockNumber</td>
+            <td>Block height hiện tại (hex)</td>
+            <td class="ep-auth">—</td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getBalance</td>
+            <td>Số dư của EVM address</td>
+            <td class="ep-auth"><code>[address, "latest"]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getTransactionCount</td>
+            <td>Nonce của address (số tx đã gửi)</td>
+            <td class="ep-auth"><code>[address, "latest"]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getBlockByNumber</td>
+            <td>Block theo number</td>
+            <td class="ep-auth"><code>[hex_num, fullTx]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getBlockByHash</td>
+            <td>Block theo hash</td>
+            <td class="ep-auth"><code>[hash, fullTx]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getTransactionByHash</td>
+            <td>Transaction theo hash</td>
+            <td class="ep-auth"><code>[txHash]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_call</td>
+            <td>Gọi smart contract (read-only, không tốn gas)</td>
+            <td class="ep-auth"><code>[{to, data}, "latest"]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_estimateGas</td>
+            <td>Ước tính gas cho transaction</td>
+            <td class="ep-auth"><code>[{from, to, data}]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_sendRawTransaction</td>
+            <td>Broadcast raw signed transaction (RLP encoded)</td>
+            <td class="ep-auth"><code>[rawTxHex]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_getLogs</td>
+            <td>Query event logs theo filter</td>
+            <td class="ep-auth"><code>[{address, topics}]</code></td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_gasPrice</td>
+            <td>Gas price hiện tại (EIP-1559 base fee)</td>
+            <td class="ep-auth">—</td>
+          </tr>
+          <tr>
+            <td class="ep-path">eth_maxPriorityFeePerGas</td>
+            <td>Suggested priority fee (miner tip)</td>
+            <td class="ep-auth">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- EVM code examples -->
+    <div style="margin-top:14px">
+      <div class="tab-bar" id="evm-tabs">
+        <button class="tab-btn active" onclick="switchTab('evm-tabs','evm-panel','evm-balance')">eth_getBalance</button>
+        <button class="tab-btn" onclick="switchTab('evm-tabs','evm-panel','evm-call')">eth_call</button>
+        <button class="tab-btn" onclick="switchTab('evm-tabs','evm-panel','evm-send')">eth_sendRawTx</button>
+        <button class="tab-btn" onclick="switchTab('evm-tabs','evm-panel','evm-gas')">eth_estimateGas</button>
+      </div>
+      <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;overflow:hidden">
+
+        <div class="tab-panel active" id="evm-balance">
+          <div class="code-wrap" style="border:none;border-radius:0">
+            <div class="code-hdr">
+              <span>bash</span>
+              <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+            </div>
+            <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{
+    "jsonrpc": "2.0",
+    "method":  "eth_getBalance",
+    "params":  ["0x742d35Cc6634C0532925a3b8D4C9C4F2B1e4A123", "latest"],
+    "id": 1
+  }'</span>
+
+<span class="c-comment"># Response:</span>
+<span class="c-str">{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "0x3635c9adc5dea00000"
+}</span></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="evm-call">
+          <div class="code-wrap" style="border:none;border-radius:0">
+            <div class="code-hdr">
+              <span>bash — ERC-20 balanceOf</span>
+              <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+            </div>
+            <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{
+    "jsonrpc": "2.0",
+    "method":  "eth_call",
+    "params":  [{
+      "to":   "0xTokenContract",
+      "data": "0x70a08231000000000000000000000000YourAddress"
+    }, "latest"],
+    "id": 1
+  }'</span></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="evm-send">
+          <div class="code-wrap" style="border:none;border-radius:0">
+            <div class="code-hdr">
+              <span>bash — broadcast signed tx</span>
+              <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+            </div>
+            <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{
+    "jsonrpc": "2.0",
+    "method":  "eth_sendRawTransaction",
+    "params":  ["0xf86c...signedRlpHex"],
+    "id": 1
+  }'</span></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="evm-gas">
+          <div class="code-wrap" style="border:none;border-radius:0">
+            <div class="code-hdr">
+              <span>bash — estimate gas for contract call</span>
+              <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+            </div>
+            <div class="code-body">curl -X POST https://oceif.com/blockchain-rust/eth \
+  -H <span class="c-str">"Content-Type: application/json"</span> \
+  -d <span class="c-str">'{
+    "jsonrpc": "2.0",
+    "method":  "eth_estimateGas",
+    "params":  [{
+      "from": "0xSender",
+      "to":   "0xContract",
+      "data": "0xa9059cbb..."
+    }],
+    "id": 1
+  }'</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Script & Lightning ── -->
+  <div id="script">
+    <div class="section-title">Bitcoin Script &amp; Lightning <span class="pill pill-script">Layer 2</span></div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Script Types được hỗ trợ</h3>
+        <p style="margin-bottom:12px">PKT Script VM thực thi đầy đủ các loại script Bitcoin chuẩn.</p>
+        <table style="width:100%;font-size:.81rem;border-collapse:collapse">
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">P2PKH</td>
+            <td style="padding:7px 0;color:var(--muted)">Pay-to-PubKey-Hash</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">P2SH</td>
+            <td style="padding:7px 0;color:var(--muted)">Pay-to-Script-Hash</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">P2TR</td>
+            <td style="padding:7px 0;color:var(--muted)">Taproot (Schnorr + MAST)</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">CLTV</td>
+            <td style="padding:7px 0;color:var(--muted)">CheckLockTimeVerify (BIP65)</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">CSV</td>
+            <td style="padding:7px 0;color:var(--muted)">CheckSequenceVerify (BIP112)</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">HTLC</td>
+            <td style="padding:7px 0;color:var(--muted)">Hash Time-Locked Contract</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--blue)">Multisig</td>
+            <td style="padding:7px 0;color:var(--muted)">m-of-n CheckMultiSig</td>
+          </tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Lightning Network</h3>
+        <p style="margin-bottom:12px">Payment channels Layer 2 trên PKT — instant, low-fee transactions.</p>
+        <table style="width:100%;font-size:.81rem;border-collapse:collapse">
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">open_channel</td>
+            <td style="padding:7px 0;color:var(--muted)">Fund + mở payment channel</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">send_payment</td>
+            <td style="padding:7px 0;color:var(--muted)">Gửi PKT instant qua channel</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">send_htlc</td>
+            <td style="padding:7px 0;color:var(--muted)">Hash Time-Locked payment</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">settle_htlc</td>
+            <td style="padding:7px 0;color:var(--muted)">Giải quyết HTLC với preimage</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">cooperative_close</td>
+            <td style="padding:7px 0;color:var(--muted)">Đóng channel hợp tác</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 0;font-family:'JetBrains Mono',monospace;color:var(--green)">force_close</td>
+            <td style="padding:7px 0;color:var(--muted)">Broadcast commitment TX on-chain</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- HTLC example -->
+    <div class="code-wrap">
+      <div class="code-hdr">
+        <span>HTLC script — OP_IF hash-path / OP_ELSE timelock-path</span>
+        <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+      </div>
+      <div class="code-body"><span class="c-comment">// Offered HTLC: receiver dùng preimage, sender dùng CLTV expiry</span>
+<span class="c-kw">let</span> script = Script::<span class="c-fn">htlc_offered</span>(
+    &amp;payment_hash,  <span class="c-comment">// SHA256 của preimage</span>
+    &amp;receiver_pkh,  <span class="c-comment">// beneficiary pubkey hash</span>
+    &amp;sender_pkh,    <span class="c-comment">// refund pubkey hash</span>
+    expiry_blockheight,
+);
+
+<span class="c-comment">// Spend path 1: receiver cung cấp preimage</span>
+<span class="c-kw">let</span> ctx = SpendContext { lock_time: <span class="c-num">0</span>, sequence: <span class="c-num">0</span> };
+<span class="c-kw">let</span> ok = script.<span class="c-fn">execute_with_context</span>(&amp;preimage_witness, &amp;sig, &amp;ctx);
+
+<span class="c-comment">// Spend path 2: sender refund sau expiry</span>
+<span class="c-kw">let</span> ctx = SpendContext { lock_time: expiry_blockheight + <span class="c-num">1</span>, sequence: <span class="c-num">0xFFFFFFFF</span> };
+<span class="c-kw">let</span> ok = script.<span class="c-fn">execute_with_context</span>(&amp;[], &amp;sender_sig, &amp;ctx);</div>
     </div>
   </div>
 
@@ -478,7 +885,7 @@ app.<span class="c-fn">post</span>(<span class="c-str">'/hook'</span>, (req, res
 
 <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
 <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-<script src="/blockchain-rust/web/js/shared.js?v=24.0"></script>
+<script src="/blockchain-rust/web/js/shared.js?v=27.1"></script>
 <script>
 function copyCode(btn) {
   const code = btn.closest('.code-wrap').querySelector('.code-body').innerText;
@@ -486,6 +893,16 @@ function copyCode(btn) {
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+function switchTab(tabBarId, panelClass, activeId) {
+  const bar = document.getElementById(tabBarId);
+  bar.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const panel = bar.nextElementSibling.querySelectorAll('.tab-panel')[i];
+    const isActive = panel && panel.id === activeId;
+    b.classList.toggle('active', isActive);
+    if (panel) panel.classList.toggle('active', isActive);
   });
 }
 
