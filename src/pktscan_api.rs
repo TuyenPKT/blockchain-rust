@@ -22,7 +22,7 @@
 //!   WS  /ws                       → live block/tx feed
 //!
 //! Caching: GET /api/* responses are cached for 5 s with ETag/304 support.
-//! CORS: allowlist-based (configurable via CorsConfig), default: localhost:3000/8080 + pktscan.io
+//! CORS: allowlist-based (configurable via CorsConfig), default: localhost:3000/8080 + oceif.com
 //! CLI: `cargo run -- pktscan [port]` (default 8080)
 
 use axum::{
@@ -46,7 +46,7 @@ pub type CacheDb = Arc<Mutex<crate::response_cache::ResponseCache>>;
 
 // ─── CORS Config + Middleware (v9.6) ─────────────────────────────────────────
 
-/// Allowlist-based CORS config.  Default origins: localhost + pktscan.io.
+/// Allowlist-based CORS config.  Default origins: localhost + oceif.com.
 /// Pass `"*"` as a single entry to allow all origins (wildcard).
 #[derive(Debug, Clone)]
 pub struct CorsConfig {
@@ -70,7 +70,6 @@ impl Default for CorsConfig {
             allowed_origins: vec![
                 "http://localhost:3000".to_string(),
                 "http://localhost:8080".to_string(),
-                "https://pktscan.io".to_string(),
                 "tauri://localhost".to_string(),
                 "https://tauri.localhost".to_string(),
                 "https://oceif.com".to_string(),
@@ -1002,7 +1001,7 @@ pub async fn serve(state: ScanDb, port: u16) {
     println!("  GET  /api/openapi.json");
     println!("  GET  /api/sdk/js");
     println!("  GET  /api/sdk/ts");
-    println!("  CORS: allowlist [localhost:3000/8080, pktscan.io]  (v9.6)");
+    println!("  CORS: allowlist [localhost:3000/8080, oceif.com]  (v9.6)");
     println!("  Auth: X-API-Key header  (optional for GET, required for write — v10.0)");
     println!("  GET  /api/admin/logs?date=YYYY-MM-DD&limit=100  (admin role only — v10.1)");
     println!("  ZT: rate limit 100 req/60s per IP  |  audit log ~/.pkt/audit.log");
@@ -1169,9 +1168,9 @@ mod tests {
     }
 
     #[test]
-    fn test_cors_default_allows_pktscan() {
+    fn test_cors_default_allows_oceif() {
         let cfg = CorsConfig::default();
-        assert!(cfg.is_allowed("https://pktscan.io"));
+        assert!(cfg.is_allowed("https://oceif.com"));
     }
 
     #[test]

@@ -29,7 +29,7 @@ pub fn build_spec() -> Value {
             "description": "PKTScan blockchain explorer REST API + ETH JSON-RPC 2.0 — Base URL: https://oceif.com/blockchain-rust"
         },
         "servers": [
-            { "url": "https://oceif.com/blockchain-rust", "description": "Testnet (oceif.com)" },
+            { "url": "https://oceif.com/blockchain-rust", "description": "Production" },
             { "url": "http://localhost:8081",              "description": "Local dev" }
         ],
         "paths": build_paths(),
@@ -523,6 +523,7 @@ mod tests {
         let servers = s["servers"].as_array().unwrap();
         assert!(servers.iter().any(|sv| sv["url"].as_str()
             .map(|u| u.contains("oceif.com")).unwrap_or(false)));
+        assert_eq!(servers[0]["description"].as_str(), Some("Production"));
     }
 
     #[test]
