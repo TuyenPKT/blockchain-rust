@@ -386,9 +386,9 @@ fn apply_block_streaming<R: Read>(
     block_hash:  [u8; 32],
     skip_merkle: bool,
 ) -> Result<BlockApplyResult, SyncError> {
-    // Read 80-byte wire header — keep bytes for merkle check
-    let header_bytes = read_bytes_s(r, 80)?;
-    // merkle_root field is bytes [36..68]
+    // Read 84-byte PKT wire header (nonce=u64 vs Bitcoin's u32, so 84 not 80)
+    let header_bytes = read_bytes_s(r, crate::pkt_wire::WIRE_HEADER_LEN)?;
+    // merkle_root field is bytes [36..68] (same offset in both 80- and 84-byte layouts)
     let mut expected_merkle = [0u8; 32];
     expected_merkle.copy_from_slice(&header_bytes[36..68]);
 
