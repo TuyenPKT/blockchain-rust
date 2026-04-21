@@ -312,7 +312,7 @@ mod tests {
     fn test_process_block_no_change_without_threshold() {
         let mut e = StewardEngine::new();
         let (_, _, new) = e.process_block(1, 1000,
-            StewardVote::for_candidate("pkt1newsteward", 1));
+            StewardVote::for_candidate("0000000000000000000000000000000000000003", 1));
         // 1 vote trong 1 block window = >50% → đủ threshold thực ra
         // Nhưng với window=1 và threshold=1: winner!
         // Kiểm tra đúng logic
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_steward_changes_when_threshold_met() {
         let mut e = StewardEngine::new();
-        let candidate = "pkt1candidate000000000000000000000";
+        let candidate = "0000000000000000000000000000000000000001";
         // Vote đủ để chiếm >50% trong window
         for i in 0..1100u64 {
             e.process_block(i + 1, 1000,
@@ -335,8 +335,8 @@ mod tests {
     #[test]
     fn test_steward_no_change_without_majority() {
         let mut e = StewardEngine::new();
-        let c1 = "pkt1candidate1";
-        let c2 = "pkt1candidate2";
+        let c1 = "0000000000000000000000000000000000000001";
+        let c2 = "0000000000000000000000000000000000000002";
         // Prefill window với abstain để threshold đủ cao trước khi split
         for i in 0..VOTE_WINDOW as u64 {
             e.process_block(i + 1, 1000, StewardVote::abstain(i + 1));
@@ -396,15 +396,15 @@ mod tests {
     fn test_vote_fraction_all_for_one() {
         let mut r = VoteRegistry::new();
         for i in 0..100u64 {
-            r.add_vote(StewardVote::for_candidate("addr1", i));
+            r.add_vote(StewardVote::for_candidate("0000000000000000000000000000000000000001", i));
         }
-        assert!((r.vote_fraction("addr1") - 1.0).abs() < 0.001);
+        assert!((r.vote_fraction("0000000000000000000000000000000000000001") - 1.0).abs() < 0.001);
     }
 
     #[test]
     fn test_vote_fraction_none_returns_zero() {
         let r = VoteRegistry::new();
-        assert_eq!(r.vote_fraction("nobody"), 0.0);
+        assert_eq!(r.vote_fraction("0000000000000000000000000000000000000000"), 0.0);
     }
 
     #[test]
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn test_elected_at_recorded() {
         let mut e = StewardEngine::new();
-        let candidate = "pkt1newsteward00000000000000000000";
+        let candidate = "0000000000000000000000000000000000000003";
         for i in 0..1100u64 {
             e.process_block(i + 1, 1000,
                 StewardVote::for_candidate(candidate, i + 1));

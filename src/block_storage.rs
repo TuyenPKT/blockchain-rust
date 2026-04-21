@@ -324,10 +324,10 @@ mod tests {
         BlockStorage::open_with_max(&dir, max).unwrap()
     }
 
-    fn sample_block(height: u64) -> Block {
+    fn block_at_height(height: u64) -> Block {
         Block {
             index:        height,
-            timestamp:    1_700_000_000 + height as i64,
+            timestamp:    height as i64,
             transactions: vec![],
             prev_hash:    format!("{:064x}", height.saturating_sub(1)),
             nonce:        height * 7,
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn test_append_read_roundtrip() {
         let s   = make_storage();
-        let blk = sample_block(0);
+        let blk = block_at_height(0);
         s.append(&blk).unwrap();
         let got = s.get(0).unwrap().unwrap();
         assert_eq!(got.index, 0);
@@ -393,7 +393,7 @@ mod tests {
     fn test_append_multiple() {
         let s = make_storage();
         for h in 0..5 {
-            s.append(&sample_block(h)).unwrap();
+            s.append(&block_at_height(h)).unwrap();
         }
         assert_eq!(s.count(), 5);
         for h in 0..5 {
@@ -405,16 +405,16 @@ mod tests {
     #[test]
     fn test_tip_height_updated() {
         let s = make_storage();
-        s.append(&sample_block(0)).unwrap();
-        s.append(&sample_block(1)).unwrap();
-        s.append(&sample_block(2)).unwrap();
+        s.append(&block_at_height(0)).unwrap();
+        s.append(&block_at_height(1)).unwrap();
+        s.append(&block_at_height(2)).unwrap();
         assert_eq!(s.get_tip_height().unwrap(), Some(2));
     }
 
     #[test]
     fn test_location_correct_file_num() {
         let s   = make_storage();
-        let blk = sample_block(10);
+        let blk = block_at_height(10);
         let loc = s.append(&blk).unwrap();
         assert_eq!(loc.file_num, 0);
         assert_eq!(loc.offset, 0);
@@ -423,8 +423,8 @@ mod tests {
     #[test]
     fn test_second_block_offset_nonzero() {
         let s  = make_storage();
-        let l0 = s.append(&sample_block(0)).unwrap();
-        let l1 = s.append(&sample_block(1)).unwrap();
+        let l0 = s.append(&block_at_height(0)).unwrap();
+        let l1 = s.append(&block_at_height(1)).unwrap();
         assert_eq!(l0.file_num, 0);
         assert_eq!(l1.file_num, 0);
         assert!(l1.offset > l0.offset);
@@ -437,8 +437,8 @@ mod tests {
         // max = 50 bytes: кожен block ~120 bytes JSON → після першого блока
         // наступний вже переходить до файлу 1
         let s  = make_storage_max(50);
-        let l0 = s.append(&sample_block(0)).unwrap();
-        let l1 = s.append(&sample_block(1)).unwrap();
+        let l0 = s.append(&block_at_height(0)).unwrap();
+        let l1 = s.append(&block_at_height(1)).unwrap();
         assert_eq!(l0.file_num, 0);
         assert_eq!(l1.file_num, 1); // переключилось на новий файл
         assert_eq!(l1.offset, 0);   // offset скидається до 0
@@ -447,8 +447,8 @@ mod tests {
     #[test]
     fn test_both_files_readable_after_split() {
         let s = make_storage_max(50);
-        s.append(&sample_block(0)).unwrap();
-        s.append(&sample_block(1)).unwrap();
+        s.append(&block_at_height(0)).unwrap();
+        s.append(&block_at_height(1)).unwrap();
         let b0 = s.get(0).unwrap().unwrap();
         let b1 = s.get(1).unwrap().unwrap();
         assert_eq!(b0.index, 0);
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn test_read_at_bad_magic_returns_corrupt_error() {
         let s = make_storage();
-        s.append(&sample_block(0)).unwrap();
+        s.append(&block_at_height(0)).unwrap();
 
         // Corrupt the magic bytes in the file
         let path = s.dat_path(0);

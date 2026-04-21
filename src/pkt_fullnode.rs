@@ -204,14 +204,14 @@ mod tests {
 
     #[test]
     fn test_default_port_when_peer_only() {
-        let cfg = parse_fullnode_args(&sv(&["node.example.com:8333"]));
+        let cfg = parse_fullnode_args(&sv(&["127.0.0.1:8333"]));
         assert_eq!(cfg.port, DEFAULT_PORT);
     }
 
     #[test]
     fn test_custom_peer() {
-        let cfg = parse_fullnode_args(&sv(&["node.example.com:8333"]));
-        assert_eq!(cfg.peer, "node.example.com:8333");
+        let cfg = parse_fullnode_args(&sv(&["127.0.0.1:8333"]));
+        assert_eq!(cfg.peer, "127.0.0.1:8333");
     }
 
     #[test]
@@ -234,33 +234,33 @@ mod tests {
 
     #[test]
     fn test_all_args_together() {
-        let cfg = parse_fullnode_args(&sv(&["8082", "mynode.example.com:8333", "--mainnet", "--p2p-port", "9333"]));
+        let cfg = parse_fullnode_args(&sv(&["8082", "127.0.0.1:8333", "--mainnet", "--p2p-port", "9333"]));
         assert_eq!(cfg.port,     8082);
         assert_eq!(cfg.p2p_port, 9333);
-        assert_eq!(cfg.peer,     "mynode.example.com:8333");
+        assert_eq!(cfg.peer,     "127.0.0.1:8333");
         assert!(cfg.mainnet);
     }
 
     #[test]
     fn test_port_before_peer() {
-        let cfg = parse_fullnode_args(&sv(&["9000", "peer.example.com:8333"]));
+        let cfg = parse_fullnode_args(&sv(&["9000", "127.0.0.1:8333"]));
         assert_eq!(cfg.port, 9000);
-        assert_eq!(cfg.peer, "peer.example.com:8333");
+        assert_eq!(cfg.peer, "127.0.0.1:8333");
     }
 
     #[test]
     fn test_peer_before_port() {
-        let cfg = parse_fullnode_args(&sv(&["peer.example.com:8333", "9000"]));
+        let cfg = parse_fullnode_args(&sv(&["127.0.0.1:8333", "9000"]));
         assert_eq!(cfg.port, 9000);
-        assert_eq!(cfg.peer, "peer.example.com:8333");
+        assert_eq!(cfg.peer, "127.0.0.1:8333");
     }
 
     #[test]
     fn test_mainnet_flag_first() {
-        let cfg = parse_fullnode_args(&sv(&["--mainnet", "8090", "peer.example.com:8333"]));
+        let cfg = parse_fullnode_args(&sv(&["--mainnet", "8090", "127.0.0.1:8333"]));
         assert!(cfg.mainnet);
         assert_eq!(cfg.port, 8090);
-        assert_eq!(cfg.peer, "peer.example.com:8333");
+        assert_eq!(cfg.peer, "127.0.0.1:8333");
     }
 
     #[test]

@@ -343,13 +343,13 @@ mod tests {
     }
 
     fn make_job(server: &mut PoolServer) -> WorkTemplate {
-        server.new_job(1, "0".repeat(64).as_str(), &"a".repeat(64), &"b".repeat(64))
+        server.new_job(1, "0".repeat(64).as_str(), &"0".repeat(64), &"0".repeat(64))
     }
 
     #[test]
     fn test_register_miner() {
         let mut srv = make_server(3);
-        let diff = srv.register_miner("alice", "addr1");
+        let diff = srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         assert_eq!(diff, 1); // 3-2=1
         assert_eq!(srv.miner_count(), 1);
     }
@@ -366,21 +366,21 @@ mod tests {
     #[test]
     fn test_client_mine_share_valid() {
         let mut srv = make_server(4);
-        srv.register_miner("bob", "addr2");
+        srv.register_miner("0000000000000002", "0000000000000000000000000000000000000002");
         let work = make_job(&mut srv);
-        let client = PoolClient::new("bob", "addr2");
+        let client = PoolClient::new("0000000000000002", "0000000000000000000000000000000000000002");
         let share = client.mine_share(&work).expect("should find share");
         assert!(share.hash.starts_with(&"0".repeat(work.share_difficulty)));
-        assert_eq!(share.miner_id, "bob");
+        assert_eq!(share.miner_id, "0000000000000002");
         assert_eq!(share.job_id, work.job_id);
     }
 
     #[test]
     fn test_submit_share_accepted() {
         let mut srv = make_server(4);
-        srv.register_miner("bob", "addr2");
+        srv.register_miner("0000000000000002", "0000000000000000000000000000000000000002");
         let work = make_job(&mut srv);
-        let client = PoolClient::new("bob", "addr2");
+        let client = PoolClient::new("0000000000000002", "0000000000000000000000000000000000000002");
         let share = client.mine_share(&work).unwrap();
         let result = srv.submit_share(share);
         // either Accepted or BlockFound
@@ -391,9 +391,9 @@ mod tests {
     #[test]
     fn test_submit_stale_job() {
         let mut srv = make_server(3);
-        srv.register_miner("bob", "addr2");
+        srv.register_miner("0000000000000002", "0000000000000000000000000000000000000002");
         let work = make_job(&mut srv);
-        let client = PoolClient::new("bob", "addr2");
+        let client = PoolClient::new("0000000000000002", "0000000000000000000000000000000000000002");
         let mut share = client.mine_share(&work).unwrap();
         share.job_id = 999; // stale
         let result = srv.submit_share(share);
@@ -403,9 +403,9 @@ mod tests {
     #[test]
     fn test_submit_invalid_hash() {
         let mut srv = make_server(3);
-        srv.register_miner("bob", "addr2");
+        srv.register_miner("0000000000000002", "0000000000000000000000000000000000000002");
         let work = make_job(&mut srv);
-        let client = PoolClient::new("bob", "addr2");
+        let client = PoolClient::new("0000000000000002", "0000000000000000000000000000000000000002");
         let mut share = client.mine_share(&work).unwrap();
         share.hash = "ffffffffffffffffffffffffffffffff".to_string(); // wrong
         let result = srv.submit_share(share);
@@ -415,11 +415,11 @@ mod tests {
     #[test]
     fn test_payout_proportional() {
         let mut srv = make_server(4);
-        srv.register_miner("alice", "addr1");
-        srv.register_miner("bob",   "addr2");
+        srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
+        srv.register_miner("0000000000000002",   "0000000000000000000000000000000000000002");
         let work = make_job(&mut srv);
-        let c1 = PoolClient::new("alice", "addr1");
-        let c2 = PoolClient::new("bob",   "addr2");
+        let c1 = PoolClient::new("0000000000000001", "0000000000000000000000000000000000000001");
+        let c2 = PoolClient::new("0000000000000002",   "0000000000000000000000000000000000000002");
 
         // alice submits 3 shares, bob 1 share
         for _ in 0..3 {
@@ -431,8 +431,8 @@ mod tests {
         let _ = srv.submit_share(s);
 
         let payouts = srv.payout(1000);
-        let alice_pay = *payouts.get("alice").unwrap_or(&0);
-        let bob_pay   = *payouts.get("bob").unwrap_or(&0);
+        let alice_pay = *payouts.get("0000000000000001").unwrap_or(&0);
+        let bob_pay   = *payouts.get("0000000000000002").unwrap_or(&0);
         // alice = 75%, bob = 25%
         assert!(alice_pay > bob_pay, "alice should earn more: {} vs {}", alice_pay, bob_pay);
         assert!(alice_pay + bob_pay <= 1000);
@@ -441,23 +441,23 @@ mod tests {
     #[test]
     fn test_reset_round() {
         let mut srv = make_server(4);
-        srv.register_miner("alice", "addr1");
+        srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         let work = make_job(&mut srv);
-        let c = PoolClient::new("alice", "addr1");
+        let c = PoolClient::new("0000000000000001", "0000000000000000000000000000000000000001");
         let s = c.mine_share(&work).unwrap();
         let _ = srv.submit_share(s);
         assert_eq!(srv.total_shares_in_round, 1);
         srv.reset_round();
         assert_eq!(srv.total_shares_in_round, 0);
-        assert_eq!(srv.miners["alice"].shares, 0);
+        assert_eq!(srv.miners["0000000000000001"].shares, 0);
     }
 
     #[test]
     fn test_get_work_for_miner() {
         let mut srv = make_server(4);
-        srv.register_miner("alice", "addr1");
+        srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         make_job(&mut srv);
-        let work = srv.get_work_for("alice").unwrap();
+        let work = srv.get_work_for("0000000000000001").unwrap();
         assert_eq!(work.block_difficulty, 4);
         assert_eq!(work.share_difficulty, 2); // 4-2=2
     }
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn test_default_share_diff_floor() {
         let mut srv = make_server(2);
-        let diff = srv.register_miner("alice", "addr1");
+        let diff = srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         assert_eq!(diff, 1); // floor at 1
     }
 
@@ -473,9 +473,9 @@ mod tests {
     fn test_block_solution_detected() {
         // Use difficulty=1 so shares can also be block solutions
         let mut srv = make_server(1);
-        srv.register_miner("miner", "addr");
+        srv.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         let work = make_job(&mut srv);
-        let client = PoolClient::new("miner", "addr");
+        let client = PoolClient::new("0000000000000001", "0000000000000000000000000000000000000001");
         // mine until we find something that meets diff=1 (share_diff=1 too)
         let share = client.mine_share(&work).unwrap();
         if share.is_block_solution {

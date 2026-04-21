@@ -657,9 +657,9 @@ mod tests {
     #[test]
     fn test_parse_args_host_flag() {
         let cfg = parse_peer_args(&[
-            "--host".to_string(), "mypeer.example.com".to_string(),
+            "--host".to_string(), "127.0.0.1".to_string(),
         ]);
-        assert_eq!(cfg.host, "mypeer.example.com");
+        assert_eq!(cfg.host, "127.0.0.1");
     }
 
     #[test]
@@ -697,8 +697,8 @@ mod tests {
 
     #[test]
     fn test_parse_args_bare_host_only() {
-        let cfg = parse_peer_args(&["mypeer.net".to_string()]);
-        assert_eq!(cfg.host, "mypeer.net");
+        let cfg = parse_peer_args(&["127.0.0.1".to_string()]);
+        assert_eq!(cfg.host, "127.0.0.1");
     }
 
     #[test]

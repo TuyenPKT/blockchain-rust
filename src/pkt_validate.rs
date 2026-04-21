@@ -273,13 +273,13 @@ mod tests {
         }
     }
 
-    fn dummy_header(merkle_root: [u8; 32]) -> WireBlockHeader {
+    fn header_with_merkle(merkle_root: [u8; 32]) -> WireBlockHeader {
         WireBlockHeader {
             version:     1,
             prev_block:  [0u8; 32],
             merkle_root,
-            timestamp:   1_700_000_000,
-            bits:        0x1d00ffff,
+            timestamp:   0,
+            bits:        0,
             nonce:       0,
         }
     }
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn validate_rejects_empty_block() {
         let db = UtxoSyncDb::open_temp().unwrap();
-        let hdr = dummy_header([0u8; 32]);
+        let hdr = header_with_merkle([0u8; 32]);
         let err = validate_block(&[], &hdr, 1, &db).unwrap_err();
         assert_eq!(err, ValidateError::EmptyBlock);
     }
@@ -331,12 +331,12 @@ mod tests {
     #[test]
     fn validate_rejects_missing_coinbase() {
         let db = UtxoSyncDb::open_temp().unwrap();
-        let fake_prev = [0xaau8; 32];
+        let prev = [0xaau8; 32];
         // Insert the UTXO so UTXO check passes, but first tx is not coinbase
-        db.insert_utxo(&fake_prev, 0, &WireTxOut { value: 1000, script_pubkey: vec![] }, 0).unwrap();
-        let tx = regular_tx(fake_prev, 0, 900);
+        db.insert_utxo(&prev, 0, &WireTxOut { value: 1000, script_pubkey: vec![] }, 0).unwrap();
+        let tx = regular_tx(prev, 0, 900);
         let txid = wire_txid(&tx);
-        let hdr  = dummy_header(compute_merkle_root(&[txid]));
+        let hdr  = header_with_merkle(compute_merkle_root(&[txid]));
         let err  = validate_block(&[tx], &hdr, 1, &db).unwrap_err();
         assert_eq!(err, ValidateError::MissingCoinbase);
     }
@@ -347,7 +347,7 @@ mod tests {
         let cb1 = coinbase_tx();
         let cb2 = coinbase_tx();
         let txids = [wire_txid(&cb1), wire_txid(&cb2)];
-        let hdr = dummy_header(compute_merkle_root(&txids));
+        let hdr = header_with_merkle(compute_merkle_root(&txids));
         let err = validate_block(&[cb1, cb2], &hdr, 1, &db).unwrap_err();
         assert!(matches!(err, ValidateError::ExtraCoinbase { tx_index: 1 }));
     }
@@ -360,7 +360,7 @@ mod tests {
         let cb   = coinbase_tx();
         let bad  = regular_tx([0xbbu8; 32], 0, 100);
         let txids = [wire_txid(&cb), wire_txid(&bad)];
-        let hdr  = dummy_header(compute_merkle_root(&txids));
+        let hdr  = header_with_merkle(compute_merkle_root(&txids));
         let err  = validate_block(&[cb, bad], &hdr, 1, &db).unwrap_err();
         assert!(matches!(err, ValidateError::MissingUtxo { .. }));
     }
@@ -375,7 +375,7 @@ mod tests {
         let tx1  = regular_tx(prev, 0, 900);
         let tx2  = regular_tx(prev, 0, 900); // same input → double-spend
         let txids = [wire_txid(&cb), wire_txid(&tx1), wire_txid(&tx2)];
-        let hdr  = dummy_header(compute_merkle_root(&txids));
+        let hdr  = header_with_merkle(compute_merkle_root(&txids));
         let err  = validate_block(&[cb, tx1, tx2], &hdr, 1, &db).unwrap_err();
         assert!(matches!(err, ValidateError::DoubleSpend { .. }));
     }
@@ -389,7 +389,7 @@ mod tests {
         let cb   = coinbase_tx();
         let tx   = regular_tx(prev, 0, 200); // output > input
         let txids = [wire_txid(&cb), wire_txid(&tx)];
-        let hdr  = dummy_header(compute_merkle_root(&txids));
+        let hdr  = header_with_merkle(compute_merkle_root(&txids));
         let err  = validate_block(&[cb, tx], &hdr, 1, &db).unwrap_err();
         assert!(matches!(err, ValidateError::ValueOverflow { .. }));
     }
@@ -400,7 +400,7 @@ mod tests {
     fn validate_rejects_bad_merkle_root() {
         let db   = UtxoSyncDb::open_temp().unwrap();
         let cb   = coinbase_tx();
-        let hdr  = dummy_header([0xffu8; 32]); // wrong merkle root
+        let hdr  = header_with_merkle([0xffu8; 32]); // wrong merkle root
         let err  = validate_block(&[cb], &hdr, 1, &db).unwrap_err();
         assert!(matches!(err, ValidateError::BadMerkleRoot { .. }));
     }
@@ -412,7 +412,7 @@ mod tests {
         let db   = UtxoSyncDb::open_temp().unwrap();
         let cb   = coinbase_tx();
         let root = compute_merkle_root(&[wire_txid(&cb)]);
-        let hdr  = dummy_header(root);
+        let hdr  = header_with_merkle(root);
         let result = validate_block(&[cb], &hdr, 1, &db).unwrap();
         assert_eq!(result.tx_count, 1);
         assert_eq!(result.total_fee, 0);
@@ -427,7 +427,7 @@ mod tests {
         let cb  = coinbase_tx();
         let tx  = regular_tx(prev, 0, 900); // fee = 100
         let txids = [wire_txid(&cb), wire_txid(&tx)];
-        let hdr = dummy_header(compute_merkle_root(&txids));
+        let hdr = header_with_merkle(compute_merkle_root(&txids));
         let result = validate_block(&[cb, tx], &hdr, 5, &db).unwrap();
         assert_eq!(result.tx_count, 2);
         assert_eq!(result.total_fee, 100);

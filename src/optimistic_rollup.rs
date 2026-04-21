@@ -280,7 +280,7 @@ impl Sequencer {
     pub fn create_fraudulent_batch(
         &mut self,
         txs: Vec<OptimisticTx>,
-        fake_new_root: impl Into<String>,
+        invalid_root: impl Into<String>,
         current_time: u64,
     ) -> OptimisticBatch {
         let old_root = self.state.state_root();
@@ -291,7 +291,7 @@ impl Sequencer {
         OptimisticBatch {
             batch_id,
             old_root,
-            new_root: fake_new_root.into(),
+            new_root: invalid_root.into(),
             txs,
             sequencer:     self.name.clone(),
             submitted_at:  current_time,

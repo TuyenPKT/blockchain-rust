@@ -116,30 +116,6 @@ mod tests {
         Arc::new(Mutex::new(PoolServer::new(4)))
     }
 
-    fn populated_pool() -> PoolServer {
-        let mut pool = PoolServer::new(4);
-        pool.register_miner("alice", "addr_alice");
-        pool.register_miner("bob",   "addr_bob");
-
-        let job = pool.new_job(1, "prevhash000", "txroot", "witroot");
-
-        // Submit shares for alice
-        for nonce in 0..5u64 {
-            let hash = job.hash_nonce(nonce);
-            if job.meets_share(&hash) {
-                let share = Share {
-                    job_id:    job.job_id.clone(),
-                    miner_id:  "alice".to_string(),
-                    nonce,
-                    hash:      hash.clone(),
-                    is_block_solution: job.meets_block(&hash),
-                };
-                pool.submit_share(share);
-            }
-        }
-        pool
-    }
-
     // ── pool_router ───────────────────────────────────────────────────────
 
     #[test]
@@ -170,8 +146,8 @@ mod tests {
     #[test]
     fn test_stats_after_register() {
         let mut pool = PoolServer::new(4);
-        pool.register_miner("m1", "addr1");
-        pool.register_miner("m2", "addr2");
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
+        pool.register_miner("0000000000000002", "0000000000000000000000000000000000000002");
         assert_eq!(pool.miners.len(), 2);
     }
 
@@ -204,16 +180,16 @@ mod tests {
     #[test]
     fn test_miners_hashrate_zero_before_shares() {
         let mut pool = PoolServer::new(4);
-        pool.register_miner("m1", "addr1");
-        let m = pool.miners.get("m1").unwrap();
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
+        let m = pool.miners.get("0000000000000001").unwrap();
         assert_eq!(m.estimated_hashrate(), 0.0);
     }
 
     #[test]
     fn test_miners_share_difficulty_set() {
         let mut pool = PoolServer::new(4);
-        pool.register_miner("m1", "addr1");
-        let m = pool.miners.get("m1").unwrap();
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
+        let m = pool.miners.get("0000000000000001").unwrap();
         assert_eq!(m.share_difficulty, pool.default_share_diff);
     }
 
@@ -229,7 +205,7 @@ mod tests {
     #[test]
     fn test_payout_no_shares() {
         let mut pool = PoolServer::new(4);
-        pool.register_miner("m1", "addr1");
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         let p = pool.payout(1000);
         assert!(p.is_empty()); // no shares → no payout
     }
@@ -249,7 +225,7 @@ mod tests {
     fn test_miner_count() {
         let mut pool = PoolServer::new(4);
         assert_eq!(pool.miner_count(), 0);
-        pool.register_miner("a", "addr_a");
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         assert_eq!(pool.miner_count(), 1);
     }
 
@@ -258,14 +234,14 @@ mod tests {
     #[test]
     fn test_reset_round_clears_shares() {
         let mut pool = PoolServer::new(4);
-        pool.register_miner("m1", "addr1");
+        pool.register_miner("0000000000000001", "0000000000000000000000000000000000000001");
         // manually add shares
-        if let Some(m) = pool.miners.get_mut("m1") {
+        if let Some(m) = pool.miners.get_mut("0000000000000001") {
             m.shares = 5;
         }
         pool.total_shares_in_round = 5;
         pool.reset_round();
         assert_eq!(pool.total_shares_in_round, 0);
-        assert_eq!(pool.miners["m1"].shares, 0);
+        assert_eq!(pool.miners["0000000000000001"].shares, 0);
     }
 }
