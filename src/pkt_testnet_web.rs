@@ -1443,7 +1443,6 @@ pub fn testnet_web_router() -> Router {
         .route("/api/testnet/sync/proc-status",      get(ps_sync_proc_status))
         .merge(sync_control)
         .with_state(ps)
-        .merge(crate::openapi::openapi_router())
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────────
