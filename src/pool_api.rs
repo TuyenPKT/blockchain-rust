@@ -108,7 +108,7 @@ async fn get_pool_miners(State(db): State<PoolDb>) -> Json<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mining_pool::{PoolServer, Share};
+    use crate::mining_pool::PoolServer;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
