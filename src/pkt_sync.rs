@@ -649,6 +649,25 @@ pub fn run_sync(peer: &str, mainnet: bool) {
     run_sync_inner(peer, cfg);
 }
 
+/// Kiểm tra xem `ip` có phải là một trong các IP của máy này không.
+/// Dùng UDP routing trick: kết nối tới IP đó (không gửi gói nào) để hỏi OS
+/// sẽ dùng interface nào — nếu source IP == target IP thì đây là self.
+fn is_self_ip(ip: std::net::IpAddr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() {
+        return true;
+    }
+    use std::net::UdpSocket;
+    if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+        let target = std::net::SocketAddr::new(ip, 1);
+        if sock.connect(target).is_ok() {
+            if let Ok(local) = sock.local_addr() {
+                return local.ip() == ip;
+            }
+        }
+    }
+    false
+}
+
 fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
     println!("[sync] kết nối tới {} ({}) …", peer_addr, cfg.network);
 
@@ -675,6 +694,51 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
             return;
         }
     };
+
+    // Self-connection guard: nếu seed resolve về IP của chính mình, chỉ lấy peers
+    // rồi sync từ các peer ngoài đó — không sync block từ chính mình.
+    if is_self_ip(addr.ip()) {
+        eprintln!("[sync] 🔍 {} → local IP ({}) — chỉ discover peers, không sync blocks",
+            peer_addr, addr.ip());
+        let mut stream = match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("[sync] self-seed connect thất bại: {}", e); return; }
+        };
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        if crate::pkt_peer::do_handshake(&mut stream, &peer_cfg).is_err() { return; }
+
+        // Lấy peers từ seed
+        let peers_path = pkt_wire::default_peers_path();
+        let mut external_peers: Vec<String> = Vec::new();
+        if send_msg(&mut stream, PktMsg::GetAddr, cfg.magic).is_ok() {
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+            if let Ok(PktMsg::Addr { peers }) = recv_msg(&mut stream, cfg.magic) {
+                let _ = pkt_wire::save_peers(&peers_path, &peers);
+                for p in &peers {
+                    if let Some(s) = p.to_addr_string() {
+                        let ip: std::net::IpAddr = s.split(':').next()
+                            .and_then(|h| h.parse().ok())
+                            .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+                        if !is_self_ip(ip) {
+                            external_peers.push(s);
+                        }
+                    }
+                }
+            }
+        }
+        drop(stream);
+
+        if external_peers.is_empty() {
+            eprintln!("[sync] ⚠️  seed chưa có peer ngoài — thử lại sau");
+            return;
+        }
+        // Sync từ peer ngoài đầu tiên tìm được
+        for ep in &external_peers {
+            println!("[sync] 🔗 sync từ external peer: {}", ep);
+            run_sync_inner(ep, cfg.clone());
+        }
+        return;
+    }
 
     let mut stream = match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
         Ok(s) => s,
