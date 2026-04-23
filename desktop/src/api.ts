@@ -4,6 +4,7 @@
 async function api<T>(nodeUrl: string, path: string): Promise<T> {
   const base = nodeUrl.replace(/\/$/, "");
   const resp = await fetch(`${base}${path}`);
+  if (resp.status === 503) return {} as T;
   if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   return resp.json();
 }
