@@ -241,6 +241,26 @@ fn block_to_wire_payload(
     payload
 }
 
+fn load_known_peers() -> Vec<String> {
+    let path = crate::pkt_wire::default_peers_path();
+    std::fs::read_to_string(&path).unwrap_or_default()
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn append_known_peer(addr_str: &str) {
+    let path = crate::pkt_wire::default_peers_path();
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    if existing.lines().any(|l| l.trim() == addr_str) { return; }
+    if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(&path) {
+        let _ = f.write_all(format!("{}\n", addr_str).as_bytes());
+    }
+}
+
 fn handle_peer(
     mut stream: TcpStream,
     magic:      [u8; 4],
@@ -274,6 +294,7 @@ fn handle_peer(
         locked.push(peer.clone());
         println!("[pkt-node] total peers: {}", locked.len());
     }
+    append_known_peer(&peer.addr);
 
     // Longer read timeout for established session
     let _ = stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)));
@@ -402,13 +423,24 @@ fn handle_peer(
                     }
                 }
                 PktMsg::GetAddr => {
-                    // Respond with Addr containing currently connected peers
-                    let peer_addrs: Vec<crate::pkt_wire::NetAddr> = {
+                    // Trả về tất cả peers đã biết: đang kết nối + lịch sử (peers.txt)
+                    let mut seen_addrs = std::collections::HashSet::new();
+                    let mut peer_addrs: Vec<crate::pkt_wire::NetAddr> = {
                         let locked = lock_or_recover!(peers);
                         locked.iter()
-                            .filter_map(|p| crate::pkt_wire::NetAddr::from_addr_str(&p.addr))
+                            .filter_map(|p| {
+                                seen_addrs.insert(p.addr.clone());
+                                crate::pkt_wire::NetAddr::from_addr_str(&p.addr)
+                            })
                             .collect()
                     };
+                    for s in load_known_peers() {
+                        if seen_addrs.insert(s.clone()) {
+                            if let Some(na) = crate::pkt_wire::NetAddr::from_addr_str(&s) {
+                                peer_addrs.push(na);
+                            }
+                        }
+                    }
                     let count = peer_addrs.len();
                     if let Err(e) = send_msg(&mut stream, PktMsg::Addr { peers: peer_addrs }, magic) {
                         println!("[pkt-node] send addr failed {}: {}", addr, e);
@@ -418,6 +450,11 @@ fn handle_peer(
                 }
                 PktMsg::Addr { peers: received } => {
                     println!("[pkt-node] addr from {}: {} entries", addr, received.len());
+                    for na in &received {
+                        if let Some(s) = na.to_addr_string() {
+                            append_known_peer(&s);
+                        }
+                    }
                 }
                 PktMsg::Inv { items } => {
                     // Lọc những hash chưa thấy → gửi GetData để request
