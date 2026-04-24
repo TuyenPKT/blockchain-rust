@@ -45,9 +45,12 @@ pub const REGTEST_MAGIC:  [u8; 4] = [0xda, 0xb5, 0xbf, 0xfa];
 
 // ── Network ports ───────────────────────────────────────────────────────────
 
-pub const MAINNET_P2P_PORT:  u16 = 64764;
-pub const TESTNET_P2P_PORT:  u16 = 8333;   // OCEIF testnet thực tế (pkt_config.rs là source of truth)
+pub const MAINNET_P2P_PORT:  u16 = 64764;  // seed port
+pub const TESTNET_P2P_PORT:  u16 = 8333;   // seed port — seed.testnet.oceif.com
 pub const REGTEST_P2P_PORT:  u16 = 18444;
+
+pub const MAINNET_NODE_PORT: u16 = 64765;  // regular node P2P port (non-seed)
+pub const TESTNET_NODE_PORT: u16 = 8336;   // regular node P2P port (non-seed)
 
 pub const MAINNET_RPC_PORT:  u16 = 64766;
 pub const TESTNET_RPC_PORT:  u16 = 64767;
@@ -116,7 +119,7 @@ impl PktNetworkParams {
         PktNetworkParams {
             network:           Network::Mainnet,
             magic:             MAINNET_MAGIC,
-            p2p_port:          MAINNET_P2P_PORT,
+            p2p_port:          MAINNET_NODE_PORT,
             rpc_port:          MAINNET_RPC_PORT,
             hrp:               "pkt",
             genesis_hash:      MAINNET_GENESIS_HASH,
@@ -133,7 +136,7 @@ impl PktNetworkParams {
         PktNetworkParams {
             network:           Network::Testnet,
             magic:             TESTNET_MAGIC,
-            p2p_port:          TESTNET_P2P_PORT,
+            p2p_port:          TESTNET_NODE_PORT,
             rpc_port:          TESTNET_RPC_PORT,
             hrp:               "tpkt",
             genesis_hash:      TESTNET_GENESIS_HASH,
@@ -384,7 +387,7 @@ mod tests {
         let p = PktNetworkParams::mainnet();
         assert!(p.is_mainnet());
         assert_eq!(p.hrp, "pkt");
-        assert_eq!(p.p2p_port, 64764);
+        assert_eq!(p.p2p_port, MAINNET_NODE_PORT);
         assert_eq!(p.halving_interval, HALVING_INTERVAL);
     }
 
@@ -393,7 +396,7 @@ mod tests {
         let p = PktNetworkParams::testnet();
         assert!(p.is_testnet());
         assert_eq!(p.hrp, "tpkt");
-        assert_eq!(p.p2p_port, TESTNET_P2P_PORT);
+        assert_eq!(p.p2p_port, TESTNET_NODE_PORT);
     }
 
     #[test]
@@ -631,13 +634,15 @@ mod tests {
 
     #[test]
     fn audit_testnet_port_matches_actual_network() {
-        // VPS thực tế chạy trên port 8333 — phải khớp với TESTNET_P2P_PORT
-        assert_eq!(TESTNET_P2P_PORT, 8333, "TESTNET_P2P_PORT phải là 8333 (thực tế VPS)");
+        // Seed node (VPS) chạy trên 8333 — regular nodes chạy trên 8336
+        assert_eq!(TESTNET_P2P_PORT,  8333, "seed port phải là 8333");
+        assert_eq!(TESTNET_NODE_PORT, 8336, "node port phải là 8336");
     }
 
     #[test]
     fn audit_mainnet_port_matches_actual_network() {
-        assert_eq!(MAINNET_P2P_PORT, 64764, "MAINNET_P2P_PORT phải là 64764");
+        assert_eq!(MAINNET_P2P_PORT,  64764, "mainnet seed port phải là 64764");
+        assert_eq!(MAINNET_NODE_PORT, 64765, "mainnet node port phải là 64765");
     }
 
     #[test]

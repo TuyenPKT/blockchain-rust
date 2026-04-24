@@ -23,7 +23,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const DEFAULT_PORT:        u16  = 8081;
-const DEFAULT_P2P_PORT:    u16  = 8333;
+const DEFAULT_P2P_PORT:    u16  = 8336;
+const DEFAULT_RPC_PORT:    u16  = 8334;  // template server (miner)
 const DEFAULT_POOL_PORT:   u16  = 8337;
 const DEFAULT_STATS_PORT:  u16  = 8338;
 const DEFAULT_PEER:        &str = "seed.testnet.oceif.com:8333";
@@ -35,6 +36,7 @@ const RESTART_DELAY_SECS:  u64  = 5;
 pub struct FullnodeConfig {
     pub port:     u16,
     pub p2p_port: u16,
+    pub rpc_port: u16,
     pub peer:     String,
     pub mainnet:  bool,
 }
@@ -44,6 +46,7 @@ impl Default for FullnodeConfig {
         FullnodeConfig {
             port:     DEFAULT_PORT,
             p2p_port: DEFAULT_P2P_PORT,
+            rpc_port: DEFAULT_RPC_PORT,
             peer:     DEFAULT_PEER.to_string(),
             mainnet:  false,
         }
@@ -76,9 +79,14 @@ pub fn parse_fullnode_args(args: &[String]) -> FullnodeConfig {
         .cloned()
         .unwrap_or_else(|| DEFAULT_PEER.to_string());
 
+    let rpc_port = args.windows(2)
+        .find(|w| w[0] == "--rpc-port")
+        .and_then(|w| w[1].parse::<u16>().ok())
+        .unwrap_or(DEFAULT_RPC_PORT);
+
     let mainnet = args.iter().any(|a| a == "--mainnet");
 
-    FullnodeConfig { port, p2p_port, peer, mainnet }
+    FullnodeConfig { port, p2p_port, rpc_port, peer, mainnet }
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -90,9 +98,10 @@ pub fn cmd_fullnode(args: &[String]) {
         cfg.port, cfg.p2p_port, cfg.peer,
         if cfg.mainnet { "mainnet" } else { "testnet" });
 
-    let peer     = cfg.peer.clone();
-    let mainnet  = cfg.mainnet;
-    let p2p_port = cfg.p2p_port;
+    let peer      = cfg.peer.clone();
+    let mainnet   = cfg.mainnet;
+    let p2p_port  = cfg.p2p_port;
+    let rpc_port  = cfg.rpc_port;
 
     let rt = tokio::runtime::Runtime::new()
         .expect("tokio runtime");
@@ -114,7 +123,7 @@ pub fn cmd_fullnode(args: &[String]) {
             crate::pkt_node::NodeConfig::testnet(p2p_port)
         };
         let relay_hub     = crate::pkt_node::run_pkt_node(node_cfg, Arc::clone(&shared_chain));
-        let template_port = p2p_port + 1;
+        let template_port = rpc_port;
         {
             let chain_tmpl = Arc::clone(&shared_chain);
             let hub_tmpl   = Arc::clone(&relay_hub);

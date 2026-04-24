@@ -1657,7 +1657,7 @@ mod tests {
         assert_ne!(t.magic, PktNetworkParams::mainnet().magic);
 
         let m = PktNetworkParams::mainnet();
-        assert_eq!(m.p2p_port, 64764);
+        assert_eq!(m.p2p_port, 64765); // node port (seed = 64764)
         assert!(!m.genesis_hash.is_empty());
     }
 

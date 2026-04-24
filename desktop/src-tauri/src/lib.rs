@@ -176,7 +176,7 @@ async fn start_node(port: Option<u16>, peer: Option<String>) -> Result<String, S
     if NODE_RUNNING.load(Ordering::SeqCst) {
         return Err("Node đang chạy".into());
     }
-    let p2p_port  = port.unwrap_or(8333);
+    let p2p_port  = port.unwrap_or(8336);
     let peer_addr = peer.unwrap_or_else(|| pkt_core::pkt_config::get().seed_p2p());
 
     let stop = node_stop_signal();
@@ -1218,7 +1218,7 @@ pub fn run() {
         stop.store(false, Ordering::SeqCst);
         NODE_RUNNING.store(true, Ordering::SeqCst);
         let peer = pkt_core::pkt_config::get().seed_p2p();
-        spawn_background_node(8333, peer, stop);
+        spawn_background_node(8336, peer, stop);
     }
 
     tauri::Builder::default()

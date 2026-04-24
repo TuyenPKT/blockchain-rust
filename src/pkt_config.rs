@@ -51,7 +51,8 @@ pub struct PktConfig {
     pub magic:      [u8; 4],
 
     // Ports
-    pub p2p_port:   u16,          // 8333 / 64764
+    pub seed_port:  u16,          // 8333 / 64764  — seed node port (peer discovery)
+    pub p2p_port:   u16,          // 8336 / 64765  — regular node P2P port
     pub api_port:   u16,          // 8081 / 8081
     pub pool_port:  u16,          // 8337
     pub stats_port: u16,          // 8338
@@ -76,7 +77,8 @@ impl PktConfig {
             network:    Network::Testnet,
             seed_host:  "seed.testnet.oceif.com".into(),
             magic:      TESTNET_MAGIC,
-            p2p_port:   8333,
+            seed_port:  8333,
+            p2p_port:   8336,
             api_port:   8081,
             pool_port:  8337,
             stats_port: 8338,
@@ -94,7 +96,8 @@ impl PktConfig {
             network:    Network::Mainnet,
             seed_host:  "seed.mainnet.oceif.com".into(),
             magic:      MAINNET_MAGIC,
-            p2p_port:   64764,
+            seed_port:  64764,
+            p2p_port:   64765,
             api_port:   8081,
             pool_port:  8337,
             stats_port: 8338,
@@ -113,7 +116,7 @@ impl PktConfig {
 
     /// "seed.testnet.oceif.com:8333"
     pub fn seed_p2p(&self) -> String {
-        format!("{}:{}", self.seed_host, self.p2p_port)
+        format!("{}:{}", self.seed_host, self.seed_port)
     }
 
     /// "seed.testnet.oceif.com:8337"
@@ -149,7 +152,8 @@ mod tests {
     fn test_testnet_defaults() {
         let cfg = PktConfig::testnet();
         assert_eq!(cfg.seed_host, "seed.testnet.oceif.com");
-        assert_eq!(cfg.p2p_port, 8333);
+        assert_eq!(cfg.seed_port, 8333);
+        assert_eq!(cfg.p2p_port,  8336);
         assert_eq!(cfg.pool_port, 8337);
         assert_eq!(cfg.rpc_port, 8334);
         assert!(!cfg.is_mainnet());
@@ -159,7 +163,8 @@ mod tests {
     fn test_mainnet_defaults() {
         let cfg = PktConfig::mainnet();
         assert_eq!(cfg.seed_host, "seed.mainnet.oceif.com");
-        assert_eq!(cfg.p2p_port, 64764);
+        assert_eq!(cfg.seed_port, 64764);
+        assert_eq!(cfg.p2p_port,  64765);
         assert!(cfg.is_mainnet());
     }
 

@@ -78,7 +78,7 @@ export function Node({ nodeUrl }: NodeProps) {
 
   const startNode = useCallback(async () => {
     try {
-      const msg = await invoke<string>("start_node", { port: 8333, peer: seedAddr.trim() });
+      const msg = await invoke<string>("start_node", { port: 8336, peer: seedAddr.trim() });
       setNodeRunning(true);
       setNodeMsg(msg);
     } catch (e) { setNodeMsg(String(e)); }
@@ -137,8 +137,14 @@ function shortHash(h: string) {
         }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>
-            P2P Node — {nodeRunning ? `listening :8333 · peer ${seedAddr}` : "stopped"}
+            P2P Node — {nodeRunning ? "running" : "stopped"}
           </div>
+          {nodeRunning && (
+            <div style={{ fontSize: 11, color: colors.muted, marginTop: 3, display: "flex", gap: 16 }}>
+              <span>⬇ sync from <span style={{ color: colors.blue }}>{seedAddr}</span></span>
+              <span>⬆ listening <span style={{ color: colors.green }}>:8336</span></span>
+            </div>
+          )}
           {nodeMsg && <div style={{ fontSize: 11, color: colors.muted, marginTop: 2 }}>{nodeMsg}</div>}
         </div>
         <button
