@@ -453,14 +453,23 @@ fn handle_peer(
                                 }
                             }
                         } else if cmd_trim == "tx" {
-                            // Raw tx relay
+                            // Raw tx relay + save to MempoolDb for template server
                             use crate::pkt_relay::wire_tx_hash;
                             let txid = wire_tx_hash(payload);
                             let is_new = !seen.insert(txid);
                             if is_new {
-                                println!("[pkt-node] tx from {}: {} → relay to {} peers",
-                                    addr, hex::encode(&txid[..8]), relay_hub.peer_count().saturating_sub(1));
+                                let txid_hex = hex::encode(txid);
+                                println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
+                                    addr, &txid_hex[..16], relay_hub.peer_count().saturating_sub(1));
                                 relay_hub.broadcast_tx(txid, Some(&addr));
+                                let mp_path = crate::pkt_mempool_sync::default_mempool_db_path();
+                                if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp_path) {
+                                    let ts_ns = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_nanos() as u64)
+                                        .unwrap_or(0);
+                                    let _ = mdb.put_tx(&txid_hex, payload, 0, ts_ns);
+                                }
                             }
                         } else {
                             let dbg = format!("{:?}", other);
