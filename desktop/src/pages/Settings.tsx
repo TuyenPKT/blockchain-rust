@@ -285,7 +285,7 @@ export function Settings({ settings, onUpdate, onReset }: SettingsProps) {
 
       {/* About */}
       <Section title={t.section_about} icon="ℹ">
-        <Row label={t.row_version} description="PKTScan Desktop">
+        <Row label={t.row_version} description="Oceif Core">
           <span style={{ fontFamily: fonts.mono, fontSize: 13, color: colors.muted }}>v21.0</span>
         </Row>
         <Row label={t.row_stack} description="Tauri v2 + React 18 + TypeScript">

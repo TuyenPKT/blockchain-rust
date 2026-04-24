@@ -12,7 +12,7 @@ use crate::token_tx::extract_token_txs;
 use crate::staking::StakingPool;
 use crate::reward::RewardEngine;
 
-const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 5;
+const DIFFICULTY_ADJUSTMENT_INTERVAL: u64 = 10;
 const BLOCK_TIME_TARGET_SECS: i64 = 10;  // 10s/block — phù hợp hashrate ~1.5 MH/s VPS
 const MAX_DIFFICULTY: usize = 7;          // diff=7 ≈ 3 phút tối đa ở 1.5 MH/s
 const MAX_BLOCK_TX: usize = 100;

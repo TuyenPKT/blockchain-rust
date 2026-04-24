@@ -11,7 +11,7 @@ interface Line {
   text: string;
 }
 
-const HELP = `PKTScan Terminal v20.1
+const HELP = `Oceif Core Terminal v20.1
 Commands:
   summary          — network summary
   blocks [n]       — latest n blocks (default 5)
@@ -86,7 +86,7 @@ export function Terminal({ nodeUrl }: TerminalProps) {
 
   async function submit() {
     if (!input.trim()) return;
-    addLine("input", `[pktscan] > ${input}`);
+    addLine("input", `[oceif] > ${input}`);
     setHistory(h => [input, ...h.slice(0, 49)]);
     setHistIdx(-1);
     const cmd = input;
@@ -162,7 +162,7 @@ export function Terminal({ nodeUrl }: TerminalProps) {
         background: colors.surface2,
       }}>
         <span style={{ color: colors.accent, fontFamily: fonts.mono, fontSize: 13, flexShrink: 0 }}>
-          [pktscan] &gt;
+          [oceif] &gt;
         </span>
         <input
           ref={inputRef}

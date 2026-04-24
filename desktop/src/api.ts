@@ -1,12 +1,17 @@
-// api.ts — v25.0: fetch() trực tiếp đến embedded local API server
-// Không dùng invoke() cho data — frontend gọi thẳng http://127.0.0.1:21019
+// api.ts — v25.1: invoke("fetch_json") through Rust reqwest — bypasses WKWebView restrictions
+import { invoke } from "@tauri-apps/api/core";
 
 async function api<T>(nodeUrl: string, path: string): Promise<T> {
   const base = nodeUrl.replace(/\/$/, "");
-  const resp = await fetch(`${base}${path}`);
-  if (resp.status === 503) return {} as T;
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-  return resp.json();
+  const url  = `${base}${path}`;
+  const data = await invoke<unknown>("fetch_json", { url });
+  const d = data as Record<string, unknown>;
+  // 503-equivalent: server returns error object
+  if (d && typeof d === "object" && "error" in d) {
+    const errVal = d["error"];
+    if (errVal === "not_synced") return {} as T;
+  }
+  return data as T;
 }
 
 /** 1 PKT = 2^30 packets (not 10^9) */

@@ -420,6 +420,7 @@ mod tests {
 
         for i in 0u64..5 {
             let mut wire = sample_wiretx();
+            wire.inputs[0].prev_vout = i as u32; // unique UTXO per TX — avoids double-spend filter
             wire.outputs[0].value = i + 1;
             let raw   = encode_wire_tx(&wire);
             let txid  = compute_wire_txid(&raw);

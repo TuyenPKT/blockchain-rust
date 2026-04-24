@@ -3,23 +3,23 @@ import { useState, useEffect, useCallback } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
 import { MiniChart, type ChartPoint } from "../components/MiniChart";
-import { useLiveDashboard, type LiveEvent } from "../hooks/useLiveDashboard";
-import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
+import { useLiveDashboard } from "../hooks/useLiveDashboard";
 import {
-  fetchBlocks, fetchAnalytics,
-  fmtHashrate, fmtNum, shortHash, timeAgo,
-  type BlockHeader, type AnalyticsSeries,
+  fetchBlocks, fetchAnalytics, fetchMempool,
+  fmtHashrate, fmtNum, fmtPkt, shortHash, timeAgo,
+  type BlockHeader, type AnalyticsSeries, type MempoolTx,
 } from "../api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ExplorerSubTab = "overview" | "blocks" | "charts";
+export type ExplorerSubTab = "overview" | "blocks" | "charts" | "transactions";
 
 interface ExplorerProps {
   nodeUrl:    string;
   onBlock:    (height: number) => void;
+  onTx?:      (txid: string) => void;
   subTab?:    ExplorerSubTab;
   onSubTab?:  (t: ExplorerSubTab) => void;
 }
@@ -49,9 +49,10 @@ function ConnBadge({ connected }: { connected: boolean }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SUB_TABS: { id: ExplorerSubTab; label: string; icon: string }[] = [
-  { id: "overview", label: "Overview", icon: "📊" },
-  { id: "blocks",   label: "Blocks",   icon: "🧱" },
-  { id: "charts",   label: "Charts",   icon: "📈" },
+  { id: "overview",      label: "Overview",     icon: "📊" },
+  { id: "blocks",        label: "Blocks",       icon: "🧱" },
+  { id: "charts",        label: "Charts",       icon: "📈" },
+  { id: "transactions",  label: "Transactions", icon: "↔" },
 ];
 
 function SubTabBar({
@@ -84,191 +85,205 @@ function SubTabBar({
 // OVERVIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LiveStat({ icon, label, value, fmt, color, unit, pulse }: {
-  icon: string; label: string; value: number;
-  fmt?: (n: number) => string; color?: string; unit?: string; pulse?: boolean;
+
+function StatCard({ label, value, sub, icon, color, pulse }: {
+  label: string; value: string; sub?: string; icon: JSX.Element; color: string; pulse?: boolean;
 }) {
-  const animated = useAnimatedNumber(value);
-  const display  = fmt ? fmt(animated) : fmtNum(animated);
   return (
     <div style={{
-      background: colors.surface, border: `1px solid ${colors.border}`,
+      background: colors.surface2, border: `1px solid ${colors.border}`,
       borderRadius: 12, padding: "18px 20px",
-      display: "flex", flexDirection: "column", gap: 8,
-      position: "relative", overflow: "hidden",
+      display: "flex", flexDirection: "column", gap: 12,
     }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,transparent,${color ?? colors.accent}66,transparent)`,
-      }} />
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{
-          width: 32, height: 32, borderRadius: 8, fontSize: 16,
-          background: colors.surface2, display: "flex",
-          alignItems: "center", justifyContent: "center",
-        }}>{icon}</span>
-        <span style={{
-          fontSize: 11, color: colors.muted, fontWeight: 700,
-          textTransform: "uppercase", letterSpacing: ".07em",
-        }}>{label}</span>
-        {pulse && (
-          <span style={{
-            marginLeft: "auto", width: 7, height: 7, borderRadius: "50%",
-            background: colors.green, boxShadow: `0 0 6px ${colors.green}`,
-            animation: "pulse 2s infinite",
-          }} />
-        )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 13, color: colors.muted, fontWeight: 500 }}>{label}</span>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: color + "22", border: `1px solid ${color}33`,
+          display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0,
+        }}>{icon}</div>
       </div>
-      <div style={{
-        fontSize: 26, fontWeight: 700, color: color ?? colors.text,
-        fontFamily: fonts.mono, letterSpacing: "-.02em",
-      }}>
-        {display}
-        {unit && <span style={{ fontSize: 14, color: colors.muted, marginLeft: 4 }}>{unit}</span>}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: colors.text, fontFamily: fonts.mono, letterSpacing: "-.02em" }}>
+            {value}
+          </span>
+          {pulse && <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.green, boxShadow: `0 0 6px ${colors.green}`, animation: "pulse 2s infinite", display: "inline-block" }} />}
+        </div>
+        {sub && <div style={{ fontSize: 12, color: colors.green, marginTop: 4, fontWeight: 600 }}>{sub}</div>}
       </div>
     </div>
   );
 }
 
-function BlockRowSmall({ b, i, total }: { b: BlockHeader; i: number; total: number }) {
-  const h       = b.index ?? b.height ?? 0;
-  const txCount = b.tx_count ?? 0;
-  const ts      = b.timestamp ?? 0;
+function DashBlockRow({ b, i, total, onBlock }: { b: BlockHeader; i: number; total: number; onBlock: (h: number) => void }) {
+  const h = b.index ?? b.height ?? 0;
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12, padding: "11px 18px",
-      borderBottom: i < total - 1 ? `1px solid ${colors.border}` : "none",
-      animation: i === 0 ? "slideIn .4s ease" : "none",
-    }}>
+    <div onClick={() => onBlock(h)}
+      style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "11px 16px",
+        borderBottom: i < total - 1 ? `1px solid ${colors.border}` : "none",
+        cursor: "pointer", transition: "background .12s",
+        animation: i === 0 ? "slideIn .4s ease" : "none",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = colors.surface3)}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
       <div style={{
-        width: 38, height: 38, borderRadius: 8, flexShrink: 0,
-        background: colors.surface2, border: `1px solid ${colors.border}`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: fonts.mono, fontWeight: 700, fontSize: 11, color: colors.accent,
-      }}>{h.toString().slice(-4)}</div>
+        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+        background: colors.surface3, display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+        </svg>
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13, color: colors.text }}>
+        <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13, color: colors.accent }}>
           #{fmtNum(h)}
         </div>
-        <div style={{ fontSize: 11, color: colors.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 11, color: colors.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {b.hash ? shortHash(b.hash) : "—"}
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <span style={{
-          fontFamily: fonts.mono, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
-          background: `${colors.blue}22`, color: colors.blue, border: `1px solid ${colors.blue}44`,
-        }}>{txCount} txs</span>
-        <div style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>{ts ? timeAgo(ts) : "—"}</div>
+        <div style={{ fontSize: 12, color: colors.text, fontWeight: 600 }}>{b.tx_count ?? 0} tx</div>
+        <div style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>{b.timestamp ? timeAgo(b.timestamp) : "—"}</div>
       </div>
     </div>
   );
 }
 
-function EventRow({ ev, i }: { ev: LiveEvent; i: number }) {
-  const ts = new Date(ev.ts * 1000).toLocaleTimeString("vi-VN", {
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-  return (
-    <div style={{
-      display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 18px",
-      borderBottom: `1px solid ${colors.border}`,
-      animation: i === 0 ? "slideIn .4s ease" : "none",
-    }}>
-      <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.muted, flexShrink: 0, marginTop: 2, minWidth: 56 }}>
-        {ts}
-      </span>
-      <div style={{ fontSize: 13, color: colors.text }}>
-        {ev.type === "block" ? (
-          <>
-            New block{" "}
-            <span style={{ color: colors.accent, fontFamily: fonts.mono, fontSize: 12 }}>
-              #{fmtNum(ev.height ?? 0)}
-            </span>
-            {ev.txCount !== undefined && (
-              <span style={{ color: colors.muted, fontSize: 12 }}> · {ev.txCount} txs</span>
-            )}
-          </>
-        ) : (
-          <span style={{ color: colors.green }}>New transaction</span>
-        )}
-      </div>
-    </div>
-  );
-}
+function OverviewPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: number) => void }) {
+  const { summary, blocks, connected, error, refresh } = useLiveDashboard(nodeUrl);
+  const [hrSeries, setHrSeries] = useState<AnalyticsSeries | null>(null);
 
-function OverviewPanel({ nodeUrl }: { nodeUrl: string }) {
-  const { summary, blocks, events, connected, error, refresh } = useLiveDashboard(nodeUrl);
   const height    = summary.height ?? 0;
   const hashrate  = summary.hashrate ?? 0;
   const mempool   = summary.mempool_count ?? 0;
-  const blockTime = Math.round((summary.avg_block_time_s ?? summary.block_time_avg) ?? 0);
+  const blockTime = (summary.avg_block_time_s ?? summary.block_time_avg) ?? 0;
+
+  useEffect(() => {
+    fetchAnalytics(nodeUrl, "hashrate", 50)
+      .then(s => setHrSeries(s))
+      .catch(() => {});
+  }, [nodeUrl]);
+
+  const hrPts: ChartPoint[] = hrSeries
+    ? hrSeries.points.map(p => ({ x: p.height, y: p.value }))
+    : [];
+
+  const latestBlocks = blocks.slice(0, 5);
 
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {error && (
         <div style={{
-          marginBottom: 16, padding: "10px 16px", borderRadius: 8,
-          background: "rgba(240,96,96,.08)", border: `1px solid rgba(240,96,96,.2)`,
+          padding: "10px 16px", borderRadius: 8,
+          background: "rgba(239,68,68,.08)", border: `1px solid rgba(239,68,68,.2)`,
           color: colors.red, fontSize: 13,
         }}>⚠ {error}</div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
-        <LiveStat icon="🧱" label="Block Height"  value={height}     color={colors.accent} pulse={connected} />
-        <LiveStat icon="⚡" label="Hashrate"      value={Math.round(hashrate / 1e9)} fmt={n => fmtHashrate(n * 1e9)} color={colors.blue} />
-        <LiveStat icon="⏱" label="Block Time"    value={blockTime}  unit="s" color={colors.green} />
-        <LiveStat icon="⏳" label="Mempool"       value={mempool}    color={colors.purple} unit="txs" />
+      {/* 4 stat cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
+        <StatCard
+          label="Latest Block" value={fmtNum(height)} pulse={connected} color={colors.accent}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>}
+        />
+        <StatCard
+          label="Network Hashrate" value={fmtHashrate(hashrate)} color={colors.blue}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+        />
+        <StatCard
+          label="Block Time" value={blockTime.toFixed(1) + "s"} color={colors.green}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+        />
+        <StatCard
+          label="Mempool" value={fmtNum(mempool)} sub={mempool > 0 ? `${mempool} pending` : "empty"} color={colors.purple}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>}
+        />
       </div>
 
+      {/* Row 2: Latest Blocks + Network Overview */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Panel icon="🧱" title="Latest Blocks"
-          right={
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Latest Blocks */}
+        <div style={{
+          background: colors.surface, border: `1px solid ${colors.border}`,
+          borderRadius: 12, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "14px 16px", borderBottom: `1px solid ${colors.border}`,
+          }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Latest Blocks</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <ConnBadge connected={connected} />
               <button onClick={refresh} style={{
-                padding: "4px 12px", background: colors.surface2,
+                padding: "4px 10px", background: colors.surface2,
                 border: `1px solid ${colors.border}`, borderRadius: 6,
                 color: colors.muted, cursor: "pointer", fontSize: 12,
               }}>↻</button>
             </div>
-          }
-        >
-          {blocks.length === 0 ? (
+          </div>
+          {latestBlocks.length === 0 ? (
             <div style={{ padding: 24, textAlign: "center", color: colors.muted, fontSize: 13 }}>
               {connected ? "Loading…" : "Connecting…"}
             </div>
-          ) : blocks.slice(0, 10).map((b, i) => (
-            <BlockRowSmall key={b.hash ?? i} b={b} i={i} total={Math.min(blocks.length, 10)} />
+          ) : latestBlocks.map((b, i) => (
+            <DashBlockRow key={b.hash ?? i} b={b} i={i} total={latestBlocks.length} onBlock={onBlock} />
           ))}
-        </Panel>
+        </div>
 
-        <Panel icon="📡" title="Live Feed" right={<ConnBadge connected={connected} />}>
-          {events.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: colors.muted, fontSize: 13 }}>
-              {connected ? "Waiting for new blocks…" : "Connecting…"}
+        {/* Network Overview chart */}
+        <div style={{
+          background: colors.surface, border: `1px solid ${colors.border}`,
+          borderRadius: 12, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "14px 16px", borderBottom: `1px solid ${colors.border}`,
+          }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Network Hashrate</span>
+            <span style={{ fontSize: 12, color: colors.muted, background: colors.surface2, border: `1px solid ${colors.border}`, borderRadius: 6, padding: "3px 10px" }}>50 blocks</span>
+          </div>
+          <div style={{ padding: "12px 16px" }}>
+            <div style={{ fontFamily: fonts.mono, fontSize: 22, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+              {fmtHashrate(hashrate)}
             </div>
-          ) : events.map((ev, i) => (
-            <EventRow key={ev.id} ev={ev} i={i} />
-          ))}
-        </Panel>
+          </div>
+          <div style={{ height: 120 }}>
+            {hrPts.length >= 2
+              ? <MiniChart points={hrPts} color={colors.blue} height={120} filled />
+              : <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: colors.muted, fontSize: 13 }}>Loading chart…</div>
+            }
+          </div>
+          {hrPts.length > 1 && (
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 16px 12px", fontSize: 11, color: colors.muted, fontFamily: fonts.mono }}>
+              <span>#{fmtNum(hrPts[0]?.x ?? 0)}</span>
+              <span>#{fmtNum(hrPts[hrPts.length - 1]?.x ?? 0)}</span>
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Row 3: Node Status */}
       <div style={{
-        marginTop: 16, padding: "10px 20px",
         background: colors.surface, border: `1px solid ${colors.border}`,
-        borderRadius: 10, display: "flex", gap: 32, alignItems: "center",
-        fontSize: 12, color: colors.muted,
+        borderRadius: 12, padding: "14px 20px",
+        display: "flex", gap: 32, alignItems: "center", flexWrap: "wrap",
       }}>
         <ConnBadge connected={connected} />
-        <span>🌐 <span style={{ color: colors.blue, fontFamily: fonts.mono }}>{nodeUrl}</span></span>
-        <span>🔄 Poll: <span style={{ color: colors.green }}>8s</span></span>
-        {summary.difficulty !== undefined && (
-          <span>⚙ Difficulty: <span style={{ fontFamily: fonts.mono, color: colors.text }}>{(summary.difficulty as number).toFixed(2)}</span></span>
-        )}
-        {summary.utxo_count !== undefined && (
-          <span>🗃 UTXOs: <span style={{ fontFamily: fonts.mono, color: colors.text }}>{fmtNum(summary.utxo_count as number)}</span></span>
-        )}
+        {[
+          ["Block Height", fmtNum(height)],
+          ["Difficulty", summary.difficulty !== undefined ? (summary.difficulty as number).toFixed(2) : "—"],
+          ["UTXOs", summary.utxo_count !== undefined ? fmtNum(summary.utxo_count as number) : "—"],
+          ["Node", nodeUrl.replace(/https?:\/\//, "")],
+        ].map(([label, val]) => (
+          <div key={label}>
+            <div style={{ fontSize: 11, color: colors.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 3 }}>{label}</div>
+            <div style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.text }}>{val}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -525,10 +540,135 @@ function ChartsPanel({ nodeUrl }: { nodeUrl: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TRANSACTIONS (Mempool)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TransactionsPanel({ nodeUrl, onTx }: { nodeUrl: string; onTx?: (txid: string) => void }) {
+  const [txs,     setTxs]     = useState<MempoolTx[]>([]);
+  const [count,   setCount]   = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const d = await fetchMempool(nodeUrl, 50);
+      setTxs(d.txs ?? []);
+      setCount(d.count ?? d.txs?.length ?? 0);
+    } catch (e) { setError(String(e)); }
+    setLoading(false);
+  }, [nodeUrl]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const cols = ["TXID", "Fee Rate", "Size", "Inputs", "Outputs", "Fee", "Time"];
+
+  return (
+    <div style={{
+      background: colors.surface, border: `1px solid ${colors.border}`,
+      borderRadius: 12, overflow: "hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 20px", borderBottom: `1px solid ${colors.border}`,
+      }}>
+        <div>
+          <span style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Mempool Transactions</span>
+          {!loading && !error && (
+            <span style={{
+              marginLeft: 10, fontSize: 12, color: colors.muted,
+              background: colors.surface2, border: `1px solid ${colors.border}`,
+              borderRadius: 6, padding: "2px 8px",
+            }}>{fmtNum(count)} pending</span>
+          )}
+        </div>
+        <button onClick={load} style={{
+          padding: "5px 14px", background: colors.surface2,
+          border: `1px solid ${colors.border}`, borderRadius: 7,
+          color: colors.muted, cursor: "pointer", fontSize: 12,
+        }}>↻ Refresh</button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ padding: "12px 20px", color: colors.red, fontSize: 13 }}>⚠ {error}</div>
+      )}
+
+      {/* Empty */}
+      {!loading && !error && txs.length === 0 && (
+        <div style={{ padding: 40, textAlign: "center", color: colors.muted, fontSize: 13 }}>
+          Mempool is empty — no pending transactions
+        </div>
+      )}
+
+      {/* Table */}
+      {txs.length > 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                {cols.map(c => (
+                  <th key={c} style={{
+                    padding: "10px 16px", textAlign: "left",
+                    fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: ".06em", color: colors.muted, whiteSpace: "nowrap",
+                  }}>{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {txs.map((tx, i) => {
+                const txid = tx.txid ?? tx.hash ?? "";
+                const ts   = tx.timestamp;
+                return (
+                  <tr key={i}
+                    onClick={() => txid && onTx?.(txid)}
+                    style={{
+                      borderBottom: `1px solid ${colors.border}`,
+                      cursor: onTx && txid ? "pointer" : "default",
+                      transition: "background .12s",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.surface2)}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ padding: "12px 16px", fontFamily: fonts.mono, color: colors.accent, fontSize: 12 }}>
+                      {txid ? shortHash(txid) : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px", fontFamily: fonts.mono, color: colors.text }}>
+                      {tx.fee_rate != null ? fmtNum(tx.fee_rate, 1) + " sat/vB" : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px", color: colors.muted }}>
+                      {tx.size != null ? fmtNum(tx.size) + " B" : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px", color: colors.text }}>{tx.inputs ?? "—"}</td>
+                    <td style={{ padding: "12px 16px", color: colors.text }}>{tx.outputs ?? "—"}</td>
+                    <td style={{ padding: "12px 16px", fontFamily: fonts.mono, color: colors.green }}>
+                      {tx.fee != null ? fmtPkt(tx.fee) : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px", color: colors.muted, whiteSpace: "nowrap" }}>
+                      {ts ? timeAgo(ts) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ padding: 40, textAlign: "center", color: colors.muted, fontSize: 13 }}>Loading…</div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main export
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function Explorer({ nodeUrl, onBlock, subTab: subTabProp, onSubTab }: ExplorerProps) {
+export function Explorer({ nodeUrl, onBlock, onTx, subTab: subTabProp, onSubTab }: ExplorerProps) {
   const [localSub, setLocalSub] = useState<ExplorerSubTab>(subTabProp ?? "overview");
   const active = subTabProp ?? localSub;
 
@@ -546,9 +686,10 @@ export function Explorer({ nodeUrl, onBlock, subTab: subTabProp, onSubTab }: Exp
 
       <SubTabBar active={active} onChange={handleChange} />
 
-      {active === "overview" && <OverviewPanel nodeUrl={nodeUrl} />}
-      {active === "blocks"   && <BlocksPanel   nodeUrl={nodeUrl} onBlock={onBlock} />}
-      {active === "charts"   && <ChartsPanel   nodeUrl={nodeUrl} />}
+      {active === "overview"      && <OverviewPanel      nodeUrl={nodeUrl} onBlock={onBlock} />}
+      {active === "blocks"        && <BlocksPanel        nodeUrl={nodeUrl} onBlock={onBlock} />}
+      {active === "charts"        && <ChartsPanel        nodeUrl={nodeUrl} />}
+      {active === "transactions"  && <TransactionsPanel  nodeUrl={nodeUrl} onTx={onTx} />}
     </div>
   );
 }

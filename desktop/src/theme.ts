@@ -2,19 +2,19 @@
 import type { ThemeMode } from "./hooks/useSettings";
 
 const dark = {
-  bg:       "#0b0f1a",
-  surface:  "#111827",
-  surface2: "#1a2235",
-  surface3: "#1e2d42",
-  border:   "#1e3a5f",
-  accent:   "#f7a133",
-  blue:     "#3b9eff",
-  green:    "#3ed56e",
-  red:      "#f06060",
-  purple:   "#b07ff0",
-  text:     "#e6edf3",
-  muted:    "#5a7a9b",
-  navBg:    "#0d1829",
+  bg:       "#070c14",
+  surface:  "#0d1117",
+  surface2: "#111827",
+  surface3: "#1a2235",
+  border:   "rgba(255,255,255,0.08)",
+  accent:   "#6366F1",
+  blue:     "#3B82F6",
+  green:    "#22C55E",
+  red:      "#EF4444",
+  purple:   "#8B5CF6",
+  text:     "#E2E8F0",
+  muted:    "#64748B",
+  navBg:    "#0d1117",
 };
 
 const light = {

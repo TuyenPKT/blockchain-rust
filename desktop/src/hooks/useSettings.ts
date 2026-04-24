@@ -18,7 +18,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   nodeUrlTestnet: "https://testnet.oceif.com",
-  nodeUrlMainnet: "http://127.0.0.1:21020",
+  nodeUrlMainnet: "http://127.0.0.1:21019",
   currency:       "PKT",
   language:       "en",
   theme:          "auto",

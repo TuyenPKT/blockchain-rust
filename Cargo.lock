@@ -4222,6 +4222,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "oceif-core"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "blake3",
+ "blockchain-rust",
+ "hex",
+ "hmac",
+ "pbkdf2",
+ "rayon",
+ "reqwest 0.12.28",
+ "ripemd",
+ "secp256k1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sha3",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "urlencoding",
+]
+
+[[package]]
 name = "ocl"
 version = "0.19.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4682,30 +4706,6 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "pktscan-desktop"
-version = "0.1.0"
-dependencies = [
- "axum",
- "blake3",
- "blockchain-rust",
- "hex",
- "hmac",
- "pbkdf2",
- "rayon",
- "reqwest 0.12.28",
- "ripemd",
- "secp256k1",
- "serde",
- "serde_json",
- "sha2",
- "sha3",
- "tauri",
- "tauri-build",
- "tokio",
- "urlencoding",
 ]
 
 [[package]]

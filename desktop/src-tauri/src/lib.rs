@@ -1,4 +1,4 @@
-//! pktscan-desktop — Tauri backend (v25.0)
+//! oceif-core — Tauri backend (v25.0)
 //!
 //! Embedded node: pkt_core chạy axum API server local tại 127.0.0.1:21019
 //! Frontend fetch() trực tiếp → không proxy, không fake.
@@ -40,7 +40,7 @@ fn spawn_embedded_server(mainnet: bool) {
         // Đảm bảo data dir tồn tại
         let data_dir = pkt_core::pkt_paths::data_dir();
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
-            eprintln!("[PKTScan] Cannot create data dir {:?}: {}", data_dir, e);
+            eprintln!("[Oceif Core] Cannot create data dir {:?}: {}", data_dir, e);
             return;
         }
 
@@ -49,7 +49,7 @@ fn spawn_embedded_server(mainnet: bool) {
             .build()
         {
             Ok(r)  => r,
-            Err(e) => { eprintln!("[PKTScan] Tokio runtime error: {}", e); return; }
+            Err(e) => { eprintln!("[Oceif Core] Tokio runtime error: {}", e); return; }
         };
 
         rt.block_on(async move {
@@ -59,7 +59,7 @@ fn spawn_embedded_server(mainnet: bool) {
             let listener = match tokio::net::TcpListener::bind(&addr).await {
                 Ok(l)  => l,
                 Err(e) => {
-                    eprintln!("[PKTScan] Cannot bind {} (port busy?): {}", addr, e);
+                    eprintln!("[Oceif Core] Cannot bind {} (port busy?): {}", addr, e);
                     return;
                 }
             };
@@ -70,17 +70,29 @@ fn spawn_embedded_server(mainnet: bool) {
             }) {
                 Ok(r)  => r,
                 Err(_) => {
-                    eprintln!("[PKTScan] API router init failed (DB corrupt?)");
+                    eprintln!("[Oceif Core] API router init failed (DB corrupt?)");
                     return;
                 }
             };
 
-            eprintln!("[PKTScan] Embedded API server → http://{}", addr);
+            eprintln!("[Oceif Core] Embedded API server → http://{}", addr);
             if let Err(e) = axum::serve(listener, router).await {
-                eprintln!("[PKTScan] API server stopped: {}", e);
+                eprintln!("[Oceif Core] API server stopped: {}", e);
             }
         });
     });
+}
+
+// ── HTTP proxy command (bypasses WKWebView network restrictions) ──────────────
+
+#[tauri::command]
+async fn fetch_json(url: String) -> Result<serde_json::Value, String> {
+    reqwest::get(&url)
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── Sync control commands ─────────────────────────────────────────────────────
@@ -138,7 +150,7 @@ fn pkt_frame(cmd: &str, payload: &[u8]) -> Vec<u8> {
 
 fn pkt_version_payload() -> Vec<u8> {
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-    let ua = b"/pktscan-desktop:0.1/";
+    let ua = b"/oceif-core:0.1/";
     let mut buf = Vec::new();
     buf.extend_from_slice(&70015u32.to_le_bytes()); // protocol version
     buf.extend_from_slice(&0u64.to_le_bytes());     // services
@@ -321,7 +333,7 @@ fn miner_loop(app: tauri::AppHandle, pubkey_hash_hex: String, node_addr: String,
         });
     }
 
-    emit_log(&app, &format!("⛏ PKTScan Miner bắt đầu — node: {}", node_addr));
+    emit_log(&app, &format!("⛏ Oceif Core Miner bắt đầu — node: {}", node_addr));
     emit_log(&app, &format!("  Threads: {}  |  Reward: {}", threads, &pubkey_hash_hex[..8]));
 
     loop {
@@ -1097,6 +1109,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Sync
             start_sync,
+            fetch_json,
             is_sync_running,
             // Miner
             start_mine,
@@ -1112,7 +1125,7 @@ pub fn run() {
             tx_broadcast,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running PKTScan desktop");
+        .expect("error while running Oceif Core");
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

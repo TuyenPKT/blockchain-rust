@@ -1,7 +1,7 @@
 {
-  "productName": "PKTScan",
+  "productName": "Oceif Core",
   "version": "0.8.0",
-  "identifier": "com.oceif.pktscan",
+  "identifier": "com.oceif.core",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "PKTScan",
+        "title": "Oceif Core",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -54,7 +54,7 @@
       }
     },
     "category": "Utility",
-    "shortDescription": "PKT blockchain explorer desktop app",
-    "longDescription": "PKTScan — a native desktop blockchain explorer for the PKT network. Browse blocks, transactions, addresses, analytics, and the rich list. Built with Tauri v2 + React."
+    "shortDescription": "Oceif Core — PKT blockchain explorer desktop app",
+    "longDescription": "Oceif Core — a native desktop blockchain explorer for the PKT network. Browse blocks, transactions, addresses, analytics, and the rich list. Built with Tauri v2 + React."
   }
 }
