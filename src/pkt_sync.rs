@@ -828,6 +828,37 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
             }
         }
 
+        // Phase 3.5: evict orphan TXs whose inputs are no longer in UTXO set
+        {
+            use crate::pkt_utxo_sync::decode_wire_tx;
+            if let Ok(pending) = mempool_db.get_pending(500) {
+                let mut orphans: Vec<[u8; 32]> = Vec::new();
+                for info in &pending {
+                    let Some((raw, _, _)) = mempool_db.get_tx_raw(&info.txid) else { continue };
+                    let mut pos = 0;
+                    let Ok(tx) = decode_wire_tx(&raw, &mut pos) else { continue };
+                    let has_missing_input = tx.inputs.iter().any(|inp| {
+                        !inp.is_coinbase() &&
+                        utxo_db.get_utxo(&inp.prev_txid, inp.prev_vout)
+                            .ok().flatten().is_none()
+                    });
+                    if has_missing_input {
+                        if let Ok(bytes) = hex::decode(&info.txid) {
+                            if bytes.len() == 32 {
+                                let mut arr = [0u8; 32];
+                                arr.copy_from_slice(&bytes);
+                                orphans.push(arr);
+                            }
+                        }
+                    }
+                }
+                if !orphans.is_empty() {
+                    println!("[mempool] evicting {} orphan txs (inputs spent/missing)", orphans.len());
+                    let _ = mempool_db.evict_confirmed(&orphans);
+                }
+            }
+        }
+
         // Phase 4: sync mempool (best-effort — errors are non-fatal)
         match crate::pkt_mempool_sync::sync_mempool(
             &mut stream, cfg.magic, &utxo_db, &mempool_db,

@@ -153,6 +153,8 @@ pub fn load_wire_mempool_txs(mempool_path: &Path, limit: usize) -> Vec<Transacti
     };
 
     let mut result = Vec::with_capacity(pending.len());
+    // Track spent outpoints to skip double-spend TXs within the same template
+    let mut spent: std::collections::HashSet<([u8; 32], u32)> = std::collections::HashSet::new();
 
     for info in &pending {
         let (raw, fee_rate, _ts) = match mdb.get_tx_raw(&info.txid) {
@@ -166,7 +168,16 @@ pub fn load_wire_mempool_txs(mempool_path: &Path, limit: usize) -> Vec<Transacti
             Err(_)  => continue,
         };
 
-        if wire.is_coinbase() { continue; } // skip spurious coinbase TXs
+        if wire.is_coinbase() { continue; }
+
+        // Skip TX if any input is already claimed by an earlier TX in this template
+        let double_spend = wire.inputs.iter()
+            .any(|inp| spent.contains(&(inp.prev_txid, inp.prev_vout)));
+        if double_spend { continue; }
+
+        for inp in &wire.inputs {
+            spent.insert((inp.prev_txid, inp.prev_vout));
+        }
 
         result.push(wire_tx_to_transaction(&wire, &raw, fee_rate));
     }
