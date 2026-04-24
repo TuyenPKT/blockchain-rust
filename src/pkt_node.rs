@@ -498,7 +498,7 @@ fn handle_peer(
                                     .map(|tx| wire_txid(&tx))
                                     .unwrap_or_else(|_| crate::pkt_relay::wire_tx_hash(payload))
                             };
-                            let is_new = seen.insert(txid);
+                            let is_new = !seen.insert(txid); // SeenHashes: false=new, true=dup
                             if is_new {
                                 let txid_hex = hex::encode(txid);
                                 println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
