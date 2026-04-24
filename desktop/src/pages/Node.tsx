@@ -22,11 +22,11 @@ export function Node({ nodeUrl }: NodeProps) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError]       = useState("");
   const [loaded, setLoaded]     = useState(false);
-  const [peers, setPeers]       = useState<PeerInfo[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [seedAddr, setSeedAddr] = useState(DEFAULT_SEED);
-
-  // Sync control
+  const [peers, setPeers]         = useState<PeerInfo[]>([]);
+  const [scanning, setScanning]   = useState(false);
+  const [seedAddr, setSeedAddr]   = useState(DEFAULT_SEED);
+  const [nodeRunning, setNodeRunning] = useState(false);
+  const [nodeMsg, setNodeMsg]     = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -62,6 +62,36 @@ export function Node({ nodeUrl }: NodeProps) {
   // Auto-scan on mount
   useEffect(() => { scanPeers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Poll node_running status
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const running = await invoke<boolean>("node_running");
+        if (mounted) setNodeRunning(running);
+      } catch (_) {}
+    };
+    poll();
+    const id = setInterval(poll, 3_000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  const startNode = useCallback(async () => {
+    try {
+      const msg = await invoke<string>("start_node", { port: 8333, peer: seedAddr.trim() });
+      setNodeRunning(true);
+      setNodeMsg(msg);
+    } catch (e) { setNodeMsg(String(e)); }
+  }, [seedAddr]);
+
+  const stopNode = useCallback(async () => {
+    try {
+      await invoke("stop_node");
+      setNodeRunning(false);
+      setNodeMsg("Node stopped");
+    } catch (e) { setNodeMsg(String(e)); }
+  }, []);
+
   const height   = summary.height ?? 0;
   const mempool  = summary.mempool_count ?? 0;
   const utxos    = summary.utxo_count ?? 0;
@@ -93,6 +123,37 @@ function shortHash(h: string) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* P2P Node control */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: colors.surface, border: `1px solid ${colors.border}`,
+        borderRadius: 12, padding: "14px 20px",
+      }}>
+        <div style={{
+          width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+          background: nodeRunning ? colors.green : colors.muted,
+          boxShadow: nodeRunning ? `0 0 8px ${colors.green}` : "none",
+        }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>
+            P2P Node — {nodeRunning ? `listening :8333 · peer ${seedAddr}` : "stopped"}
+          </div>
+          {nodeMsg && <div style={{ fontSize: 11, color: colors.muted, marginTop: 2 }}>{nodeMsg}</div>}
+        </div>
+        <button
+          onClick={nodeRunning ? stopNode : startNode}
+          style={{
+            padding: "6px 18px", borderRadius: 8, cursor: "pointer",
+            fontWeight: 700, fontSize: 13, flexShrink: 0,
+            background: nodeRunning ? `${colors.red}22` : `${colors.green}22`,
+            color: nodeRunning ? colors.red : colors.green,
+            border: `1px solid ${nodeRunning ? colors.red : colors.green}`,
+          }}
+        >
+          {nodeRunning ? "Stop" : "Start"}
+        </button>
+      </div>
 
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>

@@ -27,6 +27,14 @@ static MINER_RUNNING: AtomicBool = AtomicBool::new(false);
 static MINER_STOP:    AtomicBool = AtomicBool::new(false);
 static SYNC_RUNNING:  AtomicBool = AtomicBool::new(false);
 static SYNC_STOP:     AtomicBool = AtomicBool::new(false);
+static NODE_RUNNING:  AtomicBool = AtomicBool::new(false);
+
+// Stop signal cho background node (OnceLock — khởi tạo một lần duy nhất)
+static NODE_STOP_SIGNAL: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
+
+fn node_stop_signal() -> Arc<AtomicBool> {
+    NODE_STOP_SIGNAL.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
+}
 
 pub const EMBEDDED_API_PORT: u16 = 21019;
 
@@ -93,6 +101,105 @@ async fn fetch_json(url: String) -> Result<serde_json::Value, String> {
         .json::<serde_json::Value>()
         .await
         .map_err(|e| e.to_string())
+}
+
+// ── P2P Node — listener + sync loop ──────────────────────────────────────────
+
+/// Spawn P2P listener on `p2p_port` + sync loop từ `peer`.
+/// Không cần chain/storage export — dùng PKT wire code có sẵn trong lib.rs.
+fn spawn_background_node(p2p_port: u16, peer: String, stop: Arc<AtomicBool>) {
+    // 1. P2P listener thread — accept incoming P2P connections từ VPS/peer khác
+    {
+        let stop2 = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            use std::net::TcpListener;
+            let listener = match TcpListener::bind(format!("0.0.0.0:{}", p2p_port)) {
+                Ok(l)  => l,
+                Err(e) => { eprintln!("[node] bind :{p2p_port} failed: {e}"); return; }
+            };
+            eprintln!("[node] P2P listener on :{p2p_port}");
+            listener.set_nonblocking(false).ok();
+            for stream in listener.incoming() {
+                if stop2.load(Ordering::Relaxed) { break; }
+                match stream {
+                    Ok(mut s) => {
+                        std::thread::spawn(move || {
+                            s.set_read_timeout(Some(Duration::from_secs(30))).ok();
+                            // Handshake: recv Version → send Version + Verack → recv Verack
+                            if let Ok(cmd) = pkt_recv_cmd(&mut s) {
+                                if cmd == "version" {
+                                    let _ = s.write_all(&pkt_frame("version", &pkt_version_payload()));
+                                    let _ = s.write_all(&pkt_frame("verack", &[]));
+                                    // Keep-alive: respond to ping
+                                    loop {
+                                        match pkt_recv_cmd(&mut s) {
+                                            Ok(c) if c == "ping" => { let _ = s.write_all(&pkt_frame("pong", &[])); }
+                                            Ok(_)  => {}
+                                            Err(_) => break,
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Err(_) => {}
+                }
+            }
+            eprintln!("[node] P2P listener stopped");
+        });
+    }
+
+    // 2. Sync loop — kết nối đến peer, tải blocks, retry mỗi 30s
+    {
+        std::thread::spawn(move || {
+            loop {
+                if stop.load(Ordering::Relaxed) { break; }
+                eprintln!("[node] syncing from {peer}");
+                pkt_core::pkt_sync::cmd_sync(&[peer.clone()]);
+                // Chờ 30s, check stop mỗi 500ms
+                let deadline = std::time::Instant::now() + Duration::from_secs(30);
+                while std::time::Instant::now() < deadline {
+                    if stop.load(Ordering::Relaxed) { break; }
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+            }
+            eprintln!("[node] sync loop stopped");
+        });
+    }
+}
+
+// ── P2P Node commands ─────────────────────────────────────────────────────────
+
+/// Khởi động P2P node: lắng nghe kết nối đến + sync từ peer.
+#[tauri::command]
+async fn start_node(port: Option<u16>, peer: Option<String>) -> Result<String, String> {
+    if NODE_RUNNING.load(Ordering::SeqCst) {
+        return Err("Node đang chạy".into());
+    }
+    let p2p_port  = port.unwrap_or(8333);
+    let peer_addr = peer.unwrap_or_else(|| pkt_core::pkt_config::get().seed_p2p());
+
+    let stop = node_stop_signal();
+    stop.store(false, Ordering::SeqCst);
+    NODE_RUNNING.store(true, Ordering::SeqCst);
+
+    let peer_display = peer_addr.clone();
+    spawn_background_node(p2p_port, peer_addr, stop);
+
+    Ok(format!("Node started — port :{p2p_port} → peer {peer_display}"))
+}
+
+/// Dừng sync loop (P2P listener vẫn bind port cho đến khi process exit).
+#[tauri::command]
+fn stop_node() {
+    node_stop_signal().store(true, Ordering::SeqCst);
+    NODE_RUNNING.store(false, Ordering::SeqCst);
+}
+
+/// Trả về true nếu node đang chạy.
+#[tauri::command]
+fn node_running() -> bool {
+    NODE_RUNNING.load(Ordering::SeqCst)
 }
 
 // ── Sync control commands ─────────────────────────────────────────────────────
@@ -1102,11 +1209,24 @@ fn addr_to_p2pkh_script(addr: &str) -> Result<Vec<u8>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Khởi động embedded API server (testnet mặc định)
+    // Embedded REST API server (testnet)
     spawn_embedded_server(false);
+
+    // Auto-start P2P node — kết nối đến VPS peer ngay khi app mở
+    {
+        let stop = node_stop_signal();
+        stop.store(false, Ordering::SeqCst);
+        NODE_RUNNING.store(true, Ordering::SeqCst);
+        let peer = pkt_core::pkt_config::get().seed_p2p();
+        spawn_background_node(8333, peer, stop);
+    }
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            // Node
+            start_node,
+            stop_node,
+            node_running,
             // Sync
             start_sync,
             fetch_json,
