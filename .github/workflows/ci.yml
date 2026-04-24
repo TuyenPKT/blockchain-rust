@@ -64,7 +64,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
       - name: cargo test (CLI only)
-        run: cargo test --workspace --exclude pktscan-desktop
+        run: cargo test --workspace --exclude oceif-core
 
   # ── Desktop: TypeScript check ────────────────────────────────────────────────
   # Chạy khi desktop/** thay đổi
@@ -90,7 +90,7 @@ jobs:
   test-desktop:
     needs: changes
     if: "!startsWith(github.ref, 'refs/tags/') && needs.changes.outputs.desktop == 'true'"
-    name: Rust build (pktscan-desktop)
+    name: Rust build (oceif-core)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -115,8 +115,8 @@ jobs:
         working-directory: desktop
       - run: npm run build
         working-directory: desktop
-      - run: cargo build -p pktscan-desktop
-      - run: cargo test -p pktscan-desktop
+      - run: cargo build -p oceif-core
+      - run: cargo test -p oceif-core
 
   # ── Release: build Tauri app multi-platform ──────────────────────────────────
   # Chỉ chạy khi push tag v*.*.*
@@ -172,15 +172,15 @@ jobs:
           APPLE_SIGNING_IDENTITY:       "-"
         with:
           tagName:      ${{ github.ref_name }}
-          releaseName:  "PKTScan ${{ github.ref_name }}"
+          releaseName:  "Oceif Core ${{ github.ref_name }}"
           releaseBody:  |
-            ## PKTScan Desktop ${{ github.ref_name }}
+            ## Oceif Core ${{ github.ref_name }}
 
             | Platform | File |
             |----------|------|
-            | macOS    | `PKTScan_*.dmg` (Universal) |
-            | Windows  | `PKTScan_*.msi` |
-            | Linux    | `pktscan_*.AppImage` / `pktscan_*.deb` |
+            | macOS    | `Oceif Core_*.dmg` (Universal) |
+            | Windows  | `Oceif Core_*.msi` |
+            | Linux    | `oceif-core_*.AppImage` / `oceif-core_*.deb` |
 
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
           releaseDraft: false
