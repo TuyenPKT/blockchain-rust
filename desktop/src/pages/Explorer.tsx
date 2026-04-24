@@ -7,7 +7,7 @@ import { useLiveDashboard, type LiveEvent } from "../hooks/useLiveDashboard";
 import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
 import {
   fetchBlocks, fetchAnalytics,
-  fmtHashrate, shortHash, timeAgo,
+  fmtHashrate, fmtNum, shortHash, timeAgo,
   type BlockHeader, type AnalyticsSeries,
 } from "../api";
 
@@ -89,7 +89,7 @@ function LiveStat({ icon, label, value, fmt, color, unit, pulse }: {
   fmt?: (n: number) => string; color?: string; unit?: string; pulse?: boolean;
 }) {
   const animated = useAnimatedNumber(value);
-  const display  = fmt ? fmt(animated) : animated.toLocaleString();
+  const display  = fmt ? fmt(animated) : fmtNum(animated);
   return (
     <div style={{
       background: colors.surface, border: `1px solid ${colors.border}`,
@@ -148,7 +148,7 @@ function BlockRowSmall({ b, i, total }: { b: BlockHeader; i: number; total: numb
       }}>{h.toString().slice(-4)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: 13, color: colors.text }}>
-          #{h.toLocaleString()}
+          #{fmtNum(h)}
         </div>
         <div style={{ fontSize: 11, color: colors.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {b.hash ? shortHash(b.hash) : "—"}
@@ -183,7 +183,7 @@ function EventRow({ ev, i }: { ev: LiveEvent; i: number }) {
           <>
             New block{" "}
             <span style={{ color: colors.accent, fontFamily: fonts.mono, fontSize: 12 }}>
-              #{(ev.height ?? 0).toLocaleString()}
+              #{fmtNum(ev.height ?? 0)}
             </span>
             {ev.txCount !== undefined && (
               <span style={{ color: colors.muted, fontSize: 12 }}> · {ev.txCount} txs</span>
@@ -267,7 +267,7 @@ function OverviewPanel({ nodeUrl }: { nodeUrl: string }) {
           <span>⚙ Difficulty: <span style={{ fontFamily: fonts.mono, color: colors.text }}>{(summary.difficulty as number).toFixed(2)}</span></span>
         )}
         {summary.utxo_count !== undefined && (
-          <span>🗃 UTXOs: <span style={{ fontFamily: fonts.mono, color: colors.text }}>{(summary.utxo_count as number).toLocaleString()}</span></span>
+          <span>🗃 UTXOs: <span style={{ fontFamily: fonts.mono, color: colors.text }}>{fmtNum(summary.utxo_count as number)}</span></span>
         )}
       </div>
     </div>
@@ -334,7 +334,7 @@ function BlocksPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: numbe
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <td style={{ padding: "12px 18px", fontFamily: fonts.mono, fontWeight: 700, color: colors.accent }}>
-                      #{height.toLocaleString()}
+                      #{fmtNum(height)}
                     </td>
                     <td style={{ padding: "12px 18px", fontFamily: fonts.mono, fontSize: 12, color: colors.blue }}>
                       {b.hash ? shortHash(b.hash) : "—"}
@@ -514,8 +514,8 @@ function ChartsPanel({ nodeUrl }: { nodeUrl: string }) {
           </div>
           {!loading && diffPts.length > 1 && (
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, paddingLeft: 4, paddingRight: 4 }}>
-              <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>#{diffPts[0]?.x.toLocaleString()}</span>
-              <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>#{diffPts[diffPts.length - 1]?.x.toLocaleString()}</span>
+              <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>#{fmtNum(diffPts[0]?.x ?? 0)}</span>
+              <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>#{fmtNum(diffPts[diffPts.length - 1]?.x ?? 0)}</span>
             </div>
           )}
         </div>

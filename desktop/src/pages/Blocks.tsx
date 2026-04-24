@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
-import { fetchBlocks, shortHash, timeAgo, type BlockHeader } from "../api";
+import { fetchBlocks, fmtNum, shortHash, timeAgo, type BlockHeader } from "../api";
 
 interface BlocksProps {
   nodeUrl: string;
@@ -68,7 +68,7 @@ export function Blocks({ nodeUrl, onBlock }: BlocksProps) {
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <td style={{ padding: "12px 18px", fontFamily: fonts.mono, fontWeight: 700, color: colors.accent }}>
-                      #{height.toLocaleString()}
+                      #{fmtNum(height)}
                     </td>
                     <td style={{ padding: "12px 18px", fontFamily: fonts.mono, fontSize: 12, color: colors.blue }}>
                       {b.hash ? shortHash(b.hash) : "—"}

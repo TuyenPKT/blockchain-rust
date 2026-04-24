@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
-import { fetchBlockDetail, shortHash, timeAgo, PACKETS_PER_PKT, type BlockDetail, type TxDetail } from "../api";
+import { fetchBlockDetail, fmtNum, shortHash, timeAgo, PACKETS_PER_PKT, type BlockDetail, type TxDetail } from "../api";
 
 interface BlockDetailProps {
   nodeUrl:   string;
@@ -181,7 +181,7 @@ export function BlockDetail({ nodeUrl, height, onBack, onTx }: BlockDetailProps)
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
               <span style={{ fontFamily: fonts.mono, fontWeight: 800, fontSize: 28, color: colors.text }}>
-                Block #{h.toLocaleString()}
+                Block #{fmtNum(h)}
               </span>
               {!loading && <ConfBadge conf={block?.confirmations} />}
             </div>
@@ -231,12 +231,12 @@ export function BlockDetail({ nodeUrl, height, onBack, onTx }: BlockDetailProps)
           {/* Metadata panel */}
           <Panel icon="ℹ" title="Block Info">
             <div style={{ padding: "0 20px" }}>
-              <MetaRow label="Height"     value={`#${h.toLocaleString()}`} accent />
+              <MetaRow label="Height"     value={`#${fmtNum(h)}`} accent />
               <MetaRow label="Hash"       value={block.hash}       mono />
               <MetaRow label="Prev Hash"  value={block.prev_hash}  mono />
               <MetaRow label="Timestamp"  value={ts ? new Date(ts * 1000).toLocaleString() : undefined} />
               <MetaRow label="Txs"        value={block.tx_count}   />
-              <MetaRow label="Size"       value={block.size ? `${block.size.toLocaleString()} bytes` : undefined} />
+              <MetaRow label="Size"       value={block.size ? `${fmtNum(block.size)} bytes` : undefined} />
               <MetaRow label="Difficulty" value={block.difficulty !== undefined ? Number(block.difficulty).toExponential(3) : undefined} />
               <MetaRow label="Miner"      value={block.miner}      mono />
               <MetaRow label="Total Fees" value={feeTotal !== undefined ? `${(feeTotal / PACKETS_PER_PKT).toFixed(6)} PKT` : undefined} accent />

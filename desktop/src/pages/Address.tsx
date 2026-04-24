@@ -6,7 +6,7 @@ import { Panel } from "../components/Panel";
 import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
 import {
   fetchBalance, fetchAddressTxs, fetchAddressUtxos,
-  timeAgo, shortHash, PACKETS_PER_PKT,
+  fmtNum, timeAgo, shortHash, PACKETS_PER_PKT,
   type AddressTx, type AddressUtxo,
 } from "../api";
 
@@ -275,7 +275,7 @@ function TxTable({
                     {id !== "—" ? shortHash(id) : "—"}
                   </td>
                   <td style={{ padding: "11px 16px", fontFamily: fonts.mono, color: colors.accent }}>
-                    {tx.height !== undefined ? `#${tx.height.toLocaleString()}` : "—"}
+                    {tx.height !== undefined ? `#${fmtNum(tx.height)}` : "—"}
                   </td>
                   <td style={{ padding: "11px 16px", fontFamily: fonts.mono, fontWeight: 700,
                     color: positive ? colors.green : colors.red }}>
@@ -307,7 +307,7 @@ function TxTable({
         padding: "12px 16px", borderTop: `1px solid ${colors.border}`,
       }}>
         <span style={{ fontSize: 12, color: colors.muted }}>
-          {total > 0 ? `${total.toLocaleString()} transactions total` : ""}
+          {total > 0 ? `${fmtNum(total)} transactions total` : ""}
         </span>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <button onClick={() => onPage(page - 1)} disabled={page === 0} style={paginBtn(page === 0)}>
@@ -391,7 +391,7 @@ function UtxoList({ utxos, loading }: { utxos: AddressUtxo[]; loading: boolean }
                   {u.amount !== undefined ? (u.amount / PACKETS_PER_PKT).toFixed(4) : "—"}
                 </td>
                 <td style={{ padding: "11px 16px", fontFamily: fonts.mono, color: colors.accent }}>
-                  {u.height !== undefined ? `#${u.height.toLocaleString()}` : "—"}
+                  {u.height !== undefined ? `#${fmtNum(u.height)}` : "—"}
                 </td>
               </tr>
             ))}

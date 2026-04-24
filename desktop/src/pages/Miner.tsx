@@ -5,7 +5,7 @@ import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
-import { fetchSummary, fmtHashrate, type NetworkSummary } from "../api";
+import { fetchSummary, fmtHashrate, fmtNum, type NetworkSummary } from "../api";
 
 interface MinerProps { nodeUrl: string; }
 
@@ -223,7 +223,7 @@ export function Miner({ nodeUrl }: MinerProps) {
               [t.net_hashrate,  fmtHashrate(netHashrate)],
               [t.net_share,     shareOfNet],
               [t.difficulty,    String(summary.difficulty ?? "—")],
-              [t.block_height,  (summary.height ?? 0).toLocaleString()],
+              [t.block_height,  fmtNum(summary.height ?? 0)],
             ].map(([label, val]) => (
               <div key={label} style={{
                 display: "flex", justifyContent: "space-between", alignItems: "center",

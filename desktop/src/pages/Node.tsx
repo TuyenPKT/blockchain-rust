@@ -4,7 +4,7 @@ import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
-import { fetchSummary, fmtHashrate, PACKETS_PER_PKT, type NetworkSummary } from "../api";
+import { fetchSummary, fmtHashrate, fmtNum, fmtPkt, type NetworkSummary } from "../api";
 
 interface NodeProps { nodeUrl: string; }
 
@@ -81,12 +81,7 @@ export function Node({ nodeUrl }: NodeProps) {
     return `${Math.floor(s / 60)}m ${(s % 60).toFixed(0)}s`;
   }
 
-  function fmtPkt(sat: number) {
-    if (!sat) return "—";
-    return (sat / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT";
-  }
-
-  function shortHash(h: string) {
+function shortHash(h: string) {
     if (!h || h === "0".repeat(64)) return "—";
     return h.slice(0, 12) + "…" + h.slice(-8);
   }
@@ -105,10 +100,10 @@ export function Node({ nodeUrl }: NodeProps) {
           value={!loaded ? t.connecting : error ? t.offline : synced ? t.online : t.connecting}
           color={!loaded ? colors.accent : error ? colors.red : synced ? colors.green : colors.accent} />
         <StatCard icon="🧱" label={t.block_height2}
-          value={height.toLocaleString()}
+          value={fmtNum(height)}
           color={colors.blue} />
         <StatCard icon="⏳" label={t.mempool}
-          value={mempool.toLocaleString()}
+          value={fmtNum(mempool)}
           color={colors.purple} sub="pending txs" />
         <StatCard icon="⚡" label={t.avg_time}
           value={fmtTime(avgTime)}
@@ -140,8 +135,8 @@ export function Node({ nodeUrl }: NodeProps) {
             {[
               ["Status",      !loaded ? t.connecting : error ? t.offline : synced ? t.synced : t.connecting],
               ["Node URL",    nodeUrl],
-              ["Height",      height.toLocaleString()],
-              ["Tip Hash",    shortHash(tipHash)],
+              ["Height",       fmtNum(height)],
+              ["Tip Hash",     shortHash(tipHash)],
               ["Block Reward", fmtPkt(blockReward)],
               ["Total Supply", fmtPkt(totalValue)],
               ["Last Update",  fmtUpdate(lastUpdate)],
@@ -169,10 +164,10 @@ export function Node({ nodeUrl }: NodeProps) {
           <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 0 }}>
             {[
               [t.net_hashrate,  fmtHashrate(hashrate)],
-              [t.difficulty,    diff ? diff.toLocaleString() : "—"],
+              [t.difficulty,    diff ? fmtNum(diff) : "—"],
               [t.avg_time,      fmtTime(avgTime)],
-              ["UTXO Count",    utxos.toLocaleString()],
-              [t.mempool,       mempool.toLocaleString()],
+              ["UTXO Count",    fmtNum(utxos)],
+              [t.mempool,       fmtNum(mempool)],
               ["Total Supply",  fmtPkt(totalValue)],
               ["Block Reward",  fmtPkt(blockReward)],
             ].map(([label, val]) => (
@@ -301,7 +296,7 @@ export function Node({ nodeUrl }: NodeProps) {
                         </span>
                       </td>
                       <td style={{ padding: "10px 18px", fontFamily: fonts.mono, fontSize: 12 }}>
-                        {p.height !== null ? p.height.toLocaleString() : "—"}
+                        {p.height !== null ? fmtNum(p.height) : "—"}
                       </td>
                       <td style={{ padding: "10px 18px" }}>
                         <span style={{

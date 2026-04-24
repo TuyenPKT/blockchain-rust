@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
-import { fetchTxDetail, shortHash, timeAgo, PACKETS_PER_PKT, type TxDetail as TxDetailType, type TxInput, type TxOutput } from "../api";
+import { fetchTxDetail, fmtNum, shortHash, timeAgo, PACKETS_PER_PKT, type TxDetail as TxDetailType, type TxInput, type TxOutput } from "../api";
 
 interface TxDetailProps {
   nodeUrl: string;
@@ -265,7 +265,7 @@ export function TxDetail({ nodeUrl, txid, onBack, onAddr }: TxDetailProps) {
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
           {tx?.height !== undefined && (
             <span style={{ fontSize: 13, color: colors.muted }}>
-              Block <span style={{ color: colors.accent, fontFamily: fonts.mono }}>#{tx.height.toLocaleString()}</span>
+              Block <span style={{ color: colors.accent, fontFamily: fonts.mono }}>#{fmtNum(tx.height)}</span>
             </span>
           )}
           {tx?.timestamp && (

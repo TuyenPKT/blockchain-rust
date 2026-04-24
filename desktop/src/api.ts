@@ -207,6 +207,16 @@ export async function fetchMempool(
   return api(nodeUrl, `/api/testnet/mempool?limit=${limit}`);
 }
 
+export function fmtNum(n: number, decimals = 0): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+export function fmtPkt(sat: number): string {
+  if (!sat) return "—";
+  const pkt = sat / PACKETS_PER_PKT;
+  return fmtNum(pkt, pkt >= 1 ? 0 : 4) + " PKT";
+}
+
 export function fmtHashrate(h: number): string {
   if (h >= 1e15) return (h / 1e15).toFixed(2) + " PH/s";
   if (h >= 1e12) return (h / 1e12).toFixed(2) + " TH/s";

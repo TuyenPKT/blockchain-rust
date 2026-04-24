@@ -5,7 +5,7 @@ import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
 import {
   fetchRichList, fetchMempool,
-  shortHash, timeAgo, PACKETS_PER_PKT,
+  fmtNum, shortHash, timeAgo, PACKETS_PER_PKT,
   type RichHolder, type MempoolTx,
 } from "../api";
 
@@ -98,7 +98,7 @@ function Leaderboard({
         const rank    = h.rank ?? i + 1;
         const addr    = h.address ?? "unknown";
         const bal     = h.balance ?? 0;
-        const pkt     = (bal / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        const pkt     = fmtNum(bal / PACKETS_PER_PKT);
         const pct     = h.pct ?? 0;
 
         return (
@@ -343,9 +343,9 @@ function SummaryBar({
       display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20,
     }}>
       {[
-        { label: "Top Holders",    value: holderCount.toLocaleString(),              color: colors.accent },
-        { label: "Total Supply",   value: (totalSupply / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " PKT", color: colors.blue },
-        { label: "Mempool Count",  value: mempoolCount.toLocaleString(),             color: colors.green },
+        { label: "Top Holders",    value: fmtNum(holderCount),                       color: colors.accent },
+        { label: "Total Supply",   value: fmtNum(totalSupply / PACKETS_PER_PKT) + " PKT", color: colors.blue },
+        { label: "Mempool Count",  value: fmtNum(mempoolCount),                     color: colors.green },
         { label: "Mempool Fees",   value: (totalFee / PACKETS_PER_PKT).toFixed(4) + " PKT",     color: colors.purple },
       ].map(({ label, value, color }) => (
         <div key={label} style={{

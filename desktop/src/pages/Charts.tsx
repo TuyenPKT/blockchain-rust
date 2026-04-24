@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { colors, fonts } from "../theme";
 import { Panel } from "../components/Panel";
 import { MiniChart, type ChartPoint } from "../components/MiniChart";
-import { fetchAnalytics, fmtHashrate, type AnalyticsSeries } from "../api";
+import { fetchAnalytics, fmtHashrate, fmtNum, type AnalyticsSeries } from "../api";
 
 interface ChartsProps { nodeUrl: string; }
 
@@ -228,10 +228,10 @@ export function Charts({ nodeUrl }: ChartsProps) {
           {!loading && diffPts.length > 1 && (
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, paddingLeft: 4, paddingRight: 4 }}>
               <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>
-                #{diffPts[0]?.x.toLocaleString()}
+                #{fmtNum(diffPts[0]?.x ?? 0)}
               </span>
               <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.muted }}>
-                #{diffPts[diffPts.length - 1]?.x.toLocaleString()}
+                #{fmtNum(diffPts[diffPts.length - 1]?.x ?? 0)}
               </span>
             </div>
           )}
