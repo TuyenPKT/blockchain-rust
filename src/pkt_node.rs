@@ -490,10 +490,15 @@ fn handle_peer(
                                 }
                             }
                         } else if cmd_trim == "tx" {
-                            // Raw tx relay + save to MempoolDb for template server
-                            use crate::pkt_relay::wire_tx_hash;
-                            let txid = wire_tx_hash(payload);
-                            let is_new = !seen.insert(txid);
+                            // Use wire_txid (non-witness SHA256d) so MempoolDb keys match eviction in block_sync
+                            let txid = {
+                                use crate::pkt_utxo_sync::{decode_wire_tx, wire_txid};
+                                let mut pos = 0;
+                                decode_wire_tx(payload, &mut pos)
+                                    .map(|tx| wire_txid(&tx))
+                                    .unwrap_or_else(|_| crate::pkt_relay::wire_tx_hash(payload))
+                            };
+                            let is_new = seen.insert(txid);
                             if is_new {
                                 let txid_hex = hex::encode(txid);
                                 println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",

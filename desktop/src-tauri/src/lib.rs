@@ -665,7 +665,7 @@ struct PeerInfo {
     status:     String, // "online" | "timeout" | "refused"
 }
 
-/// Probe một peer: TCP connect → đo latency → gửi GetTemplate để lấy height.
+/// Probe một peer qua PKT wire protocol: TCP connect → Version/Verack → lấy height.
 fn probe_peer(addr: &str) -> PeerInfo {
     let sock_addr: std::net::SocketAddr = match addr.parse() {
         Ok(a) => a,
@@ -677,55 +677,59 @@ fn probe_peer(addr: &str) -> PeerInfo {
     match TcpStream::connect_timeout(&sock_addr, Duration::from_secs(5)) {
         Ok(mut stream) => {
             let latency_ms = t0.elapsed().as_millis() as u64;
-            stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
-            let height = if stream.write_all(b"{\"GetTemplate\":null}\n").is_ok() {
-                let mut line = String::new();
-                if BufReader::new(&stream).read_line(&mut line).is_ok() {
-                    serde_json::from_str::<serde_json::Value>(line.trim())
-                        .ok()
-                        .and_then(|v| v["Template"]["height"].as_u64())
-                }  else { None }
-            } else { None };
+            stream.set_read_timeout(Some(Duration::from_secs(4))).ok();
+            let magic = pkt_core::pkt_wire::TESTNET_MAGIC;
+            let cfg = pkt_core::pkt_peer::PeerConfig {
+                host: sock_addr.ip().to_string(),
+                port: sock_addr.port(),
+                magic,
+                ..Default::default()
+            };
+            let height = pkt_core::pkt_peer::do_handshake(&mut stream, &cfg)
+                .ok()
+                .map(|info| info.start_height.max(0) as u64);
             PeerInfo { addr: addr.to_string(), latency_ms: Some(latency_ms), height, status: "online".into() }
         }
         Err(e) => {
-            let status = if e.kind() == std::io::ErrorKind::ConnectionRefused {
-                "refused"
-            } else {
-                "timeout"
-            };
+            let status = if e.kind() == std::io::ErrorKind::ConnectionRefused { "refused" } else { "timeout" };
             PeerInfo { addr: addr.to_string(), latency_ms: None, height: None, status: status.into() }
         }
     }
 }
 
-/// Kết nối seed → GetAddr → probe từng peer song song.
+/// Kết nối seed qua PKT wire protocol → GetAddr → probe từng peer song song.
 #[tauri::command]
 async fn peer_scan(seed_addr: String) -> Result<Vec<PeerInfo>, String> {
     let seed = seed_addr.trim().to_string();
     let seed_sock: std::net::SocketAddr = seed.parse()
         .map_err(|_| format!("seed address không hợp lệ: {}", seed))?;
 
-    // Bước 1: GetAddr từ seed để lấy danh sách peers
+    // Bước 1: PKT handshake + GetAddr → lấy danh sách peers từ seed
     let mut addrs: Vec<String> = vec![seed.clone()];
     if let Ok(mut stream) = TcpStream::connect_timeout(&seed_sock, Duration::from_secs(5)) {
         stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
-        if stream.write_all(b"{\"GetAddr\":null}\n").is_ok() {
-            let mut line = String::new();
-            if BufReader::new(&stream).read_line(&mut line).is_ok() {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) {
-                    // Thử các field name khả dĩ
-                    let arr = v["Addr"]["addrs"].as_array()
-                        .or_else(|| v["addrs"].as_array())
-                        .or_else(|| v["Peers"].as_array());
-                    if let Some(peers) = arr {
+        let magic = pkt_core::pkt_wire::TESTNET_MAGIC;
+        let cfg = pkt_core::pkt_peer::PeerConfig {
+            host: seed_sock.ip().to_string(),
+            port: seed_sock.port(),
+            magic,
+            ..Default::default()
+        };
+        if pkt_core::pkt_peer::do_handshake(&mut stream, &cfg).is_ok() {
+            let _ = pkt_core::pkt_peer::send_msg(&mut stream, pkt_core::pkt_wire::PktMsg::GetAddr, magic);
+            stream.set_read_timeout(Some(Duration::from_secs(4))).ok();
+            for _ in 0..10 {
+                match pkt_core::pkt_peer::recv_msg(&mut stream, magic) {
+                    Ok(pkt_core::pkt_wire::PktMsg::Addr { peers }) => {
                         for p in peers {
-                            if let Some(s) = p.as_str() {
-                                let s = s.to_string();
+                            if let Some(s) = p.to_addr_string() {
                                 if s != seed { addrs.push(s); }
                             }
                         }
+                        break;
                     }
+                    Ok(_) => continue,
+                    Err(_) => break,
                 }
             }
         }
