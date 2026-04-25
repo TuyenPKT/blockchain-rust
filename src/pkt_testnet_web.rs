@@ -917,16 +917,7 @@ async fn ps_tx_broadcast(
         }
     };
 
-    // 3. Store vào local mempool ngay — miner template sẽ bao gồm TX này
-    if let Ok(mdb) = MempoolDb::open(&ps.mempool_path) {
-        let ts_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-        let _ = mdb.put_tx(&txid, &raw, 1, ts_ns);
-    }
-
-    // 4. Fire-and-forget relay — không block response, raw moved vào closure (không clone)
+    // 3. Fire-and-forget relay — không block response, raw moved vào closure (không clone)
     let our_height = ps.sync_height() as i32;
     let cfg = PeerConfig { our_height, connect_timeout_secs: 5, read_timeout_secs: 3, max_retries: 0, ..Default::default() };
     tokio::spawn(tokio::task::spawn_blocking(move || {
