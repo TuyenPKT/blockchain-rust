@@ -490,27 +490,55 @@ fn handle_peer(
                                 }
                             }
                         } else if cmd_trim == "tx" {
-                            // Use wire_txid (non-witness SHA256d) so MempoolDb keys match eviction in block_sync
-                            let txid = {
-                                use crate::pkt_utxo_sync::{decode_wire_tx, wire_txid};
-                                let mut pos = 0;
-                                decode_wire_tx(payload, &mut pos)
-                                    .map(|tx| wire_txid(&tx))
-                                    .unwrap_or_else(|_| crate::pkt_relay::wire_tx_hash(payload))
-                            };
-                            let is_new = !seen.insert(txid); // SeenHashes: false=new, true=dup
+                            use crate::pkt_utxo_sync::{decode_wire_tx, wire_txid};
+                            let mut pos = 0;
+                            let parsed = decode_wire_tx(payload, &mut pos).ok();
+                            let txid   = parsed.as_ref()
+                                .map(|tx| wire_txid(tx))
+                                .unwrap_or_else(|| crate::pkt_relay::wire_tx_hash(payload));
+
+                            let is_new = !seen.insert(txid);
                             if is_new {
                                 let txid_hex = hex::encode(txid);
-                                println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
-                                    addr, &txid_hex[..16], relay_hub.peer_count().saturating_sub(1));
-                                relay_hub.broadcast_tx(txid, Some(&addr));
-                                let mp_path = crate::pkt_mempool_sync::default_mempool_db_path();
-                                if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp_path) {
-                                    let ts_ns = std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .map(|d| d.as_nanos() as u64)
-                                        .unwrap_or(0);
-                                    let _ = mdb.put_tx(&txid_hex, payload, 0, ts_ns);
+
+                                // Kiểm tra UTXO inputs trước khi thêm vào mempool.
+                                // Nếu UTXO DB chưa sync (height=0) → chấp nhận TX mà không check.
+                                let utxo_path = crate::pkt_testnet_web::default_utxo_db_path();
+                                let inputs_valid = match (
+                                    parsed.as_ref(),
+                                    crate::pkt_utxo_sync::UtxoSyncDb::open_read_only(&utxo_path),
+                                ) {
+                                    (Some(tx), Ok(udb))
+                                        if udb.get_utxo_height().ok().flatten().unwrap_or(0) > 0 =>
+                                    {
+                                        tx.inputs.iter().all(|inp| {
+                                            inp.is_coinbase()
+                                                || udb
+                                                    .get_utxo(&inp.prev_txid, inp.prev_vout)
+                                                    .ok()
+                                                    .flatten()
+                                                    .is_some()
+                                        })
+                                    }
+                                    // UTXO DB chưa sẵn sàng → không reject, chấp nhận TX
+                                    _ => true,
+                                };
+
+                                if inputs_valid {
+                                    println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
+                                        addr, &txid_hex[..16], relay_hub.peer_count().saturating_sub(1));
+                                    relay_hub.broadcast_tx(txid, Some(&addr));
+                                    let mp_path = crate::pkt_mempool_sync::default_mempool_db_path();
+                                    if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp_path) {
+                                        let ts_ns = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .map(|d| d.as_nanos() as u64)
+                                            .unwrap_or(0);
+                                        let _ = mdb.put_tx(&txid_hex, payload, 0, ts_ns);
+                                    }
+                                } else {
+                                    println!("[pkt-node] tx from {}: {} → rejected (UTXO input not found)",
+                                        addr, &txid_hex[..16]);
                                 }
                             }
                         } else {
