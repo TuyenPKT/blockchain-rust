@@ -140,6 +140,8 @@ pub enum SyncError {
     Db(String),
     InvalidHeader(String),
     InvalidChain(String),
+    /// Peer's chain shares no common ancestor with ours → full chain_reset needed.
+    ChainReplaced(String),
     PoWFailed { height: u64, hash: [u8; 32] },
     Timeout,
     UnexpectedMsg(String),
@@ -152,6 +154,7 @@ impl std::fmt::Display for SyncError {
             Self::Db(s)                 => write!(f, "db: {}", s),
             Self::InvalidHeader(s)      => write!(f, "invalid header: {}", s),
             Self::InvalidChain(s)       => write!(f, "chain broken: {}", s),
+            Self::ChainReplaced(s)      => write!(f, "chain replaced: {}", s),
             Self::PoWFailed { height, .. } => write!(f, "PoW failed at height {}", height),
             Self::Timeout               => write!(f, "timeout"),
             Self::UnexpectedMsg(s)      => write!(f, "unexpected message: {}", s),
@@ -520,6 +523,40 @@ pub struct HeaderSyncResult {
 /// Starts from `start_height` (exclusive — we already have this header).
 /// Loops sending GetHeaders → receiving Headers → validating → saving until
 /// peer returns 0 headers (up-to-date) or max_headers reached.
+/// Scan backwards from `max_height` looking for a header whose block_hash == `target`.
+/// Uses the same exponential spacing as build_locator, so if the peer found the fork
+/// within our locator range, we will find it here too.
+fn find_fork_height(db: &SyncDb, max_height: u64, target: &[u8; 32]) -> Option<u64> {
+    let mut step: u64 = 1;
+    let mut h: i64    = max_height as i64;
+    let mut consecutive = 0u32;
+    while h >= 0 {
+        if let Ok(Some(hash)) = db.get_header_hash(h as u64) {
+            if &hash == target { return Some(h as u64); }
+        }
+        consecutive += 1;
+        if consecutive >= 10 { step = step.saturating_mul(2).min(1 << 20); }
+        h -= step as i64;
+    }
+    None
+}
+
+/// Build a Bitcoin-style block locator directly from DB (no need to load all headers).
+fn build_locator_from_db(db: &SyncDb, height: u64) -> Vec<[u8; 32]> {
+    let mut locs: Vec<[u8; 32]> = Vec::new();
+    let mut step: u64            = 1;
+    let mut h: i64               = height as i64;
+    while h >= 0 {
+        if let Ok(Some(hash)) = db.get_header_hash(h as u64) {
+            locs.push(hash);
+        }
+        if locs.len() >= 10 { step = step.saturating_mul(2).min(1 << 20); }
+        h -= step as i64;
+    }
+    locs.push([0u8; 32]); // stop hash
+    locs
+}
+
 pub fn sync_headers(
     stream:       &mut TcpStream,
     db:           &SyncDb,
@@ -527,14 +564,14 @@ pub fn sync_headers(
     start_height: u64,
     prev_hash:    [u8; 32],
 ) -> Result<HeaderSyncResult, SyncError> {
-    let t0             = Instant::now();
-    let mut height     = start_height;
-    let mut tip_hash   = prev_hash;
-    let mut total      = 0u64;
+    let t0           = Instant::now();
+    let mut height   = start_height;
+    let mut tip_hash = prev_hash;
+    let mut total    = 0u64;
 
     loop {
-        // Build locator from tip hash
-        let locators = vec![tip_hash, [0u8; 32]]; // simple: just our tip
+        // Bitcoin-style locator: tip + exponentially spaced hashes back to genesis
+        let locators = build_locator_from_db(db, height);
         send_getheaders(stream, cfg.magic, locators)?;
 
         let headers = recv_headers(stream, cfg.magic, cfg.recv_timeout_secs)?;
@@ -542,10 +579,31 @@ pub fn sync_headers(
             break; // peer says we're up to date
         }
 
-        // Validate batch
+        // Nếu header đầu tiên không nối vào tip hiện tại → tìm fork point trước,
+        // cập nhật height/tip_hash về common ancestor, rồi mới validate.
+        // validate_header_batch chỉ được gọi với prev_hash chính xác → không bao giờ fail
+        // vì prev_block mismatch trong trường hợp reorg hợp lệ.
+        if !headers.is_empty() && headers[0].prev_block != tip_hash {
+            let fork_prev = headers[0].prev_block;
+            match find_fork_height(db, height, &fork_prev) {
+                Some(fork_h) => {
+                    eprintln!("[sync] reorg: fork tại height={}, tip {} → {}", fork_h, height, fork_h);
+                    height   = fork_h;
+                    tip_hash = fork_prev;
+                }
+                None => {
+                    return Err(SyncError::ChainReplaced(format!(
+                        "ancestor {}… không có trong chain — peer có genesis khác",
+                        &hex::encode(fork_prev)[..12],
+                    )));
+                }
+            }
+        }
+
+        // Tại đây tip_hash luôn khớp với headers[0].prev_block → validate không fail
         validate_header_batch(&headers, &tip_hash, cfg.skip_pow_check, height + 1)?;
 
-        // Save each header
+        // Save each header (overwrites any old fork branch at same heights)
         for h in &headers {
             height += 1;
             let raw = h.to_bytes();
@@ -569,7 +627,6 @@ pub fn sync_headers(
         db.set_sync_height(height)?;
         db.set_tip_hash(&tip_hash)?;
 
-        // If peer sent fewer than max per message, we're caught up
         if headers.len() < cfg.batch_size {
             break;
         }
@@ -769,14 +826,19 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
                     println!("[sync] ✅  {}", format_header_result(&r));
                 }
             }
-            Err(SyncError::InvalidChain(ref msg)) if msg.contains("prev_block mismatch") => {
-                // Node restarted with a fresh chain → our stored tip is stale.
-                eprintln!("[sync] node chain changed — sẽ reset DBs và sync lại từ genesis");
+            Err(SyncError::ChainReplaced(ref msg)) => {
+                // Peer có genesis khác hoàn toàn → cần reset DB và sync lại từ đầu.
+                eprintln!("[sync] chain replaced: {} — reset DBs", msg);
                 chain_reset = true;
                 break;
             }
+            Err(SyncError::PoWFailed { height, .. }) => {
+                // Peer gửi header PoW sai → disconnect, chain của mình vẫn OK.
+                eprintln!("[sync] PoW invalid tại height={} — disconnect, thử lại sau {}s", height, poll_secs);
+                break;
+            }
             Err(e) => {
-                eprintln!("[sync] header lỗi: {:?} — reconnect sau {}s", e, poll_secs);
+                eprintln!("[sync] header lỗi: {} — reconnect sau {}s", e, poll_secs);
                 break;
             }
         }
@@ -886,11 +948,11 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
         drop(addr_db);
         drop(reorg_db);
         drop(mempool_db);
-        if utxo_path.exists()    { let _ = std::fs::remove_dir_all(&utxo_path); }
-        if block_path.exists()   { let _ = std::fs::remove_dir_all(&block_path); }
-        if addr_path.exists()    { let _ = std::fs::remove_dir_all(&addr_path); }
-        if reorg_path.exists()   { let _ = std::fs::remove_dir_all(&reorg_path); }
-        if mempool_path.exists() { let _ = std::fs::remove_dir_all(&mempool_path); }
+        if utxo_path.exists()  { let _ = std::fs::remove_dir_all(&utxo_path); }
+        if block_path.exists() { let _ = std::fs::remove_dir_all(&block_path); }
+        if addr_path.exists()  { let _ = std::fs::remove_dir_all(&addr_path); }
+        if reorg_path.exists() { let _ = std::fs::remove_dir_all(&reorg_path); }
+        // mempool DB được giữ lại — Phase 3.5 sẽ evict TXs invalid sau khi sync lại
         eprintln!("[sync] DBs đã reset — sẽ restart để sync từ genesis");
         // return → caller (fullnode watcher loop) sẽ spawn lại run_sync
     }
