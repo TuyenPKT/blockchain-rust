@@ -890,8 +890,11 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
             }
         }
 
-        // Phase 3.5: evict orphan TXs whose inputs are no longer in UTXO set
-        {
+        // Phase 3.5: evict orphan TXs whose inputs are no longer in UTXO set.
+        // Chỉ chạy khi UTXO DB đã được populate — nếu utxo_height == 0 (đang rebuild
+        // sau chain_reset), mọi TX đều bị coi là orphan và mempool bị xóa sạch oan.
+        let current_utxo_h = utxo_db.get_utxo_height().ok().flatten().unwrap_or(0);
+        if current_utxo_h > 0 {
             use crate::pkt_utxo_sync::decode_wire_tx;
             if let Ok(pending) = mempool_db.get_pending(500) {
                 let mut orphans: Vec<[u8; 32]> = Vec::new();
