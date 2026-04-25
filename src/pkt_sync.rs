@@ -874,7 +874,7 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
         }
 
         // Phase 3: apply blocks → UTXOs + address index (streaming, RAM ≈ size(tx))
-        match crate::pkt_block_sync::sync_blocks(
+        let blocks_applied = match crate::pkt_block_sync::sync_blocks(
             &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db),
             Some(&mempool_db), &cfg.magic, cfg.skip_pow_check,
         ) {
@@ -883,18 +883,20 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
                     "[block-sync] ✅  applied {} blocks, utxo_height={}  ({} ms)",
                     r.blocks_applied, r.final_height, r.elapsed_ms,
                 );
+                r.blocks_applied
             }
-            Ok(_) => {} // đã đủ, không có block mới
+            Ok(_) => 0, // không có block mới
             Err(e) => {
                 eprintln!("[block-sync] lỗi: {:?} — tiếp tục poll", e);
+                0
             }
-        }
+        };
 
         // Phase 3.5: evict orphan TXs whose inputs are no longer in UTXO set.
-        // Chỉ chạy khi UTXO DB đã được populate — nếu utxo_height == 0 (đang rebuild
-        // sau chain_reset), mọi TX đều bị coi là orphan và mempool bị xóa sạch oan.
+        // Chỉ chạy khi có block mới được apply — nếu không có block mới thì UTXO set
+        // không thay đổi, không có lý do gì để evict TX đang pending hợp lệ.
         let current_utxo_h = utxo_db.get_utxo_height().ok().flatten().unwrap_or(0);
-        if current_utxo_h > 0 {
+        if blocks_applied > 0 && current_utxo_h > 0 {
             use crate::pkt_utxo_sync::decode_wire_tx;
             if let Ok(pending) = mempool_db.get_pending(500) {
                 let mut orphans: Vec<[u8; 32]> = Vec::new();
