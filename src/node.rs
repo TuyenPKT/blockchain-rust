@@ -285,6 +285,7 @@ impl Node {
             }
 
             Message::FeeEstimate { .. } => None,
+            Message::Reject { .. }      => None,
         }
     }
 

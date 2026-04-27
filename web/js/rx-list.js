@@ -30,7 +30,6 @@ async function loadTxs(reset) {
   }
 
   txs.forEach(tx => {
-    const secsAgo = Math.floor((Date.now() - (tx.timestamp ?? 0) * 1000) / 1000);
     const row = document.createElement('div');
     row.className = 'list-item tx-item';
     row.style.cursor = 'pointer';
@@ -40,7 +39,7 @@ async function loadTxs(reset) {
         <div class="item-secondary">Block #${(tx.height ?? 0).toLocaleString("en-US")}</div>
       </div>
       <div class="item-right">
-        <div class="item-age">${ago(secsAgo)}</div>
+        <div class="item-age">${timeAgo(tx.timestamp ?? 0)}</div>
       </div>
     `;
     row.onclick = () => {

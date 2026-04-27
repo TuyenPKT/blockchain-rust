@@ -143,6 +143,7 @@ pub enum SyncError {
     /// Peer's chain shares no common ancestor with ours → full chain_reset needed.
     ChainReplaced(String),
     PoWFailed { height: u64, hash: [u8; 32] },
+    InvalidBlock(String),
     Timeout,
     UnexpectedMsg(String),
 }
@@ -156,6 +157,7 @@ impl std::fmt::Display for SyncError {
             Self::InvalidChain(s)       => write!(f, "chain broken: {}", s),
             Self::ChainReplaced(s)      => write!(f, "chain replaced: {}", s),
             Self::PoWFailed { height, .. } => write!(f, "PoW failed at height {}", height),
+            Self::InvalidBlock(s)       => write!(f, "invalid block: {}", s),
             Self::Timeout               => write!(f, "timeout"),
             Self::UnexpectedMsg(s)      => write!(f, "unexpected message: {}", s),
         }
@@ -874,7 +876,7 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
         }
 
         // Phase 3: apply blocks → UTXOs + address index (streaming, RAM ≈ size(tx))
-        let blocks_applied = match crate::pkt_block_sync::sync_blocks(
+        let _blocks_applied = match crate::pkt_block_sync::sync_blocks(
             &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db),
             Some(&mempool_db), &cfg.magic, cfg.skip_pow_check,
         ) {

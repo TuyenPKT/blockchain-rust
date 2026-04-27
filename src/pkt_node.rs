@@ -16,8 +16,13 @@
 
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::thread;
+
+/// Wall-clock timestamp (seconds) of the last accepted block.
+/// Used for difficulty adjustment and 30-min timeout — immune to miner timestamp forgery.
+static LAST_BLOCK_WALL_SECS: AtomicU64 = AtomicU64::new(0);
 
 /// Lock a Mutex, recovering from poison by using the inner value.
 /// A poisoned Mutex means another thread panicked while holding the lock —
@@ -500,45 +505,16 @@ fn handle_peer(
                             let is_new = !seen.insert(txid);
                             if is_new {
                                 let txid_hex = hex::encode(txid);
-
-                                // Kiểm tra UTXO inputs trước khi thêm vào mempool.
-                                // Nếu UTXO DB chưa sync (height=0) → chấp nhận TX mà không check.
-                                let utxo_path = crate::pkt_testnet_web::default_utxo_db_path();
-                                let inputs_valid = match (
-                                    parsed.as_ref(),
-                                    crate::pkt_utxo_sync::UtxoSyncDb::open_read_only(&utxo_path),
-                                ) {
-                                    (Some(tx), Ok(udb))
-                                        if udb.get_utxo_height().ok().flatten().unwrap_or(0) > 0 =>
-                                    {
-                                        tx.inputs.iter().all(|inp| {
-                                            inp.is_coinbase()
-                                                || udb
-                                                    .get_utxo(&inp.prev_txid, inp.prev_vout)
-                                                    .ok()
-                                                    .flatten()
-                                                    .is_some()
-                                        })
-                                    }
-                                    // UTXO DB chưa sẵn sàng → không reject, chấp nhận TX
-                                    _ => true,
-                                };
-
-                                if inputs_valid {
-                                    println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
-                                        addr, &txid_hex[..16], relay_hub.peer_count().saturating_sub(1));
-                                    relay_hub.broadcast_tx(txid, Some(&addr));
-                                    let mp_path = crate::pkt_mempool_sync::default_mempool_db_path();
-                                    if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp_path) {
-                                        let ts_ns = std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .map(|d| d.as_nanos() as u64)
-                                            .unwrap_or(0);
-                                        let _ = mdb.put_tx(&txid_hex, payload, 0, ts_ns);
-                                    }
-                                } else {
-                                    println!("[pkt-node] tx from {}: {} → rejected (UTXO input not found)",
-                                        addr, &txid_hex[..16]);
+                                println!("[pkt-node] tx from {}: {} → mempool + relay to {} peers",
+                                    addr, &txid_hex[..16], relay_hub.peer_count().saturating_sub(1));
+                                relay_hub.broadcast_tx(txid, Some(&addr));
+                                let mp_path = crate::pkt_mempool_sync::default_mempool_db_path();
+                                if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp_path) {
+                                    let ts_ns = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_nanos() as u64)
+                                        .unwrap_or(0);
+                                    let _ = mdb.put_tx(&txid_hex, payload, 0, ts_ns);
                                 }
                             }
                         } else {
@@ -704,10 +680,22 @@ fn handle_template_client(
         let msg  = match Message::deserialize(line.as_bytes()) { Some(m) => m, None => break };
         let reply = match msg {
             Message::GetTemplate => {
-                let bc       = lock_or_recover!(chain);
+                let mut bc   = lock_or_recover!(chain);
                 let height   = bc.chain.len() as u64;
                 let prev     = bc.chain.last().map(|b| b.hash.clone())
                                 .unwrap_or_else(|| "0".repeat(64));
+
+                // 30-minute timeout: no block → reset difficulty to 1 (uses wall clock)
+                {
+                    let now  = SystemTime::now()
+                        .duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    let last = LAST_BLOCK_WALL_SECS.load(Ordering::Relaxed);
+                    let idle = if last > 0 { (now as i64) - (last as i64) } else { 0 };
+                    if bc.difficulty > 1 && idle > 1800 {
+                        println!("[difficulty] no block for {}s → reset diff to 1", idle);
+                        bc.difficulty = 1;
+                    }
+                }
                 let diff     = bc.difficulty;
                 let mut txs  = bc.mempool.select_transactions(100);
                 drop(bc);
@@ -730,15 +718,72 @@ fn handle_template_client(
 
                 Message::Template { prev_hash: prev, height, difficulty: diff, txs }
             }
-            Message::NewBlock { block } => {
+            Message::NewBlock { block } => 'nb: {
+                // ── Timestamp validation (Bitcoin 2-hour rule + min 2020-01-01) ─────
+                const MIN_VALID_TS: i64 = 1_577_836_800; // 2020-01-01 UTC
+                const MAX_FUTURE_SECS: i64 = 7_200;      // 2 hours
+                let now_ts = SystemTime::now()
+                    .duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                if block.timestamp < MIN_VALID_TS {
+                    eprintln!("[template] ❌ reject block h={}: timestamp {} < 2020-01-01",
+                        block.index, block.timestamp);
+                    break 'nb Message::Reject { reason: "timestamp_too_old".into() };
+                }
+                if block.timestamp > now_ts + MAX_FUTURE_SECS {
+                    eprintln!("[template] ❌ reject block h={}: timestamp {} > now+2h",
+                        block.index, block.timestamp);
+                    break 'nb Message::Reject { reason: "timestamp_future".into() };
+                }
+
                 // Lấy BLAKE3 hash trước khi commit để relay
                 let block_hash_hex = block.hash.clone();
+                // Thu thập txids của non-coinbase TXs trước khi move block vào commit.
+                // tx_id trong Transaction là display format (reversed) → đảo lại để so với mempool key.
+                let non_coinbase_txids: Vec<[u8; 32]> = block.transactions.iter()
+                    .filter(|tx| !tx.is_coinbase)
+                    .filter_map(|tx| {
+                        let bytes = hex::decode(&tx.tx_id).ok()?;
+                        if bytes.len() != 32 { return None; }
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&bytes);
+                        arr.reverse(); // un-reverse: display → wire byte order = mempool key
+                        Some(arr)
+                    })
+                    .collect();
                 let mut bc = lock_or_recover!(chain);
                 bc.commit_mined_block(block);
                 let h = bc.chain.len() as u64;
+
+                // ── Difficulty adjustment (wall clock, immune to timestamp forgery) ────
+                // Dead zone ±20% prevents oscillation when near target.
+                const TARGET_SECS: i64 = 60;
+                const DEAD_ZONE:   i64 = 12; // ±20%: 48–72s → no change
+                {
+                    let now_wall  = SystemTime::now()
+                        .duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    let last_wall = LAST_BLOCK_WALL_SECS.swap(now_wall, Ordering::Relaxed);
+                    let dt = if last_wall > 0 { (now_wall as i64) - (last_wall as i64) } else { TARGET_SECS };
+                    if dt < TARGET_SECS - DEAD_ZONE {
+                        bc.difficulty += 1;
+                        println!("[difficulty] block_time={}s < {}s → diff → {}", dt, TARGET_SECS - DEAD_ZONE, bc.difficulty);
+                    } else if dt > TARGET_SECS + DEAD_ZONE && bc.difficulty > 1 {
+                        bc.difficulty -= 1;
+                        println!("[difficulty] block_time={}s > {}s → diff → {}", dt, TARGET_SECS + DEAD_ZONE, bc.difficulty);
+                    } else {
+                        println!("[difficulty] block_time={}s in dead zone (48–72s) → diff unchanged={}", dt, bc.difficulty);
+                    }
+                }
                 drop(bc);
                 if let Err(e) = crate::storage::save_blockchain(&lock_or_recover!(chain)) {
                     eprintln!("[template] save error: {}", e);
+                }
+                // Evict confirmed TXs khỏi mempool ngay khi miner submit block
+                if !non_coinbase_txids.is_empty() {
+                    let mp = crate::pkt_mempool_sync::default_mempool_db_path();
+                    if let Ok(mdb) = crate::pkt_mempool_sync::MempoolDb::open(&mp) {
+                        let _ = mdb.evict_confirmed(&non_coinbase_txids);
+                        println!("[template] evicted {} confirmed tx(s) from mempool", non_coinbase_txids.len());
+                    }
                 }
                 // Relay block hash tới tất cả connected peers
                 if let Ok(bytes) = hex::decode(&block_hash_hex) {

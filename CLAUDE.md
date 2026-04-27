@@ -3,83 +3,37 @@
 **Version hiện tại: v27.1 ✅**
 
 ## Quy tắc cốt lõi
-- Bắt buộc dùng Tiếng Việt
+- Trả lời bằng Tiếng Việt
 - Cập nhật `CONTEXT.md` + `CHANGELOG.md` sau mỗi version
-- Không `unwrap()` / `panic` trong production
-Tests vẫn tồn tại
-nhưng:
+- Không `unwrap()` / `panic` / `expect()` trong production code và tests
+- Khi thêm dependency: pin version trong `Cargo.toml`, đọc CHANGELOG, ghi gotcha vào **Lưu ý kỹ thuật** bên dưới
 
-- không được tạo fake values
-- không hard-code literal data
-- chỉ test qua interface
-- dữ liệu test phải load từ external source
+## DATA POLICY
+
+Tuyệt đối **không tạo**: mock data, fake data, example values, placeholder, demo accounts, lorem ipsum, test emails, sample phone numbers, seed data giả, hard-coded literal trong tests.
+
+Mọi dữ liệu phải đến từ: **database thật, API thật, config thật, input runtime**.
 
 Test inputs phải:
 - deterministic
-- không mang semantic identity
-- không hard-code example user data
+- không mang semantic identity (không phải email/tên/số điện thoại nhìn như thật)
+- load từ external source qua interface
+- không hard-code
 
-# DATA POLICY
+Nếu thiếu dữ liệu thật:
+→ tạo interface/type/schema, để TODO hoặc trả error
+→ **KHÔNG** tự bịa giá trị
 
-Tuyệt đối không tạo:
-- mock data
-- fake data
-- example values
-- placeholder values
-- demo accounts
-- lorem ipsum
-- test emails
-- sample phone numbers
-
-Không viết:
-- example usage với giá trị cụ thể
-- unit test chứa hard-coded values
-- seed data giả
-
-Nếu thiếu dữ liệu:
-→ tạo interface / type / schema
-→ để TODO hoặc error
-→ KHÔNG tự bịa giá trị
-
-Mọi dữ liệu phải đến từ:
-- database thật
-- API thật
-- config thật
-- input runtime
-
-Không được viết:
-"test data"
-
-**Khi thêm dependency mới:**
-1. Thêm vào `Cargo.toml` với version cố định
-2. Đọc CHANGELOG của dep
-3. Ghi gotcha vào mục **Lưu ý kỹ thuật** bên dưới
-4. Hỏi AI viết code → `cargo build` → paste lỗi cho AI nếu có 
-
-**Nguyên tắc:** AI giỏi structure — compiler giỏi correctness — docs giỏi truth. `CLAUDE.md` là "correction file": ghi một lần, AI đọc mãi.
-
-## Testing
-
-- Không dùng `mock_data()` để test business logic — dùng chain/DB thật
-- Test xanh với data ảo = test vô nghĩa
-
-If real data source is undefined:
-    return error
-Do NOT fabricate values
-
-struct Config {
-    database_url: String
-}
-
+```rust
 fn init_repo(cfg: &Config) -> Result<UserRepo> {
-    connect(cfg.database_url)
+    connect(cfg.database_url)   // ✅ từ config thật
 }
-
+```
 
 ## CHANGELOG format
 
 ```markdown
-## v{X.Y} — {Tên} ({ngày})
+## v{X.Y} — {Tên} ({YYYY-MM-DD})
 ### Added
 - Tính năng chính
 ### Files
@@ -111,13 +65,13 @@ hex = "0.4"
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-secp256k1 = { version = "0.27", features = ["rand-std", "global-context"] }
+secp256k1 = { version = "0.27", features = ["rand-std", "global-context", "recovery"] }
 ripemd = "0.1"
 bs58 = "0.5"
 tokio = { version = "1", features = ["full"] }
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
-redb = "2"                             # pure-Rust KV backend (v25.5, unconditional)
+redb = "2"                             # pure-Rust KV (v25.5, không còn RocksDB)
 axum = { version = "0.7", features = ["ws"] }
 async-graphql = { version = "7", features = ["tracing"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -134,6 +88,7 @@ crossterm = "0.27"
 qrcode = "0.14"
 proptest = { version = "1.4", optional = true }
 tower-http = { version = "0.5", features = ["fs"] }
+subtle = "2"                           # constant-time compare (v25.7)
 ```
 
 ## Cấu trúc file
@@ -163,11 +118,11 @@ src/
 ├── pkt_analytics.rs / pkt_snapshot.rs
 │
 │  ── EVM Layer (v26.x–v27.x) ──
-├── gas_model.rs            ← EIP-1559: next_base_fee, burn, intrinsic_gas, GasHeader, GAS_CODEDEPOSIT
+├── gas_model.rs            ← EIP-1559: next_base_fee, burn, intrinsic_gas, GasHeader
 ├── evm_state.rs            ← WorldState: codes/balances/storage/nonces; create_address, create2_address
-├── pkt_evm.rs              ← Full EVM executor: U256, 140+ opcodes, gas metering, CALL/CREATE sub-execution
+├── pkt_evm.rs              ← Full EVM: U256, 140+ opcodes, gas metering, CALL/CREATE sub-execution
 ├── evm_precompiles.rs      ← Precompiles 0x01–0x09: ecRecover, SHA256, RIPEMD160, Identity, ModExp
-├── eth_rpc.rs              ← eth_* JSON-RPC 2.0 (POST /eth): 13 methods
+├── eth_rpc.rs              ← eth_* JSON-RPC 2.0 (POST /eth)
 ├── eth_wire.rs             ← ETH/68 P2P wire: 13 msg types, FrameCodec
 ├── rlp.rs                  ← RLP encoder/decoder (Bytes/List)
 ├── uncle.rs                ← Uncle/Ommer rewards, validation, UnclePool
@@ -186,16 +141,13 @@ src/
 
 web/
 ├── css/style.css           ← theme, panels — ServeDir (no rebuild)
-├── js/shared.js            ← API_BASE, fetchJson, helpers
+├── js/shared.js            ← API_BASE, fetchJson, ago, escHtml, theme
 ├── js/app.js               ← Home SPA
-├── js/testnet.js           ← Testnet page
 ├── js/charts-live.js       ← Chart.js analytics (hashrate/difficulty/block_time)
-├── js/address.js / address-page.js
-├── js/block-list.js / block-detail.js
+├── js/address-page.js / block-list.js / block-detail.js
 ├── js/rx-list.js / rx-detail.js
 ├── js/health.js / playground.js / webhooks.js
-├── address/index.html / block/index.html / block/detail.html
-└── rx/index.html / rx/detail.html
+└── address/ block/ rx/     ← detail pages (HTML stubs + JS hydrate)
 
 desktop/
 ├── src/pages/              ← Explorer.tsx / Node.tsx / Miner.tsx / Wallet.tsx
@@ -207,72 +159,65 @@ index.html                  ← embedded via include_bytes! — rebuild khi sử
 
 ## Lưu ý kỹ thuật
 
-- `secp256k1 = 0.27`: dùng `Message::from_slice()`, không có `from_digest_slice()`; `PublicKey::combine()` thay vì `add_exp_assign`; không có `mul_assign` trên `PublicKey`
+### Crypto / Wire
+- `secp256k1 = 0.27`: dùng `Message::from_slice()` (không có `from_digest_slice()`); `PublicKey::combine()` thay `add_exp_assign`; không có `mul_assign` trên `PublicKey`. Feature `recovery` bắt buộc cho `RecoverableSignature` + `recover_ecdsa()`
 - `pbkdf2`: bắt buộc `features = ["hmac"]`
 - Schnorr: sign bằng `tweaked_sk`, không phải `internal_sk`
-- `TxOutput.script_pubkey` và `TxInput.script_sig` là type `Script`
+- `WireBlockHeader.nonce` là `u64` (v26.1); header = 84 bytes (`WIRE_HEADER_LEN`); load_header backward-compat với 80-byte entries (zero-pad)
 - UTXO lookup: `owner_bytes_of()` hỗ trợ 20-byte (P2PKH) và 32-byte (P2TR)
 - Tránh `try_into()` trên `&[u8;64]` — dùng `copy_from_slice`
-- `#![allow(dead_code)]` ở đầu file khi có nhiều public API chưa dùng
-- ratatui: dùng `TestBackend` cho unit tests
-- `SyncDb::open_temp()` — race condition khi tests song song → dùng `static Mutex<()>`
-- `WireBlockHeader.nonce` là `u64` (v26.1); header = 84 bytes (`WIRE_HEADER_LEN`); load_header backward-compat với 80-byte entries (zero-pad)
-- secp256k1 "recovery" feature bắt buộc cho `RecoverableSignature` và `recover_ecdsa()`
+
+### Storage / Test
 - redb 2: `ReadableTable::len()` không có → đếm bằng iterator
-- ABI: `encode_bytes_payload()` helper cần thiết vì Rust không cho phép `Bytes(b) | String(b)` với `b` khác kiểu trong cùng arm
+- `SyncDb::open_temp()` race condition khi tests song song → dùng `static Mutex<()>`
+- `txin_temp` lifecycle: write trong `index_tx_inputs` → **bắt buộc** read+delete trong `index_tx_outputs`. Thiếu delete → storage leak tích luỹ
 - `testnet_web_router()` mở DBs tại `~/.pkt/syncdb` + `~/.pkt/utxodb` — cần `cargo run -- sync` trước
+- ratatui: dùng `TestBackend` cho unit tests
+- `#![allow(dead_code)]` ở đầu file khi có nhiều public API chưa dùng
+
+### EVM
+- ABI: `encode_bytes_payload()` helper cần thiết vì Rust không cho phép `Bytes(b) | String(b)` với `b` khác kiểu trong cùng arm
+- `Evm::new_with_world()` arg order: `(ctx, code, storage, world)` — code sau ctx
+- EVM CREATE stack: pops `val` (top), `off`, `len` → push `len` trước, `off`, `val` cuối (val on top)
+- `Rc<RefCell<WorldState>>` dùng cho sub-EVM sharing; snapshot = `world.borrow().clone()` trước sub-call, restore = `*world.borrow_mut() = snapshot` khi REVERT
+
+### Consensus / Node
+- `LAST_BLOCK_WALL_SECS: AtomicU64` static — dùng `.swap()` để lấy last value atomic; init=0 → first block dùng `TARGET_SECS=60`
+- Difficulty dead zone `DEAD_ZONE=12` (±20%): 48–72s → no change; <48 → +1; >72 → -1. Ngăn single-block oscillation
+- Difficulty dùng wall clock (`SystemTime::now()`), **không** dùng `header.timestamp` (forgeable)
+
+### Web / Front-end
 - `tower-http = 0.5`: `ServeDir::new("web")` serve từ CWD/web/ — binary phải chạy từ project root
 - QR width = `17 + 4×N` — test: `(w - 17) % 4 == 0`
-- `Evm::new_with_world()` arg order: `(ctx, code, storage, world)` — code sau ctx
-- EVM CREATE stack order: pops `val` (top), `off`, `len` → push len trước, off, val cuối (val on top)
-- `Rc<RefCell<WorldState>>` dùng cho sub-EVM sharing; snapshot = `world.borrow().clone()` trước sub-call, restore khi REVERT
+- innerHTML template literals: **bắt buộc** `escHtml()` cho mọi giá trị từ URL/API/user (XSS)
+- `ago(secs)`: <10s = "just now"; 30 ngày: trả date string thay vì "X days ago" để tránh hiển thị timestamp lỗi (vd "8352 days ago")
+
+### Security (v25.7)
+- `subtle::ConstantTimeEq`: cả hai chuỗi phải cùng length, nếu không sẽ luôn `false` → đảm bảo blake3 hash 64 chars khớp đúng
+- `url_guard::validate_callback_url`: không resolve DNS — chỉ chặn IP literal + hostname biết trước. DNS rebinding vẫn có thể xảy ra
+- Default bind = `127.0.0.1`; set `PKT_LISTEN=0.0.0.0` để expose public
+- `PKT_TRUSTED_PROXY=1` khi sau nginx; default off → tránh X-Forwarded-For spoofing
+- GraphQL `limit_complexity(100)` + `limit_depth(5)` — tăng nếu query hợp lệ bị từ chối
 
 ## Roadmap
 
-### Era 25–28 (v18.x–v21.x) ✅ HOÀN THÀNH
+| Era | Versions | Trạng thái |
+|-----|----------|-----------|
+| 1–28 | v0.1–v21.x | ✅ Foundation → Desktop App |
+| 29 | v22.x | ✅ PKTScan Backend Fix |
+| 30 | v23.x | ✅ PKT Full Node + Security Patch |
+| 31 | v24.x | ✅ Public Testnet & Ecosystem |
+| 32 | v25.x | ✅ Storage Migration redb + Security Hardening (9 patches) |
+| 33 | v26.x | ✅ EVM Compatible Layer (gas_model, pkt_evm, eth_rpc, eth_wire, rlp, uncle, precompiles, abi, receipts) |
+| 34 | v27.x | ← ĐANG LÀM (Bitcoin Script Parity + sub-EVM) |
+| 35 | v28.x | Mainnet Prep (checkpoints, pentest, GraphQL authn) |
 
-~~Era 25 — Analytics & Polish (v18.x)~~ ✅
-~~Era 26 — PKTCore Production + Dev Layer (v19.x)~~ ✅
-~~Era 27 — PKTScan Desktop App (v20.x)~~ ✅
-~~Era 28 — PKTScan Desktop Nâng Cao (v21.x)~~ ✅ (v21.0 Miner IPC · v21.1 i18n+Theme · v21.2 Wallet+Peer Scan)
+### Era 34 — đang làm (v27.x)
+- ~~v27.0~~ Bitcoin Script Complete (CLTV/CSV/OP_IF/HTLC/Taproot/Schnorr/Lightning; 892 tests)
+- ~~v27.1~~ CALL/CREATE sub-EVM (WorldState + snapshot/restore + depth guard 1024; 909 tests)
+- v27.2 — eth_sendRawTransaction RLP decode + EIP-155 sig verify
+- v27.3 — ETH/68 P2P handshake (Status message với geth peer)
+- v27.4 — Lightning routing (multi-hop HTLC, onion routing stub)
+- v27.5 — Taproot key aggregation on-chain validation
 
-### Era 29 — PKTScan Backend Fix (v22.x) ✅
-
-~~v22.0~~ Address Index · ~~v22.1~~ UTXO Height · ~~v22.2~~ Block TX Count
-~~v22.4~~ Broadcast TX · ~~v22.5~~ Wallet Send · ~~v22.6~~ Fix Stats Display
-
-### Era 30 — PKT Full Node (v23.x) ✅
-
-~~v23.0~~ TX Validation · ~~v23.1~~ P2PKH Script · ~~v23.2~~ Block Relay
-~~v23.3~~ Multi-peer · ~~v23.4~~ Mempool Full · ~~v23.5~~ IBD Checkpoints
-~~v23.6~~ Wire Mempool Bridge · ~~v23.7~~ UTXO Snapshot · ~~v23.8~~ Full Node Mode
-~~v23.8.1~~ Security Patch (15 issues)
-
-### Era 31 — Public Testnet & Ecosystem Bootstrap (v24.x) ✅
-
-~~v24.0~~ Node Onboarding · ~~v24.1~~ EVM Address · ~~v24.2~~ Network-aware Paths
-~~v24.3~~ Nav Toggle · ~~v24.4~~ Mining Pool · ~~v24.5~~ LZ4 Compression
-~~v24.6~~ Tokenomics 21M PKT · ~~v24.6.1~~ Network Config (pkt_config.rs)
-v24.7 — Testnet Faucet · v24.8 — Developer Docs · v24.9 — Multi-node Bootstrap
-v24.10 — Mainnet Prep (checkpoints, genesis verify, tokenomics audit)
-
-### Era 32 — Storage Migration redb (v25.x) ✅
-
-~~v25.0~~ RocksKv Abstraction · ~~v25.1~~ RedbKv + feature flag · ~~v25.2~~ redb Default
-~~v25.3~~ VPS Migration + Re-sync · ~~v25.4~~ In-Process Sync (redb hoạt động trên VPS)
-~~v25.5~~ Remove RocksDB (redb là backend duy nhất, không còn C++ dep)
-~~v25.7~~ Security Hardening (9 patches: SSRF, timing, bind, path traversal, GraphQL DoS, rate limit, XFF, install checksum)
-
-### Era 33 — EVM Compatible Layer (v26.x) ✅
-
-~~v26.0~~ Full EVM Stack (gas_model + pkt_evm + eth_rpc + eth_wire; 75 tests)
-~~v26.1~~ Ethereum PoW Parity (rlp + uncle + evm_precompiles + abi + receipts + EIP-155 + nonce u64; 843 tests)
-
-### Era 34 — Bitcoin Script Parity (v27.x) ← ĐANG LÀM
-
-~~v27.0~~ Bitcoin Script Complete (CLTV/CSV/OP_IF/HTLC/Taproot/Schnorr/Lightning; 892 tests)
-~~v27.1~~ CALL/CREATE sub-execution EVM (WorldState + snapshot/restore + depth guard; 909 tests)
-v27.2 — eth_sendRawTransaction RLP decode + EIP-155 signature verify
-v27.3 — ETH/68 P2P handshake (Status message exchange với geth peer)
-v27.4 — Lightning routing (multi-hop HTLC, onion routing stub)
-v27.5 — Taproot key aggregation on-chain validation
+> Chi tiết per-version + file changes → `CONTEXT.md`. Format CHANGELOG entries → `CHANGELOG.md`.

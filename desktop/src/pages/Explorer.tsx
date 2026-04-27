@@ -116,7 +116,64 @@ function StatCard({ label, value, sub, icon, color, pulse }: {
   );
 }
 
-function DashBlockRow({ b, i, total, onBlock }: { b: BlockHeader; i: number; total: number; onBlock: (h: number) => void }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// TX chips — compact clickable txid pills
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TxChips({ txids, txCount, onTx }: {
+  txids?:  string[];
+  txCount?: number;
+  onTx?:   (txid: string) => void;
+}) {
+  const list  = txids ?? [];
+  const count = txCount ?? list.length;
+  if (count === 0 && list.length === 0) return <span style={{ color: colors.muted, fontSize: 11 }}>—</span>;
+
+  const visible = list.slice(0, 3);
+  const extra   = count - visible.length;
+
+  if (visible.length === 0 && count > 0) {
+    return (
+      <span style={{
+        fontFamily: fonts.mono, fontSize: 11, padding: "2px 8px",
+        borderRadius: 4, background: colors.surface2,
+        border: `1px solid ${colors.border}`, color: colors.muted,
+      }}>
+        {count} tx{count !== 1 ? "s" : ""}
+      </span>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+      {visible.map(txid => (
+        <span key={txid}
+          onClick={e => { e.stopPropagation(); onTx?.(txid); }}
+          title={txid}
+          style={{
+            fontFamily: fonts.mono, fontSize: 10, padding: "2px 7px",
+            borderRadius: 4, cursor: onTx ? "pointer" : "default",
+            background: `${colors.blue}14`, border: `1px solid ${colors.blue}33`,
+            color: colors.blue, whiteSpace: "nowrap",
+            transition: "background .12s",
+          }}
+          onMouseEnter={e => { if (onTx) e.currentTarget.style.background = `${colors.blue}28`; }}
+          onMouseLeave={e => { e.currentTarget.style.background = `${colors.blue}14`; }}
+        >
+          {txid.slice(0, 8)}…
+        </span>
+      ))}
+      {extra > 0 && (
+        <span style={{ fontSize: 10, color: colors.muted, whiteSpace: "nowrap" }}>+{extra} more</span>
+      )}
+    </div>
+  );
+}
+
+function DashBlockRow({ b, i, total, onBlock, onTx }: {
+  b: BlockHeader; i: number; total: number;
+  onBlock: (h: number) => void; onTx?: (txid: string) => void;
+}) {
   const h = b.index ?? b.height ?? 0;
   return (
     <div onClick={() => onBlock(h)}
@@ -145,15 +202,15 @@ function DashBlockRow({ b, i, total, onBlock }: { b: BlockHeader; i: number; tot
           {b.hash ? shortHash(b.hash) : "—"}
         </div>
       </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ fontSize: 12, color: colors.text, fontWeight: 600 }}>{b.tx_count ?? 0} tx</div>
-        <div style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>{b.timestamp ? timeAgo(b.timestamp) : "—"}</div>
+      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        <TxChips txids={b.txids as string[] | undefined} txCount={b.tx_count} onTx={onTx} />
+        <div style={{ fontSize: 11, color: colors.muted }}>{b.timestamp ? timeAgo(b.timestamp) : "—"}</div>
       </div>
     </div>
   );
 }
 
-function OverviewPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: number) => void }) {
+function OverviewPanel({ nodeUrl, onBlock, onTx }: { nodeUrl: string; onBlock: (h: number) => void; onTx?: (txid: string) => void }) {
   const { summary, blocks, connected, error, refresh } = useLiveDashboard(nodeUrl);
   const [hrSeries, setHrSeries] = useState<AnalyticsSeries | null>(null);
 
@@ -230,7 +287,7 @@ function OverviewPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: num
               {connected ? "Loading…" : "Connecting…"}
             </div>
           ) : latestBlocks.map((b, i) => (
-            <DashBlockRow key={b.hash ?? i} b={b} i={i} total={latestBlocks.length} onBlock={onBlock} />
+            <DashBlockRow key={b.hash ?? i} b={b} i={i} total={latestBlocks.length} onBlock={onBlock} onTx={onTx} />
           ))}
         </div>
 
@@ -293,7 +350,7 @@ function OverviewPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: num
 // BLOCKS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function BlocksPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: number) => void }) {
+function BlocksPanel({ nodeUrl, onBlock, onTx }: { nodeUrl: string; onBlock: (h: number) => void; onTx?: (txid: string) => void }) {
   const [blocks, setBlocks] = useState<BlockHeader[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -354,7 +411,9 @@ function BlocksPanel({ nodeUrl, onBlock }: { nodeUrl: string; onBlock: (h: numbe
                     <td style={{ padding: "12px 18px", fontFamily: fonts.mono, fontSize: 12, color: colors.blue }}>
                       {b.hash ? shortHash(b.hash) : "—"}
                     </td>
-                    <td style={{ padding: "12px 18px", color: colors.text }}>{b.tx_count ?? "—"}</td>
+                    <td style={{ padding: "10px 18px" }}>
+                      <TxChips txids={b.txids as string[] | undefined} txCount={b.tx_count} onTx={onTx} />
+                    </td>
                     <td style={{ padding: "12px 18px", color: colors.muted }}>
                       {b.timestamp ? timeAgo(b.timestamp) : "—"}
                     </td>
@@ -686,8 +745,8 @@ export function Explorer({ nodeUrl, onBlock, onTx, subTab: subTabProp, onSubTab 
 
       <SubTabBar active={active} onChange={handleChange} />
 
-      {active === "overview"      && <OverviewPanel      nodeUrl={nodeUrl} onBlock={onBlock} />}
-      {active === "blocks"        && <BlocksPanel        nodeUrl={nodeUrl} onBlock={onBlock} />}
+      {active === "overview"      && <OverviewPanel      nodeUrl={nodeUrl} onBlock={onBlock} onTx={onTx} />}
+      {active === "blocks"        && <BlocksPanel        nodeUrl={nodeUrl} onBlock={onBlock} onTx={onTx} />}
       {active === "charts"        && <ChartsPanel        nodeUrl={nodeUrl} />}
       {active === "transactions"  && <TransactionsPanel  nodeUrl={nodeUrl} onTx={onTx} />}
     </div>

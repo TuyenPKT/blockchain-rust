@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { colors, fonts } from "../theme";
 import { t } from "../i18n";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
-import { fetchBalance, fetchAddressUtxos, AddressUtxo, PACKETS_PER_PKT } from "../api";
+import { fetchBalance, fetchAddressUtxos, fetchAddressTxs, AddressUtxo, AddressTx, PACKETS_PER_PKT, fmtPkt, timeAgo } from "../api";
 
 interface WalletProps {
   nodeUrl: string;
@@ -81,9 +81,28 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
   const [sending, setSending]     = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  // TX history
+  const [txHistory, setTxHistory]   = useState<AddressTx[]>([]);
+  const [txLoading, setTxLoading]   = useState(false);
+  const [txPage, setTxPage]         = useState(0);
+  const [txHasMore, setTxHasMore]   = useState(false);
+  const TX_PAGE_SIZE = 20;
+
+  const refreshTxHistory = useCallback(async (address: string, page = 0) => {
+    setTxLoading(true);
+    try {
+      const data = await fetchAddressTxs(nodeUrl, address, page, TX_PAGE_SIZE);
+      const rows = data.txs ?? [];
+      setTxHistory(prev => page === 0 ? rows : [...prev, ...rows]);
+      setTxHasMore(rows.length === TX_PAGE_SIZE);
+      setTxPage(page);
+    } catch { /* ignore */ }
+    setTxLoading(false);
+  }, [nodeUrl]);
+
   // Fetch balance whenever wallet/network changes
   useEffect(() => {
-    if (!wallet) { setBalance(null); return; }
+    if (!wallet) { setBalance(null); setTxHistory([]); return; }
     fetchBalance(nodeUrl, wallet.address)
       .then(data => {
         const d = data as Record<string, unknown>;
@@ -91,7 +110,8 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
         setBalance(Number(sat));
       })
       .catch(() => setBalance(null));
-  }, [wallet, nodeUrl]);
+    refreshTxHistory(wallet.address, 0);
+  }, [wallet, nodeUrl, refreshTxHistory]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -230,11 +250,11 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
       } else {
         setSendResult({ ok: true, msg: `${t.wallet_send_ok} ${result.txid ?? built.txid}` });
         setSendTo(""); setSendAmt(""); setSendFee("0.001");
-        // refresh balance
         fetchBalance(nodeUrl, wallet.address).then(data => {
           const d = data as Record<string, unknown>;
           setBalance(Number((d["balance"] ?? d["confirmed"] ?? d["total"] ?? 0)));
         }).catch(() => {});
+        refreshTxHistory(wallet.address, 0);
       }
     } catch (e) { setSendResult({ ok: false, msg: String(e) }); }
     setSending(false);
@@ -529,6 +549,157 @@ export function Wallet({ nodeUrl, network, onViewAddr }: WalletProps) {
         </div>
       </Panel>
       </>}
+
+      {/* TX History */}
+      <Panel icon="📋" title="Lịch sử giao dịch"
+        right={
+          <button onClick={() => wallet && refreshTxHistory(wallet.address, 0)}
+            disabled={txLoading}
+            style={{
+              padding: "4px 12px", background: colors.surface2,
+              border: `1px solid ${colors.border}`, borderRadius: 6,
+              color: colors.muted, cursor: txLoading ? "wait" : "pointer", fontSize: 12,
+            }}>
+            {txLoading ? "…" : t.refresh}
+          </button>
+        }
+      >
+        <div style={{ overflowX: "auto" }}>
+          {!txLoading && txHistory.length === 0 && (
+            <div style={{ padding: "24px 20px", fontSize: 13, color: colors.muted, textAlign: "center" }}>
+              Chưa có giao dịch nào
+            </div>
+          )}
+          {txHistory.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                  {["Tx Hash", "Method", "Block", "Age", "From", "", "To", "Amount", "Txn Fee"].map(h => (
+                    <th key={h} style={{
+                      padding: "9px 12px", textAlign: "left",
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                      letterSpacing: ".07em", color: colors.muted, whiteSpace: "nowrap",
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {txHistory.map((tx, i) => {
+                  const txid     = (tx.txid ?? tx.hash ?? "") as string;
+                  const netSat   = (tx.net_sat ?? 0) as number;
+                  const isRecv   = netSat > 0;
+                  const isSent   = netSat < 0;
+                  const amtStr   = netSat === 0
+                    ? "—"
+                    : `${isRecv ? "+" : ""}${(netSat / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 4 })} PKT`;
+                  const amtColor = isRecv ? colors.green : isSent ? colors.red : colors.muted;
+                  const shortTx  = txid.length >= 14 ? txid.slice(0, 8) + "…" + txid.slice(-6) : txid;
+                  const from     = (tx.from ?? "") as string;
+                  const to       = (tx.to   ?? "") as string;
+                  const feeSat   = (tx.fee_sat ?? 0) as number;
+                  const ts       = (tx.timestamp ?? 0) as number;
+                  const height   = tx.height as number | undefined;
+                  const isCoinbase = !from;
+                  const isSelf   = from && to && from === to;
+                  const method   = isCoinbase ? "Coinbase" : isSelf ? "Transfer*" : "Transfer";
+                  const shortAddr = (a: string) => a.length >= 12 ? a.slice(0, 8) + "…" + a.slice(-4) : a || "—";
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                      {/* Tx Hash */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span title={txid} onClick={() => txid && onViewAddr(txid)} style={{
+                          fontFamily: fonts.mono, fontSize: 11, color: colors.blue,
+                          cursor: txid ? "pointer" : "default",
+                          textDecoration: "underline", textDecorationColor: `${colors.blue}55`,
+                        }}>
+                          {shortTx || "—"}
+                        </span>
+                      </td>
+                      {/* Method */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: "2px 10px", borderRadius: 4,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.surface2, color: colors.text,
+                        }}>
+                          {method}
+                        </span>
+                      </td>
+                      {/* Block */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span onClick={() => height !== undefined && onViewAddr(String(height))}
+                          style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.accent, cursor: "pointer" }}>
+                          {height !== undefined ? height.toLocaleString() : "—"}
+                        </span>
+                      </td>
+                      {/* Age */}
+                      <td style={{ padding: "9px 12px", color: colors.muted, fontSize: 11, whiteSpace: "nowrap" }}>
+                        {ts > 0 ? timeAgo(ts) : "—"}
+                      </td>
+                      {/* From */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span title={from} onClick={() => from && onViewAddr(from)} style={{
+                          fontFamily: fonts.mono, fontSize: 11,
+                          color: from ? colors.blue : colors.muted,
+                          cursor: from ? "pointer" : "default",
+                        }}>
+                          {shortAddr(from)}
+                        </span>
+                      </td>
+                      {/* Arrow */}
+                      <td style={{ padding: "9px 4px" }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: 20, height: 20, borderRadius: "50%",
+                          background: `${colors.green}20`, color: colors.green, fontSize: 10,
+                        }}>→</span>
+                      </td>
+                      {/* To */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span title={to} onClick={() => to && onViewAddr(to)} style={{
+                          fontFamily: fonts.mono, fontSize: 11,
+                          color: to ? colors.blue : colors.muted,
+                          cursor: to ? "pointer" : "default",
+                        }}>
+                          {isSelf ? <span style={{
+                            fontSize: 10, padding: "1px 6px", borderRadius: 4,
+                            border: `1px solid ${colors.border}`, color: colors.muted,
+                          }}>SELF</span> : shortAddr(to)}
+                        </span>
+                      </td>
+                      {/* Amount */}
+                      <td style={{ padding: "9px 12px" }}>
+                        <span style={{ fontFamily: fonts.mono, fontSize: 11, fontWeight: 600, color: amtColor }}>
+                          {amtStr}
+                        </span>
+                      </td>
+                      {/* Txn Fee */}
+                      <td style={{ padding: "9px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.muted }}>
+                        {feeSat > 0 ? fmtPkt(feeSat) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {txHasMore && (
+            <div style={{ padding: "12px 18px", borderTop: `1px solid ${colors.border}` }}>
+              <button
+                onClick={() => wallet && refreshTxHistory(wallet.address, txPage + 1)}
+                disabled={txLoading}
+                style={{
+                  width: "100%", padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                  background: colors.surface2, border: `1px solid ${colors.border}`,
+                  color: colors.muted, fontSize: 12, fontWeight: 600,
+                }}
+              >
+                {txLoading ? "Đang tải…" : "Xem thêm"}
+              </button>
+            </div>
+          )}
+        </div>
+      </Panel>
 
       {/* Danger zone */}
       <div style={{

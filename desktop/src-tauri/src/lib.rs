@@ -580,6 +580,13 @@ fn miner_loop(app: tauri::AppHandle, pubkey_hash_hex: String, node_addr: String,
                 Ok(tip) => {
                     emit_log(&app, &format!("✅ Block accepted! Node height={}", tip));
                     blocks_mined.fetch_add(1, Ordering::Relaxed);
+                    // Emit immediately so UI shows updated count without waiting 800ms
+                    let _ = app.emit("mine_stats", serde_json::json!({
+                        "hashrate":     0,
+                        "total_hashes": total_hashes.load(Ordering::Relaxed),
+                        "blocks_mined": blocks_mined.load(Ordering::Relaxed),
+                        "uptime_secs":  session_start.elapsed().as_secs(),
+                    }));
                 }
                 Err(e) => {
                     emit_log(&app, &format!("⚠️ Submit error: {}", e));

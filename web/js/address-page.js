@@ -40,8 +40,35 @@
     return 'Unknown';
   }
 
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function shortH(h) {
-    return h ? (h.length > 20 ? h.slice(0, 20) + '…' : h) : '';
+    return h ? (h.length > 14 ? h.slice(0, 8) + '…' + h.slice(-6) : h) : '';
+  }
+
+  function shortAddr(a) {
+    return a && a.length >= 12 ? a.slice(0, 8) + '…' + a.slice(-4) : (a || '—');
+  }
+
+  function fmtPkt(sat) {
+    if (!sat) return '—';
+    const pkt = sat / PAKLETS;
+    return pkt.toLocaleString(undefined, { maximumFractionDigits: pkt >= 1 ? 0 : 4 }) + ' PKT';
+  }
+
+  const MIN_VALID_TS = 1577836800; // 2020-01-01
+
+  function timeAgo(ts) {
+    if (!ts || ts < MIN_VALID_TS) return '—';
+    const secs = Math.max(0, Math.floor((Date.now() / 1000) - ts));
+    if (secs < 10)       return 'just now';
+    if (secs < 60)       return secs + ' secs ago';
+    if (secs < 3600)     return Math.floor(secs / 60) + ' mins ago';
+    if (secs < 86400)    return Math.floor(secs / 3600) + ' hrs ago';
+    if (secs < 2592000)  return Math.floor(secs / 86400) + ' days ago';
+    return new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   async function fetchJson(url) {
@@ -59,14 +86,35 @@
     const txsShow = history.slice(0, MAX_TXS);
 
     const txRows = txsShow.map(tx => {
-      const txid   = tx.txid || tx.tx_id || '';
-      const height = tx.block_height ?? tx.height ?? null;
-      const blkLnk = height !== null
-        ? `<a href="/blockchain-rust/block/${height}" class="addr-link">#${height.toLocaleString()}</a>`
-        : '—';
+      const txid      = tx.txid || tx.tx_id || '';
+      const netSat    = tx.net_sat ?? 0;
+      const isRecv    = netSat > 0;
+      const isSent    = netSat < 0;
+      const amtStr    = netSat === 0 ? '—'
+        : (isRecv ? '+' : '') + (netSat / PAKLETS).toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' PKT';
+      const amtColor  = isRecv ? 'var(--green)' : isSent ? 'var(--red)' : 'var(--muted)';
+      const from      = tx.from || '';
+      const to        = tx.to   || '';
+      const isCoinbase = !from;
+      const isSelf    = from && to && from === to;
+      const method    = isCoinbase ? 'Coinbase' : isSelf ? 'Transfer*' : 'Transfer';
+      const ts        = tx.timestamp ?? 0;
+      const height    = tx.block_height ?? tx.height ?? null;
+      const age       = ts > 0 ? timeAgo(ts) : '—';
+      const feeSat    = tx.fee_sat ?? 0;
+      const toCell    = isSelf
+        ? `<span class="addr-badge badge-muted">SELF</span>`
+        : `<span class="addr-mono addr-sm" title="${escHtml(to)}">${escHtml(shortAddr(to))}</span>`;
       return `<tr>
-        <td><a href="/blockchain-rust/rx/${txid}" class="addr-link addr-mono">${shortH(txid)}</a></td>
-        <td>${blkLnk}</td>
+        <td class="addr-mono"><a href="/blockchain-rust/rx/${escHtml(txid)}" class="addr-link">${escHtml(shortH(txid)) || '—'}</a></td>
+        <td><span class="addr-badge badge-method">${method}</span></td>
+        <td class="addr-mono addr-sm">${height !== null ? `<a href="/blockchain-rust/block/${height}" class="addr-link">${height.toLocaleString()}</a>` : '—'}</td>
+        <td class="addr-muted addr-sm">${age}</td>
+        <td><span class="addr-mono addr-sm addr-link-soft" title="${escHtml(from)}">${escHtml(shortAddr(from))}</span></td>
+        <td><span class="addr-arrow-circle">→</span></td>
+        <td>${toCell}</td>
+        <td class="addr-mono addr-sm" style="font-weight:600;color:${amtColor}">${amtStr}</td>
+        <td class="addr-muted addr-sm">${fmtPkt(feeSat)}</td>
       </tr>`;
     }).join('');
 
@@ -79,7 +127,7 @@
 
       <div class="detail-title">
         Address
-        <span class="hash">${addr}</span>
+        <span class="hash">${escHtml(addr)}</span>
       </div>
 
       <div class="panel" style="margin-bottom:20px">
@@ -91,7 +139,7 @@
         <div class="kv-table">
           <div class="kv-row">
             <div class="kv-key">Address</div>
-            <div class="kv-val">${addr}</div>
+            <div class="kv-val">${escHtml(addr)}</div>
           </div>
           <div class="kv-row">
             <div class="kv-key">Balance</div>
@@ -115,7 +163,11 @@
         </div>
         <table class="addr-table">
           <thead>
-            <tr><th>TXID</th><th>Block</th></tr>
+            <tr>
+              <th>Transaction Hash</th><th>Method</th><th>Block</th><th>Age</th>
+              <th>From</th><th></th><th>To</th>
+              <th>Amount</th><th>Txn Fee</th>
+            </tr>
           </thead>
           <tbody>${txRows}</tbody>
         </table>
@@ -166,6 +218,18 @@
       .addr-link:hover { text-decoration:underline; }
       .addr-mono { font-family:'JetBrains Mono',monospace; }
       .addr-note { color:var(--muted); font-size:.82rem; padding:16px 18px; }
+      .addr-sm   { font-size:.78rem; }
+      .addr-muted { color:var(--muted); font-size:.8rem; }
+      .addr-arrow { color:var(--muted); font-size:.8rem; padding:10px 4px; }
+      .addr-badge    { font-size:.7rem; font-weight:600; padding:2px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface2); color:var(--text); }
+      .badge-method  { background:var(--surface2); color:var(--text); }
+      .badge-muted   { background:transparent; color:var(--muted); border-color:var(--border); }
+      .addr-link-soft{ color:var(--blue); }
+      .addr-arrow-circle {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:18px; height:18px; border-radius:50%;
+        background:rgba(80,200,120,.15); color:var(--green); font-size:.7rem;
+      }
     `;
     document.head.appendChild(s);
   }

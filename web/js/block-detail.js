@@ -37,7 +37,7 @@ async function init() {
     return;
   }
 
-  const ts = b.timestamp
+  const ts = (b.timestamp && b.timestamp >= MIN_VALID_TS)
     ? new Date(b.timestamp * 1000).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
     : '—';
   const blockTime = b.block_time_secs != null ? b.block_time_secs.toFixed(1) + 's' : '—';

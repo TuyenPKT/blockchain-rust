@@ -50,7 +50,7 @@ async function init() {
     return;
   }
 
-  const ts = t.timestamp
+  const ts = (t.timestamp && t.timestamp >= MIN_VALID_TS)
     ? new Date(t.timestamp * 1000).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
     : '—';
 

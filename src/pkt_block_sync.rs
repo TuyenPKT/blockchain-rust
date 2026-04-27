@@ -388,6 +388,22 @@ fn apply_block_streaming<R: Read>(
 ) -> Result<BlockApplyResult, SyncError> {
     // Read 84-byte PKT wire header (nonce=u64 vs Bitcoin's u32, so 84 not 80)
     let header_bytes = read_bytes_s(r, crate::pkt_wire::WIRE_HEADER_LEN)?;
+    // header_bytes[4..8] = u32 LE Unix timestamp
+    let block_ts = u32::from_le_bytes(header_bytes[4..8].try_into().unwrap_or([0;4])) as u64;
+    // Timestamp validation: reject blocks >2h in the future; warn for pre-2020 (chain compat)
+    const MIN_VALID_TS: u64 = 1_577_836_800; // 2020-01-01
+    const MAX_FUTURE:   u64 = 7_200;
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    if block_ts > now_secs + MAX_FUTURE {
+        return Err(SyncError::InvalidBlock(format!(
+            "h={} timestamp {} is {}s in the future (max {}s allowed)",
+            height, block_ts, block_ts as i64 - now_secs as i64, MAX_FUTURE
+        )));
+    }
+    if block_ts > 0 && block_ts < MIN_VALID_TS {
+        eprintln!("[block-sync] ⚠ h={} suspicious timestamp {} (before 2020-01-01)", height, block_ts);
+    }
     // merkle_root field is bytes [36..68] (same offset in both 80- and 84-byte layouts)
     let mut expected_merkle = [0u8; 32];
     expected_merkle.copy_from_slice(&header_bytes[36..68]);
@@ -442,7 +458,7 @@ fn apply_block_streaming<R: Read>(
 
         // Index outputs directly from WireTx (no utxo_db lookup needed)
         if let Some(adb) = addr_db {
-            adb.index_tx_outputs(&tx, &txid, height)?;
+            adb.index_tx_outputs(&tx, &txid, height, block_ts)?;
         }
 
         // Collect delta for outputs

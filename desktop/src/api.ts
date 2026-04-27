@@ -39,6 +39,7 @@ export interface BlockHeader {
   prev_hash?:   string;
   timestamp?:   number;
   tx_count?:    number;
+  txids?:       string[];
   miner?:       string;
   [key: string]: unknown;
 }
@@ -92,9 +93,11 @@ export interface AddressTx {
   txid?:      string;
   hash?:      string;
   height?:    number;
-  timestamp?: number;
-  amount?:    number;
-  fee?:       number;
+  timestamp?: number;   // unix seconds (0 for old entries)
+  net_sat?:   number;   // positive = received, negative = sent (satoshis)
+  from?:      string;   // sender address
+  to?:        string;   // recipient address
+  fee_sat?:   number;   // miner fee in satoshis
   type?:      string;
   [key: string]: unknown;
 }
@@ -234,9 +237,15 @@ export function shortHash(h: string): string {
   return h ? h.slice(0, 10) + "…" + h.slice(-8) : "—";
 }
 
+const MIN_VALID_TS = 1577836800; // 2020-01-01 — bất kỳ ts nào trước đây là lỗi header
+
 export function timeAgo(ts: number): string {
-  const secs = Math.max(0, Math.floor((Date.now() - ts * 1000) / 1000));
-  if (secs < 60) return secs + "s ago";
-  if (secs < 3600) return Math.floor(secs / 60) + "m ago";
-  return Math.floor(secs / 3600) + "h ago";
+  if (!ts || ts <= 0 || ts < MIN_VALID_TS) return "—";
+  const secs = Math.max(0, Math.floor((Date.now() / 1000) - ts));
+  if (secs < 10)      return "just now";
+  if (secs < 60)      return secs + " secs ago";
+  if (secs < 3600)    return Math.floor(secs / 60) + " mins ago";
+  if (secs < 86400)   return Math.floor(secs / 3600) + " hrs ago";
+  if (secs < 2592000) return Math.floor(secs / 86400) + " days ago";
+  return new Date(ts * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }

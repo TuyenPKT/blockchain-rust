@@ -126,6 +126,70 @@ pub const VERSIONS: &[VersionInfo] = &[
     VersionInfo { version: "v7.7", file: "defi.rs",             year: 2037, description: "DeFi AMM: LiquidityPool, x*y=k swap, fee, spot price, DEX" },
     VersionInfo { version: "v7.8", file: "staking.rs",          year: 2037, description: "Staking & Delegation: Validator, Stake, distribute rewards, slash, APY" },
     VersionInfo { version: "v7.9", file: "economics.rs",        year: 2037, description: "Economic Model: EraParams, TokenEconomics, Simulator, project N blocks" },
+    // Era 14 — Explorer & Analytics (2038)
+    VersionInfo { version: "v8.0", file: "pktscan_api.rs",      year: 2038, description: "PKTScan REST: blocks/tx/address endpoints, search, mempool stats" },
+    VersionInfo { version: "v8.5", file: "pkt_analytics.rs",    year: 2038, description: "Analytics: hashrate/difficulty/block_time time-series, CSV export" },
+    VersionInfo { version: "v8.9", file: "websocket.rs",        year: 2038, description: "WebSocket: live block/tx feed, address subscribe, mempool delta" },
+    // Era 15 — Zero-Trust & SDK (2038)
+    VersionInfo { version: "v9.0", file: "zt_middleware.rs",    year: 2038, description: "Zero-Trust middleware: rate limit, IP guard, request validation" },
+    VersionInfo { version: "v9.5", file: "ed25519_hd.rs",       year: 2038, description: "Ed25519 HD Wallet (SLIP-0010), Token/Contract/Staking/DeFi APIs" },
+    VersionInfo { version: "v9.9", file: "openapi.rs",          year: 2038, description: "OpenAPI 3.1 spec + SDK code generator (Rust/JS/TS/Python)" },
+    // Era 16 — API Auth & GraphQL (2039)
+    VersionInfo { version: "v10.0", file: "api_auth.rs",        year: 2039, description: "API Key auth: blake3 hash, role (read/write/admin), audit log" },
+    VersionInfo { version: "v10.5", file: "graphql.rs",         year: 2039, description: "GraphQL endpoint: schema, query/subscription, depth/complexity limit" },
+    VersionInfo { version: "v10.9", file: "webhook.rs",         year: 2039, description: "Webhooks: register, sign HMAC, retry queue, dead letter" },
+    // Era 17 — Write APIs (2039)
+    VersionInfo { version: "v11.0", file: "write_api.rs",       year: 2039, description: "POST /api/write/*: TX/Token/Contract write, mempool inject" },
+    VersionInfo { version: "v11.5", file: "deploy_config.rs",   year: 2039, description: "Deploy config gen: Dockerfile, compose, systemd, nginx, env" },
+    // Era 18 — Wallet UX (2040)
+    VersionInfo { version: "v12.0", file: "bip39.rs",           year: 2040, description: "BIP39 mnemonic restore + Ed25519 SLIP-0010 derivation" },
+    VersionInfo { version: "v12.5", file: "qr.rs",              year: 2040, description: "QR code: address + payment URI (pkt:addr?amount=X), terminal render" },
+    VersionInfo { version: "v12.9", file: "completions.rs",     year: 2040, description: "Shell completions: bash/zsh/fish auto-generated" },
+    // Era 19 — PKT Wire & Genesis (2040)
+    VersionInfo { version: "v13.0", file: "packetcrypt.rs",     year: 2040, description: "PacketCrypt PKT chuẩn: 1024 announcements, effective difficulty" },
+    VersionInfo { version: "v13.5", file: "pkt_address.rs",     year: 2040, description: "PKT Address Base58Check (P2PKH/P2TR), bech32 encoding" },
+    VersionInfo { version: "v13.9", file: "pkt_genesis.rs",     year: 2040, description: "PKT Genesis: 20 PKT/block, 525k halving, 21M supply, network steward" },
+    // Era 21 — TUI & Web Frontend (2041)
+    VersionInfo { version: "v14.0", file: "tui_dashboard.rs",   year: 2041, description: "TUI Dashboard (ratatui): hashrate, peers, mempool, block history" },
+    VersionInfo { version: "v14.5", file: "web_frontend.rs",    year: 2041, description: "Web Explorer: block/address detail, live WS charts (Chart.js)" },
+    // Era 22 — PKT Wire Protocol (2041)
+    VersionInfo { version: "v15.0", file: "pkt_wire.rs",        year: 2041, description: "PKT Wire Protocol: 84-byte header, BLAKE3 PoW, varint encoding" },
+    VersionInfo { version: "v15.3", file: "pkt_utxo_sync.rs",   year: 2041, description: "UTXO Sync: addr index, height tracking, balance reconstruction" },
+    VersionInfo { version: "v15.7", file: "pkt_node.rs",        year: 2041, description: "PKT Node Server: template server, P2P bridge, mempool relay" },
+    VersionInfo { version: "v15.8", file: "pkt_sync.rs",        year: 2041, description: "Single chain architecture, PKTScan live data integration" },
+    // Era 23 — Devnet & E2E (2041)
+    VersionInfo { version: "v16.0", file: "devnet.rs",          year: 2041, description: "Devnet one-command, hot reload, integration test harness" },
+    // Era 24 — Block Explorer Pro (2042)
+    VersionInfo { version: "v17.0", file: "explorer_pro.rs",    year: 2042, description: "Block Explorer Pro: TX detail, multi-sort, rich list, mempool pro" },
+    // Era 25 — Analytics Charts (2042)
+    VersionInfo { version: "v18.0", file: "charts_live.rs",     year: 2042, description: "Chart.js analytics: hashrate/difficulty/block_time time-series, CSV export" },
+    // Era 26 — JSON-RPC & Dev Portal (2043)
+    VersionInfo { version: "v19.0", file: "workspace.rs",       year: 2043, description: "Cargo workspace: blockchain-rust + pkt-cli + pkt-sdk crates" },
+    VersionInfo { version: "v19.2", file: "pkt_rpc.rs",         year: 2043, description: "JSON-RPC 2.0 Bitcoin-compatible: getblock, getrawtx, sendrawtx" },
+    VersionInfo { version: "v19.7", file: "playground.rs",      year: 2043, description: "API Playground + Webhook UI + Dev Portal (in-browser docs)" },
+    // Era 27 — PKTScan Desktop (2043)
+    VersionInfo { version: "v20.0", file: "tauri/lib.rs",       year: 2043, description: "Tauri v2 Desktop: React UI, Charts, Search, CI Release pipeline" },
+    // Era 28 — Desktop Advanced (2043)
+    VersionInfo { version: "v21.0", file: "tauri/miner.rs",     year: 2043, description: "Real Miner IPC, i18n (vi/en), Wallet tab, Peer Scan" },
+    // Era 29 — Backend Fix (2044)
+    VersionInfo { version: "v22.0", file: "pkt_addr_index.rs",  year: 2044, description: "Address Index Fix, UTXO Height, Block TX Count, Broadcast TX, Wallet Send" },
+    // Era 30 — PKT Full Node (2044)
+    VersionInfo { version: "v23.0", file: "pkt_fullnode.rs",    year: 2044, description: "TX Validation, P2PKH script, Block+TX relay, Multi-peer, IBD checkpoints" },
+    VersionInfo { version: "v23.8", file: "pkt_fullnode.rs",    year: 2044, description: "Full Node Mode + Security Patch (15 issues)" },
+    // Era 31 — Public Testnet (2044)
+    VersionInfo { version: "v24.0", file: "pkt_install.rs",     year: 2044, description: "Node Onboarding (Linux/macOS/Windows), EVM Address, Mining Pool" },
+    VersionInfo { version: "v24.6", file: "pkt_config.rs",      year: 2044, description: "Tokenomics 21M PKT, LZ4 Compression, Network Config (single source)" },
+    VersionInfo { version: "v24.10", file: "pkt_audit.rs",      year: 2044, description: "Testnet Audit: tokenomics tests, real checkpoints, Developer Docs (OpenAPI)" },
+    // Era 32 — Storage Migration redb (2045)
+    VersionInfo { version: "v25.0", file: "kv_store.rs",        year: 2045, description: "KV Abstraction (RocksKv/RedbKv), feature flag migration" },
+    VersionInfo { version: "v25.5", file: "redb_kv.rs",         year: 2045, description: "Remove RocksDB — redb pure-Rust backend duy nhất (no C++ dep)" },
+    VersionInfo { version: "v25.7", file: "url_guard.rs",       year: 2045, description: "Security Hardening: 9 patches (SSRF, timing, bind, GraphQL DoS, XFF, install checksum)" },
+    // Era 33 — EVM Compatible Layer (2045)
+    VersionInfo { version: "v26.0", file: "pkt_evm.rs",         year: 2045, description: "Full EVM Stack: gas_model EIP-1559, 140+ opcodes, eth_rpc, eth_wire ETH/68" },
+    VersionInfo { version: "v26.1", file: "evm_precompiles.rs", year: 2045, description: "Ethereum PoW Parity: RLP, Uncle, precompiles 0x01–0x09, ABI, receipts, EIP-155" },
+    // Era 34 — Bitcoin Script Parity (2045)
+    VersionInfo { version: "v27.0", file: "script.rs",          year: 2045, description: "Bitcoin Script Complete: CLTV/CSV/OP_IF/HTLC/Taproot/Schnorr/Lightning" },
+    VersionInfo { version: "v27.1", file: "evm_state.rs",       year: 2045, description: "CALL/CREATE sub-EVM: WorldState snapshot/restore, depth guard 1024" },
 ];
 
 // ─── Era Descriptions ─────────────────────────────────────────────────────────
@@ -152,6 +216,26 @@ pub const ERAS: &[Era] = &[
     Era { name: "Era 11", range: "2032–2035", versions: "v5.0–v5.9", count: 10, theme: "Optimization & Security — fee market, WAL, fuzz, monitoring, peer discovery, benchmarks" },
     Era { name: "Era 12", range: "2036+",     versions: "v6.0–v6.9", count: 7,  theme: "Multi-threading & GPU — BLAKE3, rayon, Arc<RwLock>, OpenCL, CUDA, SIMD, Mining Pool" },
     Era { name: "Era 13", range: "2037+",     versions: "v7.0–v7.9", count: 10, theme: "Token Economy — Block Reward, Fees, ERC-20 Token, EVM-lite, DeFi AMM, Staking, Economics" },
+    Era { name: "Era 14", range: "2038",      versions: "v8.0–v8.9",   count: 10, theme: "Explorer & Analytics — REST API, WebSocket, address page, mempool, CSV" },
+    Era { name: "Era 15", range: "2038",      versions: "v9.0–v9.9",   count: 10, theme: "Zero-Trust & SDK — middleware, Ed25519 HD, OpenAPI, code gen" },
+    Era { name: "Era 16", range: "2039",      versions: "v10.0–v10.9", count: 10, theme: "API Auth & GraphQL — API key, audit, depth/complexity limit, webhooks" },
+    Era { name: "Era 17", range: "2039",      versions: "v11.0–v11.9", count: 10, theme: "Write APIs — TX/Token/Contract write, deploy config, webhook delivery" },
+    Era { name: "Era 18", range: "2040",      versions: "v12.0–v12.9", count: 10, theme: "Wallet UX — BIP39 restore, Ed25519 SLIP-0010, QR Code, shell completions" },
+    Era { name: "Era 19", range: "2040",      versions: "v13.0–v13.9", count: 10, theme: "PKT Wire & Genesis — PacketCrypt PKT chuẩn, Base58Check, network steward" },
+    Era { name: "Era 21", range: "2041",      versions: "v14.0–v14.9", count: 10, theme: "TUI & Web Frontend — ratatui dashboard, Chart.js live, address detail" },
+    Era { name: "Era 22", range: "2041",      versions: "v15.0–v15.8", count: 9,  theme: "PKT Wire Protocol — 84-byte header, BLAKE3 PoW, sync engine, UTXO sync" },
+    Era { name: "Era 23", range: "2041",      versions: "v16.0–v16.3", count: 4,  theme: "Devnet & E2E — devnet one-command, hot reload, integration test harness" },
+    Era { name: "Era 24", range: "2042",      versions: "v17.0–v17.9", count: 10, theme: "Block Explorer Pro — TX detail, multi-sort, rich list, mempool pro" },
+    Era { name: "Era 25", range: "2042",      versions: "v18.0–v18.9", count: 10, theme: "Analytics Charts — Chart.js time-series, hashrate/difficulty, CSV export" },
+    Era { name: "Era 26", range: "2043",      versions: "v19.0–v19.9", count: 10, theme: "JSON-RPC & Dev Portal — Cargo workspace, Bitcoin RPC, SDK, playground" },
+    Era { name: "Era 27", range: "2043",      versions: "v20.0–v20.9", count: 10, theme: "PKTScan Desktop — Tauri v2, React, Charts, Search, CI Release" },
+    Era { name: "Era 28", range: "2043",      versions: "v21.0–v21.2", count: 3,  theme: "Desktop Advanced — Real Miner IPC, i18n, Wallet + Peer Scan" },
+    Era { name: "Era 29", range: "2044",      versions: "v22.0–v22.6", count: 7,  theme: "Backend Fix — Address Index, UTXO Height, Block TX Count, Broadcast TX" },
+    Era { name: "Era 30", range: "2044",      versions: "v23.0–v23.8", count: 9,  theme: "PKT Full Node — TX validation, P2PKH, Block Relay, IBD checkpoints, Security Patch" },
+    Era { name: "Era 31", range: "2044",      versions: "v24.0–v24.10", count: 11, theme: "Public Testnet — Node Onboarding, EVM Address, Mining Pool, Tokenomics 21M, Audit" },
+    Era { name: "Era 32", range: "2045",      versions: "v25.0–v25.7", count: 8,  theme: "Storage Migration — RedbKv (no C++ dep), Security Hardening (9 patches)" },
+    Era { name: "Era 33", range: "2045",      versions: "v26.0–v26.1", count: 2,  theme: "EVM Compatible Layer — gas_model, 140+ opcodes, ETH/68 wire, RLP, precompiles" },
+    Era { name: "Era 34", range: "2045",      versions: "v27.0–v27.1", count: 2,  theme: "Bitcoin Script Parity — CLTV/CSV/HTLC/Taproot/Lightning + sub-EVM CALL/CREATE" },
 ];
 
 // ─── Stack Statistics ─────────────────────────────────────────────────────────
@@ -168,9 +252,9 @@ pub struct StackStats {
 }
 
 pub const STATS: StackStats = StackStats {
-    total_versions:  75,
-    total_eras:      13,
-    total_src_files: 74,
+    total_versions:  VERSIONS.len(),
+    total_eras:      ERAS.len(),
+    total_src_files: 173,
 
     crypto_primitives: &[
         "SHA-256 (block hash, Merkle)",

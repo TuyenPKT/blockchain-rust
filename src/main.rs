@@ -407,11 +407,13 @@ fn main() {
 fn print_help() {
     use full_stack::{VERSIONS, ERAS, STATS};
 
+    let cur_version = VERSIONS.last().map(|v| v.version).unwrap_or("v?");
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!("║   Open Consensus Execution Interface Framework               ║");
-    println!("║                    PKT Native Chain                         ║");
+    println!("║   PKT Native Chain · Bitcoin Script + EVM Compatible        ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
+    println!("  Current: {} · Era 34 — Bitcoin Script Parity", cur_version);
     println!();
     println!("  Commands:");
     println!("    cargo run -- wallet new              tạo ví PKT mới");
@@ -459,16 +461,22 @@ fn print_help() {
     println!();
 
     let era_totals: usize = ERAS.iter().map(|e| e.count).sum();
-    println!("  Stack: {} versions · {} eras · {} src files",
-        STATS.total_versions, ERAS.len(), STATS.total_src_files);
+    println!("  Stack: {} listed · {} planned · {} eras · {} src files",
+        STATS.total_versions, era_totals, ERAS.len(), STATS.total_src_files);
     println!();
+
+    // Numeric version compare: "v24.10" > "v24.6" (lex compare would say opposite)
+    fn vparse(s: &str) -> Vec<u32> {
+        s.trim_start_matches('v').split('.').filter_map(|p| p.parse().ok()).collect()
+    }
 
     let mut cur_era = "";
     for v in VERSIONS {
+        let vn = vparse(v.version);
         let era_name = ERAS.iter().find(|e| {
             let parts: Vec<&str> = e.versions.split('\u{2013}').collect();
             if parts.len() == 2 {
-                v.version >= parts[0] && v.version <= parts[1]
+                vn >= vparse(parts[0]) && vn <= vparse(parts[1])
             } else { false }
         }).map(|e| e.name).unwrap_or("");
 
@@ -481,7 +489,8 @@ fn print_help() {
         println!("    {}  {}  {}", v.version, v.year, v.description);
     }
     println!();
-    println!("  Total: {} versions  {} eras", era_totals, ERAS.len());
+    println!("  Listed: {} milestones · Planned roadmap: {} versions across {} eras",
+        STATS.total_versions, era_totals, ERAS.len());
     println!();
 }
 
@@ -523,7 +532,6 @@ fn run_miner(args: &[String]) {
         Some(t) => cfg.with_threads(t),
         None    => cfg,
     };
-
     let mut miner = Miner::new(cfg);
     miner.run();
 }

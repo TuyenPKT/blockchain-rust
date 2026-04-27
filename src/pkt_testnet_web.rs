@@ -312,7 +312,21 @@ async fn ps_headers(
             match crate::pkt_explorer_api::query_headers(
                 &sdb, params.limit.min(100), params.cursor,
             ) {
-                Ok((headers, tip)) => {
+                Ok((mut headers, tip)) => {
+                    // Enrich each header with tx_count (from syncdb) and first-5 txids (from addrdb)
+                    let adb = ps.open_addr();
+                    for h_val in &mut headers {
+                        if let Some(height) = h_val["height"].as_u64() {
+                            let tx_count = sdb.get_block_tx_count(height);
+                            if let Some(obj) = h_val.as_object_mut() {
+                                obj.insert("tx_count".into(), json!(tx_count));
+                                if let Some(ref adb) = adb {
+                                    let txids = adb.get_txids_at_height(height, 5);
+                                    obj.insert("txids".into(), json!(txids));
+                                }
+                            }
+                        }
+                    }
                     let next_cursor = headers.last().and_then(|h| h["height"].as_u64());
                     Json(json!({
                         "headers":     headers,
@@ -476,12 +490,21 @@ async fn ps_addr_txs(
         } else { (script, r) }
     };
     let address = script_hex_to_address(&effective_script).unwrap_or_else(|| addr.clone());
-    let txs: Vec<_> = entries.iter().map(|e| json!({
-        "height": e.height,
-        "txid":   e.txid,
-    })).collect();
+    let txs: Vec<_> = entries.iter().map(|e| {
+        let from = script_hex_to_address(&e.from_script).unwrap_or_else(|| e.from_script.clone());
+        let to   = script_hex_to_address(&e.to_script).unwrap_or_else(|| e.to_script.clone());
+        json!({
+            "height":    e.height,
+            "txid":      e.txid,
+            "net_sat":   e.net_sat,
+            "from":      from,
+            "to":        to,
+            "fee_sat":   e.fee_sat,
+            "timestamp": e.timestamp,
+        })
+    }).collect();
     let count = txs.len();
-    Json(json!({"address": address, "txs": txs, "count": count})).into_response()
+    Json(json!({"address": address, "txs": txs, "count": count, "total": count})).into_response()
 }
 
 /// GET /api/testnet/addr/:base58?limit=N
@@ -516,11 +539,23 @@ async fn ps_addr_by_base58(
     let limit = params.limit.unwrap_or(50).min(200);
     let txs: Vec<_> = adb.get_tx_history(&script, params.cursor, limit)
         .unwrap_or_default()
-        .iter()
-        .map(|e| json!({"height": e.height, "txid": e.txid}))
+        .into_iter()
+        .map(|e| {
+            let from = script_hex_to_address(&e.from_script).unwrap_or_else(|| e.from_script.clone());
+            let to   = script_hex_to_address(&e.to_script).unwrap_or_else(|| e.to_script.clone());
+            json!({
+                "height":    e.height,
+                "txid":      e.txid,
+                "net_sat":   e.net_sat,
+                "from":      from,
+                "to":        to,
+                "fee_sat":   e.fee_sat,
+                "timestamp": e.timestamp,
+            })
+        })
         .collect();
     let count = txs.len();
-    Json(json!({"address": addr, "balance": balance, "txs": txs, "count": count})).into_response()
+    Json(json!({"address": addr, "balance": balance, "txs": txs, "count": count, "total": count})).into_response()
 }
 
 // ── Analytics handler ──────────────────────────────────────────────────────────

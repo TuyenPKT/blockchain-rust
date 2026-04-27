@@ -30,7 +30,6 @@ async function loadBlocks(reset) {
   }
 
   headers.forEach(b => {
-    const secsAgo = Math.floor((Date.now() - (b.timestamp ?? 0) * 1000) / 1000);
     const row = document.createElement('div');
     row.className = 'list-item block-item';
     row.style.cursor = 'pointer';
@@ -41,7 +40,7 @@ async function loadBlocks(reset) {
         <div class="item-secondary mono" style="font-size:.78rem">${shortHash(b.hash ?? '')}</div>
       </div>
       <div class="item-right">
-        <div class="item-age">${ago(secsAgo)}</div>
+        <div class="item-age">${timeAgo(b.timestamp ?? 0)}</div>
       </div>
     `;
     row.onclick = () => {

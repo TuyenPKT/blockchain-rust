@@ -22,10 +22,17 @@ function toggleTheme() {
 function shortHash(h) { return h ? h.slice(0,10)+'…'+h.slice(-8) : '—'; }
 function shortAddr(a) { return a ? a.slice(0,8)+'…'+a.slice(-6) : '—'; }
 function pakletsToPkt(p) { return (p / 1e9).toFixed(4) + ' PKT'; }
-function ago(secs) {
-  if (secs < 60)   return secs + 's ago';
-  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
-  return Math.floor(secs/3600) + 'h ago';
+const MIN_VALID_TS = 1577836800; // 2020-01-01
+
+function timeAgo(ts) {
+  if (!ts || ts < MIN_VALID_TS) return '—';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 10)       return 'just now';
+  if (secs < 60)       return secs + ' secs ago';
+  if (secs < 3600)     return Math.floor(secs/60) + ' mins ago';
+  if (secs < 86400)    return Math.floor(secs/3600) + ' hrs ago';
+  if (secs < 2592000)  return Math.floor(secs/86400) + ' days ago';
+  return new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 function fmtHashrate(h) {
   if (h >= 1e15) return (h/1e15).toFixed(2) + ' PH/s';

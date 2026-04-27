@@ -6,7 +6,7 @@ import { Panel } from "../components/Panel";
 import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
 import {
   fetchBalance, fetchAddressTxs, fetchAddressUtxos,
-  fmtNum, timeAgo, shortHash, PACKETS_PER_PKT,
+  fmtNum, fmtPkt, timeAgo, shortHash, PACKETS_PER_PKT,
   type AddressTx, type AddressUtxo,
 } from "../api";
 
@@ -246,53 +246,93 @@ function TxTable({
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-              {["TXID", "Height", "Amount", "Type", "Time"].map(h => (
+              {["Tx Hash", "Method", "Block", "Age", "From", "", "To", "Amount", "Txn Fee"].map(h => (
                 <th key={h} style={{
-                  padding: "10px 16px", textAlign: "left",
+                  padding: "10px 12px", textAlign: "left",
                   fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: ".08em", color: colors.muted,
+                  letterSpacing: ".08em", color: colors.muted, whiteSpace: "nowrap",
                 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: colors.muted }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: colors.muted }}>Loading…</td></tr>
             )}
             {!loading && txs.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: colors.muted }}>No transactions found</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: colors.muted }}>No transactions found</td></tr>
             )}
             {txs.map((tx, i) => {
-              const id  = tx.txid ?? tx.hash ?? "—";
-              const amt = tx.amount !== undefined ? (tx.amount / PACKETS_PER_PKT).toFixed(4) : "—";
-              const positive = (tx.amount ?? 0) >= 0;
+              const id       = (tx.txid ?? tx.hash ?? "") as string;
+              const netSat   = (tx.net_sat ?? 0) as number;
+              const isRecv   = netSat > 0;
+              const isSent   = netSat < 0;
+              const amtStr   = netSat === 0
+                ? "—"
+                : `${isRecv ? "+" : ""}${(netSat / PACKETS_PER_PKT).toLocaleString(undefined, { maximumFractionDigits: 4 })} PKT`;
+              const amtColor = isRecv ? colors.green : isSent ? colors.red : colors.muted;
+              const shortTx  = id.length >= 14 ? id.slice(0, 8) + "…" + id.slice(-6) : id;
+              const from     = (tx.from ?? "") as string;
+              const to       = (tx.to   ?? "") as string;
+              const feeSat   = (tx.fee_sat ?? 0) as number;
+              const ts       = (tx.timestamp ?? 0) as number;
+              const height   = tx.height as number | undefined;
+              const isCoinbase = !from;
+              const isSelf   = from && to && from === to;
+              const method   = isCoinbase ? "Coinbase" : isSelf ? "Transfer*" : "Transfer";
+              const shortAddr = (a: string) => a.length >= 12 ? a.slice(0, 8) + "…" + a.slice(-4) : a || "—";
               return (
                 <tr key={i} style={{ borderBottom: `1px solid ${colors.border}`, transition: "background .15s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = colors.surface2)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  <td style={{ padding: "11px 16px", fontFamily: fonts.mono, fontSize: 12, color: colors.blue }}>
-                    {id !== "—" ? shortHash(id) : "—"}
+                  {/* Tx Hash */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.blue }}>
+                    {id ? shortTx : "—"}
                   </td>
-                  <td style={{ padding: "11px 16px", fontFamily: fonts.mono, color: colors.accent }}>
-                    {tx.height !== undefined ? `#${fmtNum(tx.height)}` : "—"}
-                  </td>
-                  <td style={{ padding: "11px 16px", fontFamily: fonts.mono, fontWeight: 700,
-                    color: positive ? colors.green : colors.red }}>
-                    {amt !== "—" ? `${positive ? "+" : ""}${amt} PKT` : "—"}
-                  </td>
-                  <td style={{ padding: "11px 16px" }}>
+                  {/* Method */}
+                  <td style={{ padding: "10px 12px" }}>
                     <span style={{
-                      fontSize: 11, fontWeight: 700,
-                      padding: "2px 8px", borderRadius: 4,
-                      background: `${colors.purple}22`, color: colors.purple,
-                      border: `1px solid ${colors.purple}44`,
+                      fontSize: 10, fontWeight: 600, padding: "2px 10px", borderRadius: 4,
+                      border: `1px solid ${colors.border}`,
+                      background: colors.surface2, color: colors.text,
                     }}>
-                      {tx.type ?? "tx"}
+                      {method}
                     </span>
                   </td>
-                  <td style={{ padding: "11px 16px", color: colors.muted }}>
-                    {tx.timestamp ? timeAgo(tx.timestamp) : "—"}
+                  {/* Block */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.accent }}>
+                    {height !== undefined ? height.toLocaleString() : "—"}
+                  </td>
+                  {/* Age */}
+                  <td style={{ padding: "10px 12px", color: colors.muted, fontSize: 11, whiteSpace: "nowrap" }}>
+                    {ts > 0 ? timeAgo(ts) : "—"}
+                  </td>
+                  {/* From */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.blue }}>
+                    <span title={from}>{shortAddr(from)}</span>
+                  </td>
+                  {/* Arrow */}
+                  <td style={{ padding: "10px 4px" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 20, height: 20, borderRadius: "50%",
+                      background: `${colors.green}20`, color: colors.green, fontSize: 10,
+                    }}>→</span>
+                  </td>
+                  {/* To */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.blue }}>
+                    {isSelf
+                      ? <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, border: `1px solid ${colors.border}`, color: colors.muted }}>SELF</span>
+                      : <span title={to}>{shortAddr(to)}</span>}
+                  </td>
+                  {/* Amount */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, fontWeight: 600, color: amtColor }}>
+                    {amtStr}
+                  </td>
+                  {/* Txn Fee */}
+                  <td style={{ padding: "10px 12px", fontFamily: fonts.mono, fontSize: 11, color: colors.muted }}>
+                    {feeSat > 0 ? fmtPkt(feeSat) : "—"}
                   </td>
                 </tr>
               );

@@ -358,7 +358,7 @@ impl Miner {
         println!("  ┌─ Block #{:<5}  diff={}  txs={}  [standalone]",
             height, diff, block.transactions.len() - 1);
 
-        let result = mine_live(&mut block, diff, self.cfg.threads, 0); // standalone: no timeout
+        let result = mine_live(&mut block, diff, self.cfg.threads, 0);
 
         // Commit mined block vào chain (không re-mine)
         chain.commit_mined_block(block.clone());
@@ -468,6 +468,9 @@ impl Miner {
                 if let Err(e) = crate::storage::add_mined_earnings(&self.cfg.address, earned) {
                     eprintln!("  [miner] ⚠️  Cannot save balance: {}", e);
                 }
+            }
+            Some(Message::Reject { reason }) => {
+                eprintln!("  [miner] ❌ Block #{} rejected by node: {}", block.index, reason);
             }
             _ => {
                 println!("  [miner] ⚠️  Không nhận được ack từ node (block vẫn có thể đã được nhận)");

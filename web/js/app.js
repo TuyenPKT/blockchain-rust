@@ -5,10 +5,17 @@ const API_BASE = '/blockchain-rust';
 /* ── UTILS ──────────────────────────────────────────────────── */
 function shortHash(h) { return h ? h.slice(0,10)+'…'+h.slice(-8) : '—'; }
 function shortAddr(a) { return a ? a.slice(0,8)+'…'+a.slice(-6) : '—'; }
-function ago(secs) {
-  if (secs < 60) return secs + 's ago';
-  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
-  return Math.floor(secs/3600) + 'h ago';
+const MIN_VALID_TS = 1577836800; // 2020-01-01
+
+function timeAgo(ts) {
+  if (!ts || ts < MIN_VALID_TS) return '—';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 10)       return 'just now';
+  if (secs < 60)       return secs + ' secs ago';
+  if (secs < 3600)     return Math.floor(secs/60) + ' mins ago';
+  if (secs < 86400)    return Math.floor(secs/3600) + ' hrs ago';
+  if (secs < 2592000)  return Math.floor(secs/86400) + ' days ago';
+  return new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 function pakletsToPkt(p) { return (p / 1e9).toFixed(4) + ' PKT'; }
 function fmtHashrate(h) {
@@ -89,7 +96,6 @@ async function fetchBlocks() {
     const el = document.getElementById('latestBlocks');
     el.innerHTML = blocks.length ? '' : '<div style="padding:18px;color:var(--muted);font-size:.85rem">No blocks yet</div>';
     blocks.forEach(b => {
-      const secsAgo = Math.floor((Date.now() - (b.timestamp ?? 0) * 1000) / 1000);
       const div = document.createElement('div');
       div.className = 'list-item block-item';
       div.style.cursor = 'pointer';
@@ -100,7 +106,7 @@ async function fetchBlocks() {
           <div class="item-secondary mono" style="font-size:.78rem">${shortHash(b.hash ?? '')}</div>
         </div>
         <div class="item-right">
-          <div class="item-age">${ago(secsAgo)}</div>
+          <div class="item-age">${timeAgo(b.timestamp ?? 0)}</div>
         </div>`;
       div.onclick = () => { window.location.href = `${API_BASE}/block/${b.height}`; };
       el.appendChild(div);
@@ -117,7 +123,6 @@ async function fetchTxs() {
     const el = document.getElementById('latestTxs');
     el.innerHTML = txs.length ? '' : '<div style="padding:18px;color:var(--muted);font-size:.85rem">No transactions yet</div>';
     txs.forEach(tx => {
-      const secsAgo = Math.floor((Date.now() - (tx.timestamp ?? 0) * 1000) / 1000);
       const div = document.createElement('div');
       div.className = 'list-item tx-item';
       div.style.cursor = 'pointer';
@@ -127,7 +132,7 @@ async function fetchTxs() {
           <div class="item-secondary">Block #${(tx.height ?? 0).toLocaleString("en-US")}</div>
         </div>
         <div class="item-right">
-          <div class="item-age">${ago(secsAgo)}</div>
+          <div class="item-age">${timeAgo(tx.timestamp ?? 0)}</div>
         </div>`;
       div.onclick = () => { window.location.href = `${API_BASE}/rx/${tx.txid}`; };
       el.appendChild(div);

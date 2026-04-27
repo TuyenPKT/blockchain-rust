@@ -54,6 +54,9 @@ pub enum Message {
         txs:        Vec<Transaction>, // pending txs từ mempool
     },
 
+    /// Node từ chối block/tx không hợp lệ
+    Reject { reason: String },
+
     /// v5.4: Query fee estimate từ node
     GetFeeEstimate,
     /// Node trả về fee estimate dựa trên lịch sử block gần nhất

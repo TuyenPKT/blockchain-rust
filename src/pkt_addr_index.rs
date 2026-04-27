@@ -33,8 +33,15 @@ pub struct AddrIndexDb {
 
 /// One entry in a per-address tx history list.
 pub struct AddrTxEntry {
-    pub height: u64,
-    pub txid:   String, // lowercase hex
+    pub height:      u64,
+    pub txid:        String,  // lowercase hex
+    /// Net amount for this address in this TX (satoshis).
+    /// Positive = received, negative = sent. 0 if not yet indexed.
+    pub net_sat:     i64,
+    pub from_script: String,  // script_pubkey hex of primary sender; "" for coinbase / old entries
+    pub to_script:   String,  // script_pubkey hex of primary recipient
+    pub fee_sat:     u64,
+    pub timestamp:   u64,     // unix seconds; 0 for old entries
 }
 
 impl AddrIndexDb {
@@ -80,6 +87,57 @@ impl AddrIndexDb {
     /// so scanning prefix "rich:" from start gives highest-balance entries first.
     fn rich_key(balance: u64, script_hex: &str) -> String {
         format!("rich:{:020}:{}", u64::MAX - balance, script_hex)
+    }
+
+    /// Net amount per address per TX: positive = received, negative = sent.
+    fn txamt_key(script_hex: &str, height: u64, txid_hex: &str) -> String {
+        format!("txamt:{}:{:016x}:{}", script_hex, height, txid_hex)
+    }
+
+    /// Temp storage during block apply: from_script + total_in before outputs are known.
+    fn txin_temp_key(txid_hex: &str) -> String {
+        format!("txin_temp:{}", txid_hex)
+    }
+
+    /// Final TX metadata: from_script, to_script, fee_sat, timestamp.
+    fn txinfo_key(txid_hex: &str) -> String {
+        format!("txinfo:{}", txid_hex)
+    }
+
+    /// Read-modify-write: add `delta` (signed satoshis) to stored net amount for this TX.
+    fn adjust_txamt(&self, script_hex: &str, height: u64, txid_hex: &str, delta: i64) -> Result<(), SyncError> {
+        let key = Self::txamt_key(script_hex, height, txid_hex);
+        let cur = match self.kv.get(key.as_bytes()).map_err(SyncError::Db)? {
+            Some(v) if v.len() == 8 => i64::from_le_bytes(v[..8].try_into().unwrap()),
+            _ => 0i64,
+        };
+        let new = cur.saturating_add(delta);
+        self.kv.put(key.as_bytes(), &new.to_le_bytes()).map_err(SyncError::Db)
+    }
+
+    fn read_txamt(&self, script_hex: &str, height: u64, txid_hex: &str) -> i64 {
+        let key = Self::txamt_key(script_hex, height, txid_hex);
+        match self.kv.get(key.as_bytes()) {
+            Ok(Some(v)) if v.len() == 8 => i64::from_le_bytes(v[..8].try_into().unwrap()),
+            _ => 0,
+        }
+    }
+
+    /// Read stored TX metadata: (from_script, to_script, fee_sat, timestamp).
+    fn read_txinfo(&self, txid_hex: &str) -> (String, String, u64, u64) {
+        let key = Self::txinfo_key(txid_hex);
+        match self.kv.get(key.as_bytes()) {
+            Ok(Some(v)) => {
+                let s = String::from_utf8_lossy(&v);
+                let mut parts = s.splitn(4, '|');
+                let from  = parts.next().unwrap_or("").to_string();
+                let to    = parts.next().unwrap_or("").to_string();
+                let fee   = parts.next().unwrap_or("0").parse().unwrap_or(0u64);
+                let ts    = parts.next().unwrap_or("0").parse().unwrap_or(0u64);
+                (from, to, fee, ts)
+            }
+            _ => (String::new(), String::new(), 0, 0),
+        }
     }
 
     // ── Balance helpers ────────────────────────────────────────────────────────
@@ -144,6 +202,10 @@ impl AddrIndexDb {
         // htx: secondary index — one write per tx (idempotent)
         self.kv.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
             .map_err(SyncError::Db)?;
+
+        let mut from_script = String::new();
+        let mut total_in: u64 = 0;
+
         for inp in &tx.inputs {
             if inp.is_coinbase() { continue; }
             if let Ok(Some(entry)) = utxo_db.get_utxo(&inp.prev_txid, inp.prev_vout) {
@@ -152,28 +214,74 @@ impl AddrIndexDb {
                 let atx_key = Self::atx_key(&script, height, &txid_hex);
                 self.kv.put(atx_key.as_bytes(), b"").map_err(SyncError::Db)?;
                 self.sub_from_balance(&script, entry.value)?;
+                self.adjust_txamt(&script, height, &txid_hex, -(entry.value as i64))?;
+                total_in = total_in.saturating_add(entry.value);
+                if from_script.is_empty() {
+                    from_script = script;
+                }
             }
         }
+
+        // Store temp for finalization in index_tx_outputs (format: from_script|total_in)
+        let temp = format!("{}|{}", from_script, total_in);
+        self.kv.put(Self::txin_temp_key(&txid_hex).as_bytes(), temp.as_bytes())
+            .map_err(SyncError::Db)?;
+
         Ok(())
     }
 
     /// Index outputs being created.  Values come directly from the WireTx.
+    /// `timestamp` = unix seconds from block header (0 for old entries).
     pub fn index_tx_outputs(
         &self,
-        tx:     &WireTx,
-        txid:   &[u8; 32],
-        height: u64,
+        tx:        &WireTx,
+        txid:      &[u8; 32],
+        height:    u64,
+        timestamp: u64,
     ) -> Result<(), SyncError> {
         let txid_hex = hex::encode(txid);
         self.kv.put(Self::htx_key(height, &txid_hex).as_bytes(), b"")
             .map_err(SyncError::Db)?;
+
+        let mut to_script = String::new();
+        let mut total_out: u64 = 0;
+
         for out in &tx.outputs {
             if out.script_pubkey.is_empty() { continue; }
             let script = hex::encode(&out.script_pubkey);
             let atx_key = Self::atx_key(&script, height, &txid_hex);
             self.kv.put(atx_key.as_bytes(), b"").map_err(SyncError::Db)?;
             self.add_to_balance(&script, out.value)?;
+            self.adjust_txamt(&script, height, &txid_hex, out.value as i64)?;
+            total_out = total_out.saturating_add(out.value);
+            if to_script.is_empty() {
+                to_script = script;
+            }
         }
+
+        // Read and immediately delete temp data written by index_tx_inputs
+        let (from_script, total_in) = {
+            let temp_key = Self::txin_temp_key(&txid_hex);
+            let result = match self.kv.get(temp_key.as_bytes()).ok().flatten() {
+                Some(v) => {
+                    let s = String::from_utf8_lossy(&v);
+                    if let Some((from, in_str)) = s.split_once('|') {
+                        (from.to_string(), in_str.parse::<u64>().unwrap_or(0))
+                    } else { (String::new(), 0) }
+                }
+                None => (String::new(), 0),
+            };
+            let _ = self.kv.delete(temp_key.as_bytes());
+            result
+        };
+
+        let fee_sat = if total_in > 0 { total_in.saturating_sub(total_out) } else { 0 };
+
+        // Persist TX metadata for history display
+        let info = format!("{}|{}|{}|{}", from_script, to_script, fee_sat, timestamp);
+        self.kv.put(Self::txinfo_key(&txid_hex).as_bytes(), info.as_bytes())
+            .map_err(SyncError::Db)?;
+
         Ok(())
     }
 
@@ -236,8 +344,10 @@ impl AddrIndexDb {
                 let key = std::str::from_utf8(&k).ok()?;
                 let rest = &key[prefix.len()..];
                 let (h_str, txid) = rest.split_once(':')?;
-                let height = u64::from_str_radix(h_str, 16).ok()?;
-                Some(AddrTxEntry { height, txid: txid.to_string() })
+                let height  = u64::from_str_radix(h_str, 16).ok()?;
+                let net_sat = self.read_txamt(script_hex, height, txid);
+                let (from_script, to_script, fee_sat, timestamp) = self.read_txinfo(txid);
+                Some(AddrTxEntry { height, txid: txid.to_string(), net_sat, from_script, to_script, fee_sat, timestamp })
             })
             .collect();
         Ok(out)
@@ -390,7 +500,7 @@ mod tests {
         let db   = AddrIndexDb::open_temp().unwrap();
         let txid = [0x01u8; 32];
         let tx   = make_tx(vec![coinbase_in()], vec![out(5000, b"\x76\xa9\x14")]);
-        db.index_tx_outputs(&tx, &txid, 1).unwrap();
+        db.index_tx_outputs(&tx, &txid, 1, 0).unwrap();
         let script = hex::encode(b"\x76\xa9\x14");
         assert_eq!(db.get_balance(&script).unwrap(), 5000);
     }
@@ -401,7 +511,7 @@ mod tests {
         let db   = AddrIndexDb::open_temp().unwrap();
         let txid = [0x02u8; 32];
         let tx   = make_tx(vec![coinbase_in()], vec![out(1000, b"\x51")]);
-        db.index_tx_outputs(&tx, &txid, 5).unwrap();
+        db.index_tx_outputs(&tx, &txid, 5, 0).unwrap();
         let script = hex::encode(b"\x51");
         let hist = db.get_tx_history(&script, None, 10).unwrap();
         assert_eq!(hist.len(), 1);
@@ -445,7 +555,7 @@ mod tests {
         let db = AddrIndexDb::open_temp().unwrap();
         let tx   = make_tx(vec![coinbase_in()], vec![out(1000, b"")]);
         let txid = [0x30u8; 32];
-        db.index_tx_outputs(&tx, &txid, 1).unwrap();
+        db.index_tx_outputs(&tx, &txid, 1, 0).unwrap();
         assert_eq!(db.get_balance("").unwrap(), 0);
         assert_eq!(db.get_tx_history("", None, 10).unwrap().len(), 0);
     }
@@ -494,7 +604,7 @@ mod tests {
         for h in [1u64, 5, 10, 20] {
             let txid = [h as u8; 32];
             let tx = make_tx(vec![coinbase_in()], vec![out(100, b"\x76")]);
-            db.index_tx_outputs(&tx, &txid, h).unwrap();
+            db.index_tx_outputs(&tx, &txid, h, 0).unwrap();
         }
         let hist = db.get_tx_history(&script, None, 100).unwrap();
         assert_eq!(hist.len(), 4);
@@ -510,7 +620,7 @@ mod tests {
         for h in [1u64, 2, 3, 4, 5] {
             let txid = [h as u8; 32];
             let tx = make_tx(vec![coinbase_in()], vec![out(100, b"\x77")]);
-            db.index_tx_outputs(&tx, &txid, h).unwrap();
+            db.index_tx_outputs(&tx, &txid, h, 0).unwrap();
         }
         // cursor=3 → heights 3, 4, 5
         let hist = db.get_tx_history(&script, Some(3), 100).unwrap();
@@ -535,7 +645,7 @@ mod tests {
         for (h, val) in [(1u64, 1000u64), (2, 2000), (3, 3000)] {
             let txid = [h as u8; 32];
             let tx = make_tx(vec![coinbase_in()], vec![out(val, b"\x52")]);
-            db.index_tx_outputs(&tx, &txid, h).unwrap();
+            db.index_tx_outputs(&tx, &txid, h, 0).unwrap();
         }
         assert_eq!(db.get_balance(&script).unwrap(), 6000);
     }

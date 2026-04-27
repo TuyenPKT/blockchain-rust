@@ -1,6 +1,6 @@
 # Open Consensus Execution Interface Framework — CONTEXT
 
-**Version hiện tại: v25.7 ✅ — Security Hardening (2026-04-19)**
+**Version hiện tại: v27.1 ✅ — Bitcoin Script Parity (2026-04-27)**
 
 ---
 
@@ -77,7 +77,7 @@
 - [x] v24.8 — Developer Docs (OpenAPI + Swagger UI)
 - [x] v24.10 — Testnet Audit (tokenomics tests + real checkpoints)
 
-### Era 32 — Storage Migration redb (v25.x) ← ĐANG LÀM
+### Era 32 — Storage Migration redb (v25.x) ✅
 - [x] v25.0 — RocksKv Abstraction
 - [x] v25.1 — RedbKv + feature flag
 - [x] v25.2 — redb Default
@@ -122,6 +122,69 @@
 
 ### Tests
 - 2473 passed (0 failed)
+
+---
+
+### Era 33 — EVM Compatible Layer (v26.x) ✅
+
+#### v26.0 — Full EVM Stack
+- `gas_model.rs`: EIP-1559 base fee, next_base_fee, burn, intrinsic_gas, GasHeader, GAS_CODEDEPOSIT
+- `pkt_evm.rs`: Full EVM executor — U256, 140+ opcodes, gas metering
+- `eth_rpc.rs`: eth_* JSON-RPC 2.0 (POST /eth) — 13 methods
+- `eth_wire.rs`: ETH/68 P2P wire — 13 msg types, FrameCodec
+- **75 tests**
+
+#### v26.1 — Ethereum PoW Parity
+- `rlp.rs`: RLP encoder/decoder (Bytes/List)
+- `uncle.rs`: Uncle/Ommer rewards, validation, UnclePool
+- `evm_precompiles.rs`: Precompiles 0x01–0x09 (ecRecover, SHA256, RIPEMD160, Identity, ModExp)
+- `abi.rs`: Solidity ABI encode/decode, function_selector, ERC-20 selectors
+- `receipts.rs`: Receipt storage + bloom filter (redb)
+- EIP-155 replay protection, nonce u64
+- **843 tests**
+
+### Era 34 — Bitcoin Script Parity (v27.x) ← ĐANG LÀM
+
+#### v27.0 — Bitcoin Script Complete
+- `script.rs`: CLTV (OP_CHECKLOCKTIMEVERIFY), CSV (OP_CHECKSEQUENCEVERIFY), OP_IF/OP_NOTIF/OP_ELSE/OP_ENDIF, HTLC scripts
+- `taproot.rs`: Schnorr (BIP340), MAST (BIP341), key path + script path spend
+- `lightning.rs`: Payment channels, commitment TX, revocation + penalty, HTLC settlement
+- **892 tests**
+
+#### v27.1 — CALL/CREATE Sub-execution EVM
+- `pkt_evm.rs`: CALL/STATICCALL/DELEGATECALL/CALLCODE — sub-EVM execution with depth guard (max 1024)
+- `pkt_evm.rs`: CREATE/CREATE2 — contract deployment via sub-EVM, address derivation
+- `evm_state.rs`: WorldState + snapshot/restore for REVERT semantics
+- `pkt_evm.rs`: Rc<RefCell<WorldState>> shared between parent/child EVM contexts
+- **909 tests**
+
+---
+
+## 🛠 Các fix quan trọng (session 2026-04-27)
+
+### Bug fixes
+| # | Vấn đề | Fix |
+|---|--------|-----|
+| 1 | `colSpan` mismatch trong Address.tsx | `colSpan={8}` → `colSpan={9}` (loading + empty row) |
+| 2 | `txin_temp` storage leak trong pkt_addr_index.rs | Delete key sau khi đọc trong `index_tx_outputs` |
+| 3 | Difficulty dùng block timestamp giả mạo được | `LAST_BLOCK_WALL_SECS` AtomicU64 — wall-clock thay header timestamp |
+| 4 | Single-block ±1 difficulty oscillation | Dead zone ±20% (48–72s) — no-change nếu trong dải |
+| 5 | Miner counter nhảy về 2 khi restart | Emit `mine_stats` ngay sau accept block (không đợi 800ms reporter) |
+
+### XSS fixes (address-page.js)
+- `escHtml()` helper added — applied to `addr`, `from`, `to`, `txid` trong tất cả innerHTML template literals
+- API `count` → `total` alias thêm vào cả hai endpoint `ps_addr_txs` + `ps_addr_by_base58`
+
+### UI improvements
+- **TxChips**: compact clickable txid pills trong block list (≤3 chips + "+N more"), cả Explorer.tsx và web block-list
+- **timeAgo format**: "just now" (<10s), "X secs ago", "X mins ago", "X hrs ago", "X days ago" (<30 ngày), date string (>30 ngày — tránh "8352 days ago" với timestamp lỗi)
+- **ps_headers enrichment**: mỗi block header bổ sung `tx_count` + `txids` (5 txid đầu)
+- `BlockHeader` interface thêm `txids?: string[]`
+
+### File cleanup
+- Xoá `TODO.md` (stale v24.0.9.11)
+- Xoá `docs/architecture.md` (auto-generated, 5 tuần lỗi thời)
+- Xoá `docs/cli.md` (auto-generated, 5 tuần lỗi thời)
 
 ---
 
@@ -171,18 +234,28 @@
 - `max_tracked_ips` khi `trust_proxy=false`: tất cả anon traffic vào bucket "unknown" → 1 bucket chung. Rate limit vẫn hoạt động nhưng không phân biệt IP
 - GraphQL `limit_complexity(100)`: mỗi field mặc định cost=1; alias có thể nhân cost. Tăng nếu query hợp lệ bị từ chối
 
+### Lưu ý kỹ thuật mới (v27.x)
+- `LAST_BLOCK_WALL_SECS: AtomicU64` — static trong pkt_node.rs; `.swap()` trả last value atomically; init=0 → first block dùng TARGET_SECS=60 làm dt
+- Difficulty dead zone `DEAD_ZONE=12` (±20%): 48–72s → no change; <48s → +1; >72s → -1. Ngăn oscillation single-block
+- `Rc<RefCell<WorldState>>`: snapshot = `world.borrow().clone()` trước sub-call; restore bằng `*world.borrow_mut() = snapshot` khi REVERT
+- EVM CREATE stack: pops `val` (top), `off`, `len` → push `len` trước, `off`, `val` cuối (val on top)
+- `txin_temp` lifecycle: write trong `index_tx_inputs` → read+delete trong `index_tx_outputs`. Nếu thiếu delete → storage leak tích lũy
+
 ---
 
 ## Roadmap tiếp theo
 
-### Era 32 — còn lại
-- [ ] v25.8 — GraphQL yêu cầu API key (hiện chỉ có depth/complexity, chưa authn)
-- [ ] v25.9 — Rate limit per API key (gộp với per-IP)
+### Era 34 — còn lại (v27.x)
+- [ ] v27.2 — eth_sendRawTransaction RLP decode + EIP-155 signature verify
+- [ ] v27.3 — ETH/68 P2P handshake (Status message exchange với geth peer)
+- [ ] v27.4 — Lightning routing (multi-hop HTLC, onion routing stub)
+- [ ] v27.5 — Taproot key aggregation on-chain validation
 
-### Era 33 — Mainnet Prep (v26.x)
-- [ ] v26.0 — Checkpoints height 50k + 100k (chờ testnet)
-- [x] v26.1 — Block reward từ coinbase TX thực ✅ (done trong ps_summary)
-- [ ] v26.2 — Pentest: fuzz REST, peer spam, eclipse attack
+### Era 35 — Mainnet Prep (v28.x)
+- [ ] v28.0 — Checkpoints height 50k + 100k (chờ testnet)
+- [ ] v28.1 — Pentest: fuzz REST, peer spam, eclipse attack
+- [ ] v28.2 — GraphQL yêu cầu API key (hiện chỉ depth/complexity, chưa authn)
+- [ ] v28.3 — Rate limit per API key (gộp với per-IP)
 
 ### Era 20 — Post-Singularity (v99.x)
 - [ ] Quantum Random Beacon, Neural Wallet, Interplanetary Sync, AI Consensus
