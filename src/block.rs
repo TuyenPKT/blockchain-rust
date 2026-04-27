@@ -3,7 +3,6 @@
 //! Block header commit đến cả txid_root lẫn witness_root
 //! → không thể thay đổi witness data mà không làm vô hiệu block hash
 
-use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use crate::transaction::Transaction;
 
@@ -20,7 +19,7 @@ pub struct Block {
 
 impl Block {
     pub fn new(index: u64, transactions: Vec<Transaction>, prev_hash: String) -> Self {
-        let timestamp    = Utc::now().timestamp();
+        let timestamp    = crate::ntp_time::now_ts();
         let witness_root = Self::merkle_root_wtxid(&transactions);
         Block { index, timestamp, transactions, prev_hash, nonce: 0, hash: String::new(), witness_root }
     }

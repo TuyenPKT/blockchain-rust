@@ -3,6 +3,9 @@
 //! Chỉ khai báo những module mà pkt_testnet_web cần (và transitive deps).
 //! Tauri crate add dependency: blockchain-rust = { path = "../.." }
 
+// ── Time ──────────────────────────────────────────────────────────────────────
+pub mod ntp_time;
+
 // ── Base types ────────────────────────────────────────────────────────────────
 pub mod script;
 pub mod wallet;

@@ -223,7 +223,7 @@ pub fn cmd_cpu_mine(address: &str, difficulty: usize, max_blocks: u32) {
     for i in 0..max_blocks {
         let block = Blake3Block::new(
             i as u64 + 1,
-            chrono::Utc::now().timestamp(),
+            crate::ntp_time::now_ts(),
             format!("txroot_{}", i),
             format!("witroot_{}", i),
             "0".repeat(64),

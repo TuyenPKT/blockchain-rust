@@ -1,3 +1,4 @@
+mod ntp_time;
 mod block;
 mod chain;
 mod transaction;
