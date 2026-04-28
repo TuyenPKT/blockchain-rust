@@ -814,6 +814,7 @@ fn handle_template_client(
                     ) {
                         for (txid, wire_tx) in &wire_txs_idx {
                             let _ = adb.index_tx_inputs(&udb, wire_tx, txid, h);
+                            let _ = crate::pkt_utxo_sync::apply_wire_tx(&udb, wire_tx, txid, h);
                             let _ = adb.index_tx_outputs(wire_tx, txid, h, block_ts_idx);
                         }
                         let sync_path = crate::pkt_testnet_web::default_sync_db_path();
