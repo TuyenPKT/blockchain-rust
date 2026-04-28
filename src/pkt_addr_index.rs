@@ -337,16 +337,12 @@ impl AddrIndexDb {
             Some(h) => format!("atx:{}:{:016x}:", script_hex, h),
             None    => prefix.clone(),
         };
-        // Scan thêm để bù cho duplicate (sau reorg cùng txid có nhiều height).
-        // Dedup theo txid giữ height cao nhất, rồi lấy `limit` đầu.
-        let scan_limit = limit.saturating_mul(4).max(64);
-        let mut by_txid: std::collections::HashMap<String, AddrTxEntry> = std::collections::HashMap::new();
-        self.kv.scan_from(start.as_bytes())
+        let out = self.kv.scan_from(start.as_bytes())
             .into_iter()
             .take_while(|(k, _)| k.starts_with(prefix.as_bytes()))
-            .take(scan_limit)
+            .take(limit)
             .filter_map(|(k, _)| {
-                let key = std::str::from_utf8(&k).ok()?.to_string();
+                let key = std::str::from_utf8(&k).ok()?;
                 let rest = &key[prefix.len()..];
                 let (h_str, txid) = rest.split_once(':')?;
                 let height  = u64::from_str_radix(h_str, 16).ok()?;
@@ -354,14 +350,7 @@ impl AddrIndexDb {
                 let (from_script, to_script, fee_sat, timestamp) = self.read_txinfo(txid);
                 Some(AddrTxEntry { height, txid: txid.to_string(), net_sat, from_script, to_script, fee_sat, timestamp })
             })
-            .for_each(|e| {
-                by_txid.entry(e.txid.clone())
-                    .and_modify(|existing| { if e.height > existing.height { *existing = e.clone(); } })
-                    .or_insert(e);
-            });
-        let mut out: Vec<AddrTxEntry> = by_txid.into_values().collect();
-        out.sort_by_key(|e| e.height);
-        out.truncate(limit);
+            .collect();
         Ok(out)
     }
 
