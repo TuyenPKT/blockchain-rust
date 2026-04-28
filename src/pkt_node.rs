@@ -765,7 +765,21 @@ fn handle_template_client(
                                 prev_txid: [0u8; 32], prev_vout: 0xffff_ffff,
                                 script_sig: vec![], sequence: 0xffff_ffff,
                             }]
-                        } else { vec![] };
+                        } else {
+                            tx.inputs.iter().filter_map(|inp| {
+                                let mut raw = hex::decode(&inp.tx_id).ok()?;
+                                if raw.len() != 32 { return None; }
+                                raw.reverse(); // display → wire byte order
+                                let mut prev_txid = [0u8; 32];
+                                prev_txid.copy_from_slice(&raw);
+                                Some(crate::pkt_utxo_sync::WireTxIn {
+                                    prev_txid,
+                                    prev_vout: inp.output_index as u32,
+                                    script_sig: vec![],
+                                    sequence: inp.sequence,
+                                })
+                            }).collect()
+                        };
                         let outputs = tx.outputs.iter().map(|o| crate::pkt_utxo_sync::WireTxOut {
                             value: o.amount,
                             script_pubkey: o.script_pubkey.to_wire_bytes(),
