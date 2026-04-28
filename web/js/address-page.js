@@ -58,7 +58,7 @@
     return pkt.toLocaleString(undefined, { maximumFractionDigits: pkt >= 1 ? 0 : 4 }) + ' PKT';
   }
 
-  const MIN_VALID_TS = 1577836800; // 2020-01-01
+  const MIN_VALID_TS = 1735689600; // 2025-01-01
 
   function timeAgo(ts) {
     if (!ts || ts < MIN_VALID_TS) return '—';

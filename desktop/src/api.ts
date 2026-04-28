@@ -237,7 +237,7 @@ export function shortHash(h: string): string {
   return h ? h.slice(0, 10) + "…" + h.slice(-8) : "—";
 }
 
-const MIN_VALID_TS = 1577836800; // 2020-01-01 — bất kỳ ts nào trước đây là lỗi header
+const MIN_VALID_TS = 1735689600; // 2025-01-01 — blocks testnet cũ (OS clock sai) hiển thị "—"
 
 export function timeAgo(ts: number): string {
   if (!ts || ts <= 0 || ts < MIN_VALID_TS) return "—";

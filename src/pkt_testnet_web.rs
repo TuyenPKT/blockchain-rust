@@ -476,15 +476,17 @@ async fn ps_addr_txs(
         Some(d) => d,
     };
     let limit  = params.limit.unwrap_or(50).min(200);
-    // cursor takes priority; page is converted: page N → skip N*limit entries via cursor=None
-    // (simple approach: use cursor directly; page ignored if cursor present)
+    let page   = params.page.unwrap_or(0) as usize;
+    let skip   = if params.cursor.is_none() { page * limit } else { 0 };
     let cursor = params.cursor;
     // Thử raw P2PKH format; nếu không có kết quả thử legacy JSON format
     let (effective_script, entries) = {
-        let r = adb.get_tx_history(&script, cursor, limit).unwrap_or_default();
+        let r = adb.get_tx_history(&script, cursor, limit + skip).unwrap_or_default();
+        let r: Vec<_> = r.into_iter().skip(skip).collect();
         if r.is_empty() {
             if let Some(legacy) = any_addr_to_script_hex_legacy(&addr) {
-                let r2 = adb.get_tx_history(&legacy, cursor, limit).unwrap_or_default();
+                let r2 = adb.get_tx_history(&legacy, cursor, limit + skip).unwrap_or_default();
+                let r2: Vec<_> = r2.into_iter().skip(skip).collect();
                 if !r2.is_empty() { (legacy, r2) } else { (script, r) }
             } else { (script, r) }
         } else { (script, r) }
