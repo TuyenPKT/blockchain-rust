@@ -150,10 +150,20 @@ struct SyncStartParams {
 
 // ── Script helpers ─────────────────────────────────────────────────────────────
 
-/// Decode a JSON-hex script (custom format used by this chain) to EVM address.
-/// Script JSON: {"ops":["OpDup","OpHash160",{"OpPushData":[b0,b1,...,b19]},"OpEqualVerify","OpCheckSig"]}
+/// Decode script hex → EVM address.
+/// Hỗ trợ 2 format:
+///   Wire P2PKH: 76 a9 14 <hash20> 88 ac  (25 bytes)
+///   Legacy JSON: {"ops":["OpDup","OpHash160",{"OpPushData":[...]},...]}
 fn script_hex_to_address(script_hex: &str) -> Option<String> {
     let bytes = hex::decode(script_hex).ok()?;
+    // Wire P2PKH: 76 a9 14 <20 bytes> 88 ac
+    if bytes.len() == 25 && bytes[0] == 0x76 && bytes[1] == 0xa9 && bytes[2] == 0x14
+        && bytes[23] == 0x88 && bytes[24] == 0xac
+    {
+        let raw: [u8; 20] = bytes[3..23].try_into().ok()?;
+        return Some(crate::evm_address::raw_to_evm_address(&raw));
+    }
+    // Legacy JSON format
     let json: Value = serde_json::from_slice(&bytes).ok()?;
     let ops = json["ops"].as_array()?;
     let hash160: Vec<u8> = ops.iter().find_map(|op| {
