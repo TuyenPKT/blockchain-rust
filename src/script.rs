@@ -127,17 +127,23 @@ impl Script {
 
     // ── Standard script builders ─────────────────────────────
 
+    /// Decode hex string, tự động strip prefix "0x" nếu có.
+    fn decode_hex(s: &str) -> Vec<u8> {
+        let s = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+        hex::decode(s).unwrap_or_default()
+    }
+
     /// P2PK scriptPubKey: <pubkey> OP_CHECKSIG
     pub fn p2pk_pubkey(pubkey_hex: &str) -> Self {
         Script::new(vec![
-            Opcode::OpPushData(hex::decode(pubkey_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(pubkey_hex)),
             Opcode::OpCheckSig,
         ])
     }
 
     /// P2PK scriptSig: <sig>
     pub fn p2pk_sig(sig_hex: &str) -> Self {
-        Script::new(vec![Opcode::OpPushData(hex::decode(sig_hex).unwrap_or_default())])
+        Script::new(vec![Opcode::OpPushData(Self::decode_hex(sig_hex))])
     }
 
     /// P2PKH scriptPubKey: OP_DUP OP_HASH160 <hash20> OP_EQUALVERIFY OP_CHECKSIG
@@ -145,7 +151,7 @@ impl Script {
         Script::new(vec![
             Opcode::OpDup,
             Opcode::OpHash160,
-            Opcode::OpPushData(hex::decode(pubkey_hash_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(pubkey_hash_hex)),
             Opcode::OpEqualVerify,
             Opcode::OpCheckSig,
         ])
@@ -154,8 +160,8 @@ impl Script {
     /// P2PKH scriptSig: <sig> <pubkey>
     pub fn p2pkh_sig(sig_hex: &str, pubkey_hex: &str) -> Self {
         Script::new(vec![
-            Opcode::OpPushData(hex::decode(sig_hex).unwrap_or_default()),
-            Opcode::OpPushData(hex::decode(pubkey_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(sig_hex)),
+            Opcode::OpPushData(Self::decode_hex(pubkey_hex)),
         ])
     }
 
@@ -163,7 +169,7 @@ impl Script {
     pub fn p2sh_pubkey(script_hash_hex: &str) -> Self {
         Script::new(vec![
             Opcode::OpHash160,
-            Opcode::OpPushData(hex::decode(script_hash_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(script_hash_hex)),
             Opcode::OpEqual,
         ])
     }
@@ -173,7 +179,7 @@ impl Script {
     pub fn p2sh_sig(sig_hexes: &[String], redeem_script: &Script) -> Self {
         let mut ops = vec![Opcode::OpPushData(vec![])]; // OP_0 dummy
         for sig_hex in sig_hexes {
-            ops.push(Opcode::OpPushData(hex::decode(sig_hex).unwrap_or_default()));
+            ops.push(Opcode::OpPushData(Self::decode_hex(sig_hex)));
         }
         // Cuối cùng push serialized redeemScript
         ops.push(Opcode::OpPushData(redeem_script.to_bytes()));
@@ -186,7 +192,7 @@ impl Script {
         let n = pubkey_hexes.len();
         let mut ops = vec![Opcode::OpNum(m as i64)];
         for pk in pubkey_hexes {
-            ops.push(Opcode::OpPushData(hex::decode(pk).unwrap_or_default()));
+            ops.push(Opcode::OpPushData(Self::decode_hex(pk)));
         }
         ops.push(Opcode::OpNum(n as i64));
         ops.push(Opcode::OpCheckMultiSig);
@@ -198,7 +204,7 @@ impl Script {
     pub fn p2wpkh_pubkey(pubkey_hash_hex: &str) -> Self {
         Script::new(vec![
             Opcode::Op0,
-            Opcode::OpPushData(hex::decode(pubkey_hash_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(pubkey_hash_hex)),
         ])
     }
 
@@ -222,7 +228,7 @@ impl Script {
     pub fn p2tr_pubkey(tweaked_xonly_hex: &str) -> Self {
         Script::new(vec![
             Opcode::Op1,
-            Opcode::OpPushData(hex::decode(tweaked_xonly_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(tweaked_xonly_hex)),
         ])
     }
 
@@ -245,7 +251,7 @@ impl Script {
     /// CTV scriptPubKey ← v1.4: <32-byte template_hash> OP_CTV
     pub fn ctv_pubkey(template_hash_hex: &str) -> Self {
         Script::new(vec![
-            Opcode::OpPushData(hex::decode(template_hash_hex).unwrap_or_default()),
+            Opcode::OpPushData(Self::decode_hex(template_hash_hex)),
             Opcode::OpCheckTemplateVerify,
         ])
     }
