@@ -278,8 +278,15 @@ impl AddrIndexDb {
 
         let fee_sat = if total_in > 0 { total_in.saturating_sub(total_out) } else { 0 };
 
+        // Không ghi đè from_script cũ (đã capture lần đầu) bằng giá trị rỗng (reorg re-index).
+        let effective_from = if from_script.is_empty() {
+            self.read_txinfo(&txid_hex).0
+        } else {
+            from_script
+        };
+
         // Persist TX metadata for history display
-        let info = format!("{}|{}|{}|{}", from_script, to_script, fee_sat, timestamp);
+        let info = format!("{}|{}|{}|{}", effective_from, to_script, fee_sat, timestamp);
         self.kv.put(Self::txinfo_key(&txid_hex).as_bytes(), info.as_bytes())
             .map_err(SyncError::Db)?;
 
