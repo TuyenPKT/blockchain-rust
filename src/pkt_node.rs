@@ -768,7 +768,7 @@ fn handle_template_client(
                         } else { vec![] };
                         let outputs = tx.outputs.iter().map(|o| crate::pkt_utxo_sync::WireTxOut {
                             value: o.amount,
-                            script_pubkey: o.script_pubkey.to_bytes(),
+                            script_pubkey: o.script_pubkey.to_wire_bytes(),
                         }).collect();
                         Some((txid, crate::pkt_utxo_sync::WireTx {
                             version: 1, inputs, outputs, locktime: 0,

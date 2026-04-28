@@ -68,6 +68,53 @@ impl Script {
         json
     }
 
+    /// Serialize script thành Bitcoin wire bytes (76 a9 14 <hash20> 88 ac cho P2PKH, v.v.)
+    /// Dùng để lưu vào utxodb — phải khớp với prefix query của query_utxos.
+    pub fn to_wire_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for op in &self.ops {
+            match op {
+                Opcode::OpDup                  => out.push(0x76),
+                Opcode::OpDrop                 => out.push(0x75),
+                Opcode::OpSwap                 => out.push(0x7c),
+                Opcode::OpOver                 => out.push(0x78),
+                Opcode::OpNip                  => out.push(0x77),
+                Opcode::OpSize                 => out.push(0x82),
+                Opcode::OpHash160              => out.push(0xa9),
+                Opcode::OpHash256              => out.push(0xaa),
+                Opcode::OpSha256               => out.push(0xa8),
+                Opcode::OpCheckSig             => out.push(0xac),
+                Opcode::OpCheckMultiSig        => out.push(0xae),
+                Opcode::OpEqualVerify          => out.push(0x88),
+                Opcode::OpEqual                => out.push(0x87),
+                Opcode::OpVerify               => out.push(0x69),
+                Opcode::OpReturn               => out.push(0x6a),
+                Opcode::OpIf                   => out.push(0x63),
+                Opcode::OpElse                 => out.push(0x67),
+                Opcode::OpEndIf                => out.push(0x68),
+                Opcode::OpCheckLockTimeVerify  => out.push(0xb1),
+                Opcode::OpCheckSequenceVerify  => out.push(0xb2),
+                Opcode::OpCheckTemplateVerify  => out.push(0xb3),
+                Opcode::Op0                    => out.push(0x00),
+                Opcode::Op1                    => out.push(0x51),
+                Opcode::OpNum(n) => {
+                    let n = *n;
+                    if n == 0 { out.push(0x00); }
+                    else if (1..=16).contains(&n) { out.push(0x50 + n as u8); }
+                    else { out.push(0x01); out.push(n as u8); }
+                }
+                Opcode::OpPushData(bytes) => {
+                    let len = bytes.len();
+                    if len == 0 { out.push(0x00); }
+                    else if len <= 75 { out.push(len as u8); out.extend_from_slice(bytes); }
+                    else if len <= 255 { out.push(0x4c); out.push(len as u8); out.extend_from_slice(bytes); }
+                    else { out.push(0x4d); out.push((len & 0xff) as u8); out.push((len >> 8) as u8); out.extend_from_slice(bytes); }
+                }
+            }
+        }
+        out
+    }
+
     /// Deserialize từ bytes
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok()
