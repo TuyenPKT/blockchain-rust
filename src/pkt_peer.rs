@@ -228,16 +228,16 @@ pub fn recv_msg(stream: &mut TcpStream, magic: [u8; 4]) -> Result<PktMsg, PeerEr
     let mut buf    = Vec::with_capacity(header_len);
     read_exact_into(stream, &mut buf, header_len)?;
 
+    // Verify magic FIRST — nếu peer gửi sai format thì fail sớm thay vì đọc payload_len rác
+    if buf[0..4] != magic {
+        return Err(PeerError::Handshake(format!("wrong magic {:02x}{:02x}{:02x}{:02x}",
+            buf[0], buf[1], buf[2], buf[3])));
+    }
+
     // Payload length is bytes 16..20 of the header (LE u32)
     let payload_len = u32::from_le_bytes([buf[16], buf[17], buf[18], buf[19]]) as usize;
     if payload_len > pkt_wire::MAX_PAYLOAD {
         return Err(PeerError::Io(format!("payload too large: {} bytes", payload_len)));
-    }
-
-    // Verify magic before spending time reading payload
-    if buf[0..4] != magic {
-        return Err(PeerError::Handshake(format!("wrong magic {:02x}{:02x}{:02x}{:02x}",
-            buf[0], buf[1], buf[2], buf[3])));
     }
 
     if payload_len > 0 {

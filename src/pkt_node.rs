@@ -750,6 +750,32 @@ fn handle_template_client(
                         Some(arr)
                     })
                     .collect();
+
+                // Collect TX data BEFORE block is moved into commit_mined_block
+                let block_ts_idx = block.timestamp as u64;
+                let wire_txs_idx: Vec<([u8; 32], crate::pkt_utxo_sync::WireTx)> = block.transactions.iter()
+                    .filter_map(|tx| {
+                        let mut raw = hex::decode(&tx.tx_id).ok()?;
+                        if raw.len() != 32 { return None; }
+                        raw.reverse(); // display → wire byte order
+                        let mut txid = [0u8; 32];
+                        txid.copy_from_slice(&raw);
+                        let inputs = if tx.is_coinbase {
+                            vec![crate::pkt_utxo_sync::WireTxIn {
+                                prev_txid: [0u8; 32], prev_vout: 0xffff_ffff,
+                                script_sig: vec![], sequence: 0xffff_ffff,
+                            }]
+                        } else { vec![] };
+                        let outputs = tx.outputs.iter().map(|o| crate::pkt_utxo_sync::WireTxOut {
+                            value: o.amount,
+                            script_pubkey: o.script_pubkey.to_bytes(),
+                        }).collect();
+                        Some((txid, crate::pkt_utxo_sync::WireTx {
+                            version: 1, inputs, outputs, locktime: 0,
+                        }))
+                    })
+                    .collect();
+
                 let mut bc = lock_or_recover!(chain);
                 bc.commit_mined_block(block);
                 let h = bc.chain.len() as u64;
@@ -777,6 +803,27 @@ fn handle_template_client(
                 if let Err(e) = crate::storage::save_blockchain(&lock_or_recover!(chain)) {
                     eprintln!("[template] save error: {}", e);
                 }
+
+                // Index block transactions vào addr_index + syncdb (wallet balance + TX history)
+                if !wire_txs_idx.is_empty() {
+                    let addr_path = crate::pkt_addr_index::default_addr_db_path();
+                    let utxo_path = crate::pkt_testnet_web::default_utxo_db_path();
+                    if let (Ok(adb), Ok(udb)) = (
+                        crate::pkt_addr_index::AddrIndexDb::open(&addr_path),
+                        crate::pkt_utxo_sync::UtxoSyncDb::open(&utxo_path),
+                    ) {
+                        for (txid, wire_tx) in &wire_txs_idx {
+                            let _ = adb.index_tx_inputs(&udb, wire_tx, txid, h);
+                            let _ = adb.index_tx_outputs(wire_tx, txid, h, block_ts_idx);
+                        }
+                        let sync_path = crate::pkt_testnet_web::default_sync_db_path();
+                        if let Ok(sdb) = crate::pkt_sync::SyncDb::open(&sync_path) {
+                            let _ = sdb.set_block_tx_count(h, wire_txs_idx.len() as u64);
+                        }
+                        println!("[template] indexed {} tx(s) → addr_index height={}", wire_txs_idx.len(), h);
+                    }
+                }
+
                 // Evict confirmed TXs khỏi mempool ngay khi miner submit block
                 if !non_coinbase_txids.is_empty() {
                     let mp = crate::pkt_mempool_sync::default_mempool_db_path();

@@ -437,6 +437,13 @@ impl SyncDb {
             .unwrap_or(0)
     }
 
+    /// Lưu tx_count cho block ở height (dùng khi block được mine qua RPC, không qua sync).
+    pub fn set_block_tx_count(&self, height: u64, count: u64) -> Result<(), SyncError> {
+        let key = format!("txcount:{:016x}", height);
+        self.kv.put(key.as_bytes(), &count.to_le_bytes())
+            .map_err(SyncError::Db)
+    }
+
     pub fn path(&self) -> &Path { &self.path }
 }
 
