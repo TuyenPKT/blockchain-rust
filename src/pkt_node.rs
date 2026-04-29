@@ -822,20 +822,30 @@ fn handle_template_client(
                 if !wire_txs_idx.is_empty() {
                     let addr_path = crate::pkt_addr_index::default_addr_db_path();
                     let utxo_path = crate::pkt_testnet_web::default_utxo_db_path();
-                    if let (Ok(adb), Ok(udb)) = (
+                    match (
                         crate::pkt_addr_index::AddrIndexDb::open(&addr_path),
                         crate::pkt_utxo_sync::UtxoSyncDb::open(&utxo_path),
                     ) {
-                        for (txid, wire_tx) in &wire_txs_idx {
-                            let _ = adb.index_tx_inputs(&udb, wire_tx, txid, h);
-                            let _ = crate::pkt_utxo_sync::apply_wire_tx(&udb, wire_tx, txid, h);
-                            let _ = adb.index_tx_outputs(wire_tx, txid, h, block_ts_idx);
+                        (Ok(adb), Ok(udb)) => {
+                            for (txid, wire_tx) in &wire_txs_idx {
+                                if let Err(e) = adb.index_tx_inputs(&udb, wire_tx, txid, h) {
+                                    eprintln!("[template] index_tx_inputs lỗi h={}: {:?}", h, e);
+                                }
+                                if let Err(e) = crate::pkt_utxo_sync::apply_wire_tx(&udb, wire_tx, txid, h) {
+                                    eprintln!("[template] apply_wire_tx lỗi h={}: {:?}", h, e);
+                                }
+                                if let Err(e) = adb.index_tx_outputs(wire_tx, txid, h, block_ts_idx) {
+                                    eprintln!("[template] index_tx_outputs lỗi h={}: {:?}", h, e);
+                                }
+                            }
+                            let sync_path = crate::pkt_testnet_web::default_sync_db_path();
+                            if let Ok(sdb) = crate::pkt_sync::SyncDb::open(&sync_path) {
+                                let _ = sdb.set_block_tx_count(h, wire_txs_idx.len() as u64);
+                            }
+                            println!("[template] indexed {} tx(s) → addr_index height={}", wire_txs_idx.len(), h);
                         }
-                        let sync_path = crate::pkt_testnet_web::default_sync_db_path();
-                        if let Ok(sdb) = crate::pkt_sync::SyncDb::open(&sync_path) {
-                            let _ = sdb.set_block_tx_count(h, wire_txs_idx.len() as u64);
-                        }
-                        println!("[template] indexed {} tx(s) → addr_index height={}", wire_txs_idx.len(), h);
+                        (Err(e), _) => eprintln!("[template] mở addr_index thất bại h={}: {}", h, e),
+                        (_, Err(e)) => eprintln!("[template] mở utxodb thất bại h={}: {}", h, e),
                     }
                 }
 
