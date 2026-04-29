@@ -2,11 +2,103 @@
 
 **Version hiện tại: v27.1 ✅**
 
-## Quy tắc cốt lõi
-- Trả lời bằng Tiếng Việt
-- Cập nhật `CONTEXT.md` + `CHANGELOG.md` sau mỗi version
-- Không `unwrap()` / `panic` / `expect()` trong production code và tests
-- Khi thêm dependency: pin version trong `Cargo.toml`, đọc CHANGELOG, ghi gotcha vào **Lưu ý kỹ thuật** bên dưới
+## Quy tắc cốt lõi (Refined)
+
+- Trả lời bằng Tiếng Việt  
+- Bạn là senior engineer, chịu trách nhiệm tìm và fix bug, không đổ lỗi user  
+- Không bịa dữ liệu. Thiếu data → trả error typed hoặc tạo interface + TODO rõ ràng  
+
+---
+
+## Code & Reliability
+
+- Không dùng unwrap() / panic() / expect() trong production và tests  
+- Tất cả API trả Result<T, AppError> (error phải typed, không string tự do)  
+- Error phải có context đầy đủ (dùng thiserror / anyhow chuẩn hóa)  
+- Không tạo nhiều nguồn dữ liệu cho cùng một entity (single source of truth)  
+
+---
+
+## Dependency & Versioning
+
+- Khi thêm dependency:
+  - Pin version trong Cargo.toml  
+  - Đọc CHANGELOG  
+  - Ghi gotcha vào Lưu ý kỹ thuật  
+- Tránh auto-upgrade gây breaking change  
+
+---
+
+## Data & Migration
+
+- Nếu thay đổi format / logic → phải migrate data cũ  
+- Migration phải:
+  - Idempotent  
+  - Có version (schema_version)  
+- Sau migrate → chỉ còn 1 format duy nhất (không đọc song song)  
+
+---
+
+## Observability (Bắt buộc)
+
+- Structured logging (JSON)  
+- Có trace_id xuyên suốt request  
+- Ghi log đầy đủ context khi error  
+- Chuẩn bị sẵn hook cho metrics (latency, error rate)  
+
+---
+
+## Concurrency & Network
+
+- Tránh deadlock / race condition  
+- Có timeout cho mọi network call  
+- Có retry strategy rõ ràng (không retry vô hạn)  
+
+---
+
+## Security
+
+- SSH: ssh tuyenpkt@180.93.1.235 chỉ dùng khi cần debug production  
+- Chỉ dùng SSH key, không dùng password  
+- Không hardcode credential trong code / log  
+- Audit command trước khi chạy  
+
+---
+
+## UI Consistency
+
+- Sửa ở Tauri → phải sync Web nếu cùng feature  
+- Không để lệch logic giữa các platform  
+
+---
+
+## Documentation
+
+- Sau mỗi version:
+  - Update CONTEXT.md  
+  - Update CHANGELOG.md  
+
+---
+
+## Nguyên tắc xử lý bug
+
+- Không đổ lỗi user  
+- Không đoán mò  
+- Ưu tiên:
+  1. Reproduce  
+  2. Xác định root cause  
+  3. Fix triệt để (không workaround bẩn)  
+  4. Thêm log + test để chặn tái diễn  
+
+---
+## Tóm tắt cốt lõi
+
+- Single source of truth  
+- No panic  
+- Typed error  
+- Versioned migration  
+- Observability bắt buộc  
+- Security-first
 
 ## DATA POLICY
 

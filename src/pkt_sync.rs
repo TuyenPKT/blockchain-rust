@@ -854,6 +854,7 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
 
         // Phase 2: detect reorg trước khi apply blocks
         let utxo_h = utxo_db.get_utxo_height().ok().flatten().unwrap_or(0);
+        let mut did_rollback = false;
         if utxo_h > 0 {
             match reorg_db.detect_reorg(&db, utxo_h) {
                 Ok(true) => {
@@ -861,7 +862,10 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
                     match reorg_db.find_common_ancestor(&db, utxo_h) {
                         Ok(Some(ancestor)) => {
                             match reorg_db.rollback_to(ancestor, utxo_h, &utxo_db, &addr_db) {
-                                Ok(n) => eprintln!("[reorg] ✅  rollback {} blocks → ancestor={}", n, ancestor),
+                                Ok(n) => {
+                                    eprintln!("[reorg] ✅  rollback {} blocks → ancestor={}", n, ancestor);
+                                    did_rollback = true;
+                                }
                                 Err(e) => {
                                     eprintln!("[reorg] rollback thất bại: {:?} → full reset", e);
                                     chain_reset = true;
@@ -883,7 +887,7 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
         }
 
         // Phase 3: apply blocks → UTXOs + address index (streaming, RAM ≈ size(tx))
-        let _blocks_applied = match crate::pkt_block_sync::sync_blocks(
+        let blocks_applied = match crate::pkt_block_sync::sync_blocks(
             &mut stream, &db, &utxo_db, &block_db, Some(&addr_db), Some(&reorg_db),
             Some(&mempool_db), &cfg.magic, cfg.skip_pow_check,
         ) {
@@ -900,6 +904,15 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
                 0
             }
         };
+
+        // Nếu vừa rollback nhưng peer không cung cấp block hợp lệ nào → ngắt kết nối.
+        // Tránh lặp vô hạn: rollback → 0 applied → reconnect → rollback lại.
+        // Sau khi ngắt kết nối, utxo_h = ancestor (≤ pre_rollback_h), detect_reorg sẽ
+        // không kích hoạt lại (không còn checkpoint cho height cũ của mình).
+        if did_rollback && blocks_applied == 0 {
+            eprintln!("[reorg] peer không cung cấp block hợp lệ sau rollback → ngắt kết nối, thử lại sau {}s", poll_secs);
+            break;
+        }
 
         // Phase 3.5: disabled — UTXO "not found" ≠ "spent", gây evict oan TX hợp lệ.
         // evict_confirmed trong sync_blocks xử lý TX đã vào block.
