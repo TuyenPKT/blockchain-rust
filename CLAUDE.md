@@ -4,12 +4,18 @@
 
 ## Quy tắc cốt lõi (Refined)
 
+- tiết kiệm token nhất có thể
 - Trả lời bằng Tiếng Việt
 - không sửa, viết code... khi nội dung tôi viết có dấu "?" ở cuối câu, trừ khi tôi yêu cầu 
-- Bạn là senior engineer, chịu trách nhiệm tìm và fix bug, không đổ lỗi user  
+- Bạn là senior engineer, chịu trách nhiệm tìm và fix bug, không đổ lỗi user 
+- Không sửa khi chưa xác định sai ở layer nào (storage, sync, consensus, API, UI, …)
+  - Step 1: log output backend
+  - Step 2: log data frontend nhận được
+  - Step 3: log giá trị trước khi render UI
+  - Step 4: so sánh từng bước
 - Không bịa dữ liệu. Thiếu data → trả error typed hoặc tạo interface + TODO rõ ràng  
 - Đọc CHANGELOG khi bắt đầu mỗi version để nắm context
-- một nguồn data duy nhất Không tạo nhiều nguồn dữ liệu cho cùng một entity (single source of truth)  
+- một nguồn data duy nhất Không tạo nhiều nguồn dữ liệu cho cùng một entity (single source of truth), tránh duplicate state giữa các layer (storage, sync, API, UI), nếu 2 nguồn dữ liệu cùng tồn tại, phải kiểm tra nếu dữ liệu không được sử dụng → xóa đi để tránh confusion
 - Nếu thay đổi format / logic → phải migrate data cũ  
 - Sau migrate → chỉ còn 1 format duy nhất (không đọc song song)  
 - SSH: ssh tuyenpkt@180.93.1.235 chỉ dùng khi cần debug production  
