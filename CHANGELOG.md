@@ -4,6 +4,65 @@ Ghi lại thay đổi theo từng version. Format: Added / Files / Tests / Gotch
 
 ---
 
+## v27.1-prod — Production Bugfix: Web Explorer + Block Sync (2026-04-30)
+
+### Fixed
+- **Web explorer toàn dấu `—`** (root cause: JS/CSS 404 vì sai CWD)
+  - Node khởi động từ `/home/tuyenpkt/` → `ServeDir::new("web")` tìm `web/` relative → không thấy → 404
+  - Fix: startup script phải `cd /home/tuyenpkt/blockchain-rust` trước `exec`
+  - API hoạt động bình thường (nginx proxy OK), chỉ static files bị 404
+
+- **`sync_blocks` stuck tại utxo_height=1 mãi mãi** (4 bugs độc lập)
+  1. **Timestamp offset sai** (`pkt_block_sync.rs:392`):
+     - Bug: `header_bytes[4..8]` đọc 4 byte đầu của `prev_block` (hash ngẫu nhiên)
+     - Fix: `header_bytes[68..72]` — đúng vị trí timestamp trong 84-byte wire header
+     - Layout: `version(4) + prev_block(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(8)`
+     - Hậu quả: mọi block có tx (height≥2) bị reject "timestamp từ tương lai" → utxo_height mãi = 1
+     - Block height=1 (genesis, tx_count=0) fast-path → không qua check → sync OK → che giấu bug
+
+  2. **Merkle root mismatch** (`pkt_node.rs`, `blocks_to_wire_headers`):
+     - Bug: dùng BLAKE3 hash của debug-string để tính merkle_root trong wire header
+     - Fix: dùng SHA256d của wire-encoded txid (khớp với gì `apply_block_streaming` verify)
+     - `pub fn merkle_root(txids: &[[u8; 32]]) -> [u8; 32]` — expose để dùng chung
+
+  3. **`set_utxo_height` thiếu trong template handler** (`pkt_node.rs`):
+     - Bug: template handler gọi `apply_wire_tx` nhưng không gọi `set_utxo_height(h)`
+     - Fix: thêm `let _ = udb.set_utxo_height(h);` sau vòng lặp apply UTXOs
+     - utxo_height stuck = 1 dù template handler đã insert UTXOs lên tới height cao hơn
+
+  4. **External peer 1.53.244.191 inject block year-2065**:
+     - Peer này gửi block với timestamp ~3012248661 (year 2065) vào P2P network
+     - Trước fix (1): `header_bytes[4..8]` đọc sai → tất cả block đều bị reject, che luôn lỗi này
+     - Sau fix (1): block year-2065 mới lộ ra qua sync
+     - Fix: `validate_header_batch` trong `pkt_sync.rs` reject header có timestamp > now + 7200s
+     - Fix thêm: lọc 1.53.244.191 khỏi `peers.txt`, restart node sạch
+
+  5. **`sync_blocks` bị short-circuit do template handler nhảy `utxo_height`** (`pkt_block_sync.rs`):
+     - Bug: template handler gọi `set_utxo_height(h)` cho mỗi block mới mine (h=192..197)
+     - `sync_blocks` thấy `utxo_height=197 >= sync_height=197` → skip toàn bộ 197 blocks → utxodb chỉ có 6 UTXOs
+     - Root cause: template handler advance `utxo_height` KHÔNG đi qua `block_db.set_block()`
+     - Fix: `sync_blocks` lấy `block_synced_h = block_db.get_block_height()` (chỉ set bởi `apply_block_streaming`)
+     - `effective_h = min(utxo_height, block_synced_h)` → phát hiện gap → sync từ gap+1
+     - Kết quả: utxo_count 6 → 202, total_value 120 → 4040 PKT sau một lần sync
+
+### Files
+- `src/pkt_block_sync.rs` — fix timestamp offset `[4..8]` → `[68..72]`; fix `sync_blocks` dùng `min(utxo_h, block_synced_h)` để phát hiện gap; xóa debug eprintln
+- `src/pkt_node.rs` — fix merkle SHA256d + thêm `set_utxo_height` trong template handler
+- `src/pkt_sync.rs` — thêm timestamp check trong `validate_header_batch`
+- `/tmp/start_fullnode.sh` (VPS) — thêm `cd /home/tuyenpkt/blockchain-rust`
+
+### Gotcha — TRÁNH LẶP LẠI
+- **Node PHẢI chạy từ project root** (`blockchain-rust/`) để `ServeDir::new("web")` tìm thấy `web/`
+- Wire header 84 bytes: `version(4) | prev_block(32) | merkle_root(32) | **timestamp(4)** | bits(4) | nonce(8)`
+  - Timestamp = bytes `[68..72]`, KHÔNG phải `[4..8]`
+- `blocks_to_wire_headers` và `apply_block_streaming` phải dùng cùng 1 Merkle algorithm (SHA256d)
+- `apply_block_streaming` KHÔNG verify block_hash nhận được khớp với hash đã GetData → dễ bị peer xấu inject block khác
+- **Template handler và `sync_blocks` là hai con đường độc lập apply UTXO**. Template chỉ set `utxo_height`, không set `block_db`. `sync_blocks` phải dùng `block_db` làm nguồn sự thật để tránh gap.
+- macOS binary không chạy được trên Linux VPS → phải build trên VPS bằng Rust (đã install tại `~/.cargo/`)
+- Build trên VPS: `cd /home/tuyenpkt/blockchain-rust && source ~/.cargo/env && cargo build --release`
+
+---
+
 ## v27.1 — CALL/CREATE Sub-execution EVM (2026-04-20)
 
 ### Added

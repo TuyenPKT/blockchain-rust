@@ -4,84 +4,23 @@
 
 ## Quy tắc cốt lõi (Refined)
 
-- Trả lời bằng Tiếng Việt  
+- Trả lời bằng Tiếng Việt
+- không sửa, viết code... khi nội dung tôi viết có dấu "?" ở cuối câu, trừ khi tôi yêu cầu 
 - Bạn là senior engineer, chịu trách nhiệm tìm và fix bug, không đổ lỗi user  
 - Không bịa dữ liệu. Thiếu data → trả error typed hoặc tạo interface + TODO rõ ràng  
-
----
-
-## Code & Reliability
-
-- Không dùng unwrap() / panic() / expect() trong production và tests  
-- Tất cả API trả Result<T, AppError> (error phải typed, không string tự do)  
-- Error phải có context đầy đủ (dùng thiserror / anyhow chuẩn hóa)  
-- Không tạo nhiều nguồn dữ liệu cho cùng một entity (single source of truth)  
-
----
-
-## Dependency & Versioning
-
-- Khi thêm dependency:
-  - Pin version trong Cargo.toml  
-  - Đọc CHANGELOG  
-  - Ghi gotcha vào Lưu ý kỹ thuật  
-- Tránh auto-upgrade gây breaking change  
-
----
-
-## Data & Migration
-
+- Đọc CHANGELOG khi bắt đầu mỗi version để nắm context
+- một nguồn data duy nhất Không tạo nhiều nguồn dữ liệu cho cùng một entity (single source of truth)  
 - Nếu thay đổi format / logic → phải migrate data cũ  
-- Migration phải:
-  - Idempotent  
-  - Có version (schema_version)  
 - Sau migrate → chỉ còn 1 format duy nhất (không đọc song song)  
-
----
-
-## Observability (Bắt buộc)
-
-- Structured logging (JSON)  
-- Có trace_id xuyên suốt request  
-- Ghi log đầy đủ context khi error  
-- Chuẩn bị sẵn hook cho metrics (latency, error rate)  
-
----
-
-## Concurrency & Network
-
-- Tránh deadlock / race condition  
-- Có timeout cho mọi network call  
-- Có retry strategy rõ ràng (không retry vô hạn)  
-
----
-
-## Security
-
 - SSH: ssh tuyenpkt@180.93.1.235 chỉ dùng khi cần debug production  
 - Chỉ dùng SSH key, không dùng password  
 - Không hardcode credential trong code / log  
-- Audit command trước khi chạy  
-
----
-
-## UI Consistency
-
+- Audit command trước khi chạy
 - Sửa ở Tauri → phải sync Web nếu cùng feature  
-- Không để lệch logic giữa các platform  
-
----
-
-## Documentation
-
+- Không để lệch logic giữa các platform 
 - Sau mỗi version:
-  - Update CONTEXT.md  
-  - Update CHANGELOG.md  
-
----
-
-## Nguyên tắc xử lý bug
-
+ 1, Update CONTEXT.md  
+ 2, Update CHANGELOG.md  
 - Không đổ lỗi user  
 - Không đoán mò  
 - Ưu tiên:
@@ -89,32 +28,15 @@
   2. Xác định root cause  
   3. Fix triệt để (không workaround bẩn)  
   4. Thêm log + test để chặn tái diễn  
-
----
-## Tóm tắt cốt lõi
-
-- Single source of truth  
-- No panic  
-- Typed error  
-- Versioned migration  
-- Observability bắt buộc  
-- Security-first
-
-## DATA POLICY
-
-Tuyệt đối **không tạo**: mock data, fake data, example values, placeholder, demo accounts, lorem ipsum, test emails, sample phone numbers, seed data giả, hard-coded literal trong tests.
-
-Mọi dữ liệu phải đến từ: **database thật, API thật, config thật, input runtime**.
-
+- Tuyệt đối **không tạo**: mock data, fake data, example values, placeholder, demo accounts, lorem ipsum, test emails, sample phone numbers, seed data giả, hard-coded literal trong tests.
+- Mọi dữ liệu phải đến từ: **database thật, API thật, config thật, input runtime**.
 Test inputs phải:
 - deterministic
-- không mang semantic identity (không phải email/tên/số điện thoại nhìn như thật)
-- load từ external source qua interface
 - không hard-code
+- **KHÔNG** tự bịa giá trị
 
-Nếu thiếu dữ liệu thật:
-→ tạo interface/type/schema, để TODO hoặc trả error
-→ **KHÔNG** tự bịa giá trị
+
+
 
 ```rust
 fn init_repo(cfg: &Config) -> Result<UserRepo> {

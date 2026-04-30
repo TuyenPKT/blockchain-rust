@@ -245,7 +245,7 @@ pub fn validate_chain_links(
     Ok(())
 }
 
-/// Full validation: chain links + PoW (unless skip_pow_check).
+/// Full validation: chain links + timestamp + PoW (unless skip_pow_check).
 pub fn validate_header_batch(
     headers:        &[WireBlockHeader],
     prev_hash:      &[u8; 32],
@@ -253,6 +253,20 @@ pub fn validate_header_batch(
     start_height:   u64,
 ) -> Result<(), SyncError> {
     validate_chain_links(headers, prev_hash)?;
+    // Reject headers with timestamps more than 2 hours in the future.
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    for (i, h) in headers.iter().enumerate() {
+        let ts = h.timestamp as u64;
+        if ts > now_secs + 7_200 {
+            return Err(SyncError::InvalidBlock(format!(
+                "header h={} timestamp {} is {}s in the future — peer has invalid chain",
+                start_height + i as u64, ts, ts as i64 - now_secs as i64,
+            )));
+        }
+    }
     if !skip_pow_check {
         for (i, h) in headers.iter().enumerate() {
             if !validate_header_pow(h) {
@@ -899,6 +913,10 @@ fn run_sync_inner(peer_addr: &str, cfg: SyncConfig) {
                 r.blocks_applied
             }
             Ok(_) => 0, // không có block mới
+            Err(e @ SyncError::InvalidBlock(_)) => {
+                eprintln!("[block-sync] lỗi: {:?} — ngắt kết nối peer (invalid block), thử peer khác sau {}s", e, poll_secs);
+                break; // peer này phục vụ block không hợp lệ → ngắt, thử peer khác
+            }
             Err(e) => {
                 eprintln!("[block-sync] lỗi: {:?} — tiếp tục poll", e);
                 0

@@ -247,7 +247,7 @@ fn sha256d(data: &[u8]) -> [u8; 32] {
 }
 
 /// Compute Bitcoin merkle root from a list of txids (little-endian).
-fn merkle_root(txids: &[[u8; 32]]) -> [u8; 32] {
+pub fn merkle_root(txids: &[[u8; 32]]) -> [u8; 32] {
     if txids.is_empty() { return [0u8; 32]; }
     let mut row: Vec<[u8; 32]> = txids.to_vec();
     while row.len() > 1 {
@@ -387,9 +387,10 @@ fn apply_block_streaming<R: Read>(
     skip_merkle: bool,
 ) -> Result<BlockApplyResult, SyncError> {
     // Read 84-byte PKT wire header (nonce=u64 vs Bitcoin's u32, so 84 not 80)
+    // Layout: version(4) + prev_block(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(8)
     let header_bytes = read_bytes_s(r, crate::pkt_wire::WIRE_HEADER_LEN)?;
-    // header_bytes[4..8] = u32 LE Unix timestamp
-    let block_ts = u32::from_le_bytes(header_bytes[4..8].try_into().unwrap_or([0;4])) as u64;
+    // header_bytes[68..72] = u32 LE Unix timestamp
+    let block_ts = u32::from_le_bytes(header_bytes[68..72].try_into().unwrap_or([0;4])) as u64;
     // Timestamp validation: reject blocks >2h in the future; warn for pre-2020 (chain compat)
     const MIN_VALID_TS: u64 = 1_577_836_800; // 2020-01-01
     const MAX_FUTURE:   u64 = 7_200;
@@ -543,14 +544,21 @@ pub fn sync_blocks(
     let utxo_height = utxo_db.get_utxo_height()
         .map_err(|e| SyncError::Db(format!("{:?}", e)))?
         .unwrap_or(0);
+    // block_db.get_block_height() tracks what sync_blocks actually processed.
+    // Template handler advances utxo_height without calling block_db.set_block,
+    // so taking the min prevents skipping blocks that were never synced.
+    let block_synced_h = block_db.get_block_height()
+        .map_err(|e| SyncError::Db(format!("{:?}", e)))?
+        .unwrap_or(0);
+    let effective_h = utxo_height.min(block_synced_h);
 
-    if utxo_height >= sync_height {
-        return Ok(BlockSyncResult { blocks_applied: 0, final_height: utxo_height, elapsed_ms: 0 });
+    if effective_h >= sync_height {
+        return Ok(BlockSyncResult { blocks_applied: 0, final_height: effective_h, elapsed_ms: 0 });
     }
 
-    let start = utxo_height + 1;
+    let start = effective_h + 1;
     let mut applied = 0u64;
-    let mut final_h = utxo_height;
+    let mut final_h = effective_h;
 
     for height in start..=sync_height {
         let block_hash = sync_db.get_header_hash(height)

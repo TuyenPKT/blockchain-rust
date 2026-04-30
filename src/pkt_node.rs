@@ -165,19 +165,34 @@ fn blocks_to_wire_headers(
     prev_hash: [u8; 32],   // SHA256d hash của block ngay trước slice (hoặc zeros nếu genesis)
 ) -> Vec<crate::pkt_wire::WireBlockHeader> {
     use crate::pkt_wire::WireBlockHeader;
-    use crate::block::Block;
 
     let mut headers = Vec::with_capacity(blocks.len());
     let mut prev = prev_hash;
 
     for block in blocks {
-        // merkle_root từ txids
-        let mr_hex = Block::merkle_root_txid(&block.transactions);
-        let mut merkle_root = [0u8; 32];
-        if let Ok(b) = hex::decode(&mr_hex) {
-            let len = b.len().min(32);
-            merkle_root[..len].copy_from_slice(&b[..len]);
-        }
+        // Compute wire merkle root (SHA256d of wire txids) — matches apply_block_streaming verification
+        let wire_txids: Vec<[u8; 32]> = block.transactions.iter().map(|tx| {
+            let inputs = tx.inputs.iter().map(|inp| {
+                let mut prev_txid = [0u8; 32];
+                if let Ok(b) = hex::decode(&inp.tx_id) {
+                    let n = b.len().min(32);
+                    prev_txid[..n].copy_from_slice(&b[..n]);
+                }
+                crate::pkt_utxo_sync::WireTxIn {
+                    prev_txid,
+                    prev_vout:  inp.output_index as u32,
+                    script_sig: inp.script_sig.to_wire_bytes(),
+                    sequence:   inp.sequence,
+                }
+            }).collect();
+            let outputs = tx.outputs.iter().map(|out| crate::pkt_utxo_sync::WireTxOut {
+                value:         out.amount,
+                script_pubkey: out.script_pubkey.to_wire_bytes(),
+            }).collect();
+            let wire_tx = crate::pkt_utxo_sync::WireTx { version: 1, inputs, outputs, locktime: 0 };
+            crate::pkt_utxo_sync::wire_txid(&wire_tx)
+        }).collect();
+        let merkle_root = crate::pkt_block_sync::merkle_root(&wire_txids);
 
         let wh = WireBlockHeader {
             version:     1,
@@ -225,13 +240,13 @@ fn block_to_wire_payload(
             WireTxIn {
                 prev_txid,
                 prev_vout:  inp.output_index as u32,
-                script_sig: inp.script_sig.to_bytes(),
+                script_sig: inp.script_sig.to_wire_bytes(),
                 sequence:   inp.sequence,
             }
         }).collect();
         let outputs = tx.outputs.iter().map(|out| WireTxOut {
             value:        out.amount,
-            script_pubkey: out.script_pubkey.to_bytes(),
+            script_pubkey: out.script_pubkey.to_wire_bytes(),
         }).collect();
         WireTx { version: 1, inputs, outputs, locktime: 0 }
     }).collect();
@@ -838,6 +853,7 @@ fn handle_template_client(
                                     eprintln!("[template] index_tx_outputs lỗi h={}: {:?}", h, e);
                                 }
                             }
+                            let _ = udb.set_utxo_height(h);
                             let sync_path = crate::pkt_testnet_web::default_sync_db_path();
                             if let Ok(sdb) = crate::pkt_sync::SyncDb::open(&sync_path) {
                                 let _ = sdb.set_block_tx_count(h, wire_txs_idx.len() as u64);
